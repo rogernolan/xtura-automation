@@ -1,0 +1,1847 @@
+[
+    {
+        "signalId": 1,
+        "description": "12V Loads Button",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 4,
+        "description": "Tank Discharge Open",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 5,
+        "description": "Tank Discharge Close",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 6,
+        "description": "Footstep Open",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 7,
+        "description": "Footstep Close",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 11,
+        "description": "Engine Running Signal Indication",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 27,
+        "description": "Waterpump",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 70,
+        "description": "Fuse Reset Heating",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 71,
+        "description": "Fuse Trip Heating",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 72,
+        "description": "Fuse Reset WaterPump",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 73,
+        "description": "Fuse Trip WaterPump",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 78,
+        "description": "Fuse Trip D+ SAT IN",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 79,
+        "description": "Fuse Reset D+ Output SAT",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 83,
+        "description": "Fuse Trip Tank Sensors",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 8,
+        "description": "Signal MainSwitch",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 235,
+        "description": "Fuse Reset Charger Signal Output",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 236,
+        "description": "Fuse Trip Charger Signal Output",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 45,
+        "description": "All Interior Lights ON",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 46,
+        "description": "All Interior Lights Off",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 47,
+        "description": "All Exterior Lights On",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 48,
+        "description": "All Exterior Lights Off",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 77,
+        "description": "MASTER RESET",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 84,
+        "description": "Fuse Trip IND: FootStep",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 85,
+        "description": "Fuse Trip IND: Valve",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 177,
+        "description": "Fuse Reset Switch Group A",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 178,
+        "description": "Fuse Reset Switch Group B",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 172,
+        "description": "Fuse Trip IND: Group B",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 179,
+        "description": "Fuse Trip IND: Group A",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 2,
+        "description": "Tripped Breaker",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 12,
+        "description": "Fresh Water Value %",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 14,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 13,
+        "description": "Grey Water Value %",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 14,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 61,
+        "description": "Victron Silent Mode",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 62,
+        "description": "Fuse Reset Victron Silent Mode",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 63,
+        "description": "Fuse Trip Victron Silent Mode",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 14,
+        "description": "Heating Restart Button",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 66,
+        "description": "Fuse Trip IND Power Supply",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 25,
+        "description": "Warning/Acknowledge Low Fresh Water Warning",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 24,
+        "description": "Warning/Acknowledge high grey Water Warning",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 74,
+        "description": "Fuse Reset Tread",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 75,
+        "description": "Fuse Trip Tread Overlander",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 42,
+        "description": "Awning Out",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 43,
+        "description": "Awning In",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 44,
+        "description": "Fuse Trip IND Awning",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 125,
+        "description": "Engine Control extract",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 126,
+        "description": "Engine Contract retract",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 127,
+        "description": "Fuse Trip IND AUX Lift",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 128,
+        "description": "Fuse Reset Heating 2",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 129,
+        "description": "Fuse Trip Heating 2",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 130,
+        "description": "Aux 1",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 131,
+        "description": "Fuse Reset Aux 1",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 132,
+        "description": "Fuse Trip Aux 1",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 133,
+        "description": "Aux 2",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 134,
+        "description": "Fuse Reset Aux 2",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 135,
+        "description": "Fuse Trip Aux 2",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 136,
+        "description": "Fuse Reset High Current (without Safety On)",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 137,
+        "description": "Fuse Trip IND: High Current (without safety On)",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 138,
+        "description": "Fuse Reset High Current (with Safety On)",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 139,
+        "description": "Fuse Trip IND: High Current (with Safety On)",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 140,
+        "description": "Fuse Reset Seat Heating Driver",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 141,
+        "description": "Fuse Trip Seat Heating Driver",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 144,
+        "description": "Fuse Reset Seat Heating Passenger 1",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 145,
+        "description": "Fuse Trip Seat Heating Passenger",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 86,
+        "description": "Fuse Reset Valve",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 82,
+        "description": "Fuse Reset Foot Step",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 64,
+        "description": "Fuse Reset Awning",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 124,
+        "description": "Fuse Reset Aux Lift",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 150,
+        "description": "Unhide Engine Control",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 152,
+        "description": "Optional Awning Movement",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 100,
+        "description": "HeatingExternalTemp",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 22,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 101,
+        "description": "HeatingTurnON/OFF ALDE",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 1
+    },
+    {
+        "signalId": 102,
+        "description": "HeatingBusy",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 103,
+        "description": "HeatingError",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 104,
+        "description": "HeatingNotAvailable",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 105,
+        "description": "HeatingTargetTemp",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 22,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 106,
+        "description": "Actual Temp ALDE",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 22,
+        "dataType": 3,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 107,
+        "description": "HeatingTempUP ALDE",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 108,
+        "description": "HeatingTempDWN ALDE",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 109,
+        "description": "HeatingShowerStep ALDE",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 110,
+        "description": "HeatingSettingGaz ALDE",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 1
+    },
+    {
+        "signalId": 112,
+        "description": "HeatingElecOff",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 113,
+        "description": "HeatingElec1KW",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 114,
+        "description": "HeatingElec2KW",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 115,
+        "description": "HEatingElec3KW",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 116,
+        "description": "HeatingHotWater off",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 117,
+        "description": "HeatingHotWaterNormal",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 118,
+        "description": "HeatingHotWaterBoost",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 119,
+        "description": "HeatingPumpRunning",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 120,
+        "description": "heating External2",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 22,
+        "dataType": 3,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 97,
+        "description": "Heating Elec. 3kW",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 87,
+        "description": "Heating Elec. 2kW",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 88,
+        "description": "Heating Elec 1kW",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 89,
+        "description": "Heating Elec Off",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 90,
+        "description": "Hot Water Boost",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 91,
+        "description": "Hot Water Normal",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 92,
+        "description": "Hot Water Off",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 96,
+        "description": "ACC Command On",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 1
+    },
+    {
+        "signalId": 99,
+        "description": "Priority: GAS",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 98,
+        "description": "Priority: Electricity",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 248,
+        "description": "AC installed?",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 94,
+        "description": "ACC Feedback On",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 153,
+        "description": "Panel busy sua",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 15,
+        "description": "30 Minutes Boost Timer",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 9,
+        "dataType": 4,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 16,
+        "description": "Icon Electricity Only",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 17,
+        "description": "Icon Priority Electricity",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 18,
+        "description": "Icon Priority Gas",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 19,
+        "description": "Icon Gas Only",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 111,
+        "description": "Gas On Text Indication",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 93,
+        "description": "Heating Indication",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 95,
+        "description": "Hot Water Auto-Boost",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 240,
+        "description": "ALDE3030+ Installed?",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 26,
+        "description": "Alde Boost Off Text",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 9,
+        "dataType": 4,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 200,
+        "description": "Power Control: Charger/Inverter ON",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 201,
+        "description": "Power Control: Charger/Inverter OFF",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 202,
+        "description": "Power Control: Increase AC Input Limit",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 203,
+        "description": "Power Control: Decrease AC Input Limit",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 204,
+        "description": "Power Status: Input AC Current Limit",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 6,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 205,
+        "description": "Power Status: Input AC Voltage",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 27,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 206,
+        "description": "Power Status: Input AC Current",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 6,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 207,
+        "description": "Power Status: Input AC Frequency",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 11,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 208,
+        "description": "Power Status: Output AC Voltage",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 27,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 209,
+        "description": "Power Status: Output AC Current",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 6,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 210,
+        "description": "Power Status: Output AC Frequency",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 11,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 211,
+        "description": "Power Status: Board Battery Voltage",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 27,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 212,
+        "description": "Power Status: Board Battery Current",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 6,
+        "dataType": 3,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 213,
+        "description": "Power Status: Board Battery State Of Charge",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 14,
+        "dataType": 4,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 214,
+        "description": "Charger State: Bulk",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 215,
+        "description": "Charger State: Absorption",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 216,
+        "description": "Charge State: Float",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 217,
+        "description": "MPPT100/20 Voltage",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 27,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 218,
+        "description": "MPPT 100/20 Current",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 6,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 219,
+        "description": "Battery: Time Remaining",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 0,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 199,
+        "description": "Power Control: Charger Only",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 221,
+        "description": "Power Status: Input AC Watts",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 222,
+        "description": "Power Status: Output AC Watts",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 223,
+        "description": "Power Status: Board Battery Watts",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 0,
+        "dataType": 1,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 181,
+        "description": "MPPT 75/15 Current",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 6,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 182,
+        "description": "MPPT 75/15 Voltage",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 27,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 185,
+        "description": "Solar Watts ALL",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 183,
+        "description": "Indication Line: Charger to Battery",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 197,
+        "description": "Inverter On",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 196,
+        "description": "Charger On",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 28,
+        "description": "Shore Power Indication",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 220,
+        "description": "AC IN Indicator",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 195,
+        "description": "AC OUT Indicator",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 180,
+        "description": "Eco mode",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 189,
+        "description": "Victron Low battery indicator",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 191,
+        "description": "Victron Temperature indicator",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 190,
+        "description": "Victron Overload indicator",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 184,
+        "description": "Solar Power MPPT 100/20",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 186,
+        "description": "Solar Power MPPT 75/15",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 192,
+        "description": "Indication Line: Battery to Charger",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 193,
+        "description": "Indication Line: Solar to Battery",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 194,
+        "description": "Indication Line: Solar to Charger",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 29,
+        "description": "230V Button",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 1
+    },
+    {
+        "signalId": 65,
+        "description": "Vehicle Voltage",
+        "type": 0,
+        "channelType": 5,
+        "dataItemFormatType": 27,
+        "dataType": 2,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 151,
+        "description": "Unhide Vehicle Voltage",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 9,
+        "description": "Roof Light Back",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 10,
+        "description": "Roof Light Front",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 20,
+        "description": "Pre-Tent Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 21,
+        "description": "Bathroom Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 22,
+        "description": "Shower Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 23,
+        "description": "Kitchen Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 51,
+        "description": "Fuse Reset Roof Light Front",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 52,
+        "description": "Fuse Trip Roof Light Front",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 53,
+        "description": "Fuse Reset Pre-Tent Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 54,
+        "description": "Fuse Trip Tent Light",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 55,
+        "description": "Fuse Reset Bathroom Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 56,
+        "description": "Fuse Trip Bathroom Light",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 57,
+        "description": "Fuse Trip Shower Light",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 58,
+        "description": "Fuse Reset Shower Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 59,
+        "description": "Fuse Reset Kitchen Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 60,
+        "description": "Fuse Trip Kitchen Light",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 49,
+        "description": "Fuse Reset Roof Light Back",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 50,
+        "description": "Fuse Trip Roof Light Back",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 294,
+        "description": "Shower Light Availalbe?",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 30,
+        "description": "Slider: Ambient Light Front",
+        "type": 0,
+        "channelType": 3,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 31,
+        "description": "Fuse Reset: Ambient Light Frton",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 32,
+        "description": "IND Ambient Light Front",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 33,
+        "description": "Fuse Trip IND Ambient Light Front",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 34,
+        "description": "Slider: Ambient Light Back",
+        "type": 0,
+        "channelType": 3,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 35,
+        "description": "Fuse Reset: Ambient Light Back",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 36,
+        "description": "IND Ambient Light Back",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 37,
+        "description": "Fuse Trip Ambient Light Back",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 38,
+        "description": "Slider: Awning Light",
+        "type": 0,
+        "channelType": 3,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 39,
+        "description": "Fuse Reset: Awning Light",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 40,
+        "description": "Awning Light Indication",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 41,
+        "description": "Fuse Trip: Awning Light",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 3,
+        "description": "Optional Awning Light",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 68,
+        "description": "Fuse Reset Working Lights Front",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 69,
+        "description": "Fuse Trip Working Lights Front",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 76,
+        "description": "Working Light Front",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 225,
+        "description": "Fuse Reset: Working Lights Left",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 226,
+        "description": "Fuse Trip: Working Lights Left ",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 227,
+        "description": "Working Lights Left",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 228,
+        "description": "Fuse Reset: Working Lights Right",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 229,
+        "description": "Fuse Trip: Working Lights Right",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 230,
+        "description": "Working Lights Right",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 231,
+        "description": "Fuse Reset: Working Lights Back",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 232,
+        "description": "Fuse Trip: Working Lights Back",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 233,
+        "description": "Working Lights Back",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 237,
+        "description": "Working Lights left Installed?",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 238,
+        "description": "Working Lights Right Installed?",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 239,
+        "description": "Working Lights Back Installed?",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 148,
+        "description": "Activate Accessories Page Button",
+        "type": 0,
+        "channelType": 0,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    },
+    {
+        "signalId": 149,
+        "description": "Accessories Nav Button",
+        "type": 0,
+        "channelType": 1,
+        "dataItemFormatType": 0,
+        "dataType": 0,
+        "channelSettingType": 0
+    }
+]
