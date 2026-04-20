@@ -187,12 +187,42 @@ def _format_burst_summary(suppressed_count: int, family_count: int, first_ts: fl
     return f"burst suppressed={suppressed_count} families={family_count} span={duration:.3f}s"
 
 
+def _flush_suppressed_burst(
+    suppressed_count: int,
+    suppressed_families: set[tuple],
+    suppressed_first_ts: float | None,
+    suppressed_last_ts: float | None,
+) -> tuple[int, set[tuple], float | None, float | None]:
+    if suppressed_count and suppressed_first_ts is not None and suppressed_last_ts is not None:
+        print(_format_burst_summary(suppressed_count, len(suppressed_families), suppressed_first_ts, suppressed_last_ts))
+    return 0, set(), None, None
+
+
+def _is_likely_related_response(frame: dict, last_send_frame: dict | None, response_deadline: float | None) -> bool:
+    if last_send_frame is None or response_deadline is None:
+        return False
+    if frame.get("direction") != "receive":
+        return False
+    frame_ts = frame.get("ts")
+    if not isinstance(frame_ts, (int, float)) or frame_ts > response_deadline:
+        return False
+    send_signal = last_send_frame.get("signal_id")
+    receive_signal = frame.get("signal_id")
+    if not isinstance(send_signal, int) or not isinstance(receive_signal, int):
+        return False
+    if frame.get("group") != last_send_frame.get("group"):
+        return False
+    return abs(receive_signal - send_signal) <= 1
+
+
 def run_stream(args: argparse.Namespace) -> int:
     catalog = load_signal_catalog(Path(args.signals) if args.signals else None)
     frames = iter_source_frames(args, catalog)
     learn_seconds = float(args.learn_seconds)
     threshold = int(args.noise_threshold)
     selected_group = args.filter_group
+    correlate_sends = bool(args.correlate_sends)
+    response_window_seconds = float(args.response_window_seconds)
 
     learn_frames: list[dict] = []
     seen_families: set[tuple] = set()
@@ -204,6 +234,8 @@ def run_stream(args: argparse.Namespace) -> int:
     suppressed_families: set[tuple] = set()
     suppressed_first_ts: float | None = None
     suppressed_last_ts: float | None = None
+    last_send_frame: dict | None = None
+    response_deadline: float | None = None
 
     _print_learning_header(selected_group, args.ws_url)
 
@@ -216,13 +248,16 @@ def run_stream(args: argparse.Namespace) -> int:
 
         if frame.get("direction") == "send":
             glyph_count = _flush_learning_line(glyph_count)
-            if suppressed_count and suppressed_first_ts is not None and suppressed_last_ts is not None:
-                print(_format_burst_summary(suppressed_count, len(suppressed_families), suppressed_first_ts, suppressed_last_ts))
-                suppressed_count = 0
-                suppressed_families.clear()
-                suppressed_first_ts = None
-                suppressed_last_ts = None
+            suppressed_count, suppressed_families, suppressed_first_ts, suppressed_last_ts = _flush_suppressed_burst(
+                suppressed_count,
+                suppressed_families,
+                suppressed_first_ts,
+                suppressed_last_ts,
+            )
             print(_format_frame(frame))
+            if correlate_sends:
+                last_send_frame = frame
+                response_deadline = frame["ts"] + response_window_seconds
             continue
 
         if learn_cutoff_ts is not None and frame["ts"] < learn_cutoff_ts:
@@ -233,6 +268,15 @@ def run_stream(args: argparse.Namespace) -> int:
         if noisy_families is None:
             noisy_families = classify_noisy_families(learn_frames, threshold=threshold)
         glyph_count = _flush_learning_line(glyph_count)
+        if correlate_sends and _is_likely_related_response(frame, last_send_frame, response_deadline):
+            suppressed_count, suppressed_families, suppressed_first_ts, suppressed_last_ts = _flush_suppressed_burst(
+                suppressed_count,
+                suppressed_families,
+                suppressed_first_ts,
+                suppressed_last_ts,
+            )
+            print(_format_frame(frame))
+            continue
         family_key = frame_family_key(frame)
         if family_key in noisy_families:
             suppressed_count += 1
@@ -240,17 +284,21 @@ def run_stream(args: argparse.Namespace) -> int:
             suppressed_first_ts = frame["ts"] if suppressed_first_ts is None else suppressed_first_ts
             suppressed_last_ts = frame["ts"]
             continue
-        if suppressed_count and suppressed_first_ts is not None and suppressed_last_ts is not None:
-            print(_format_burst_summary(suppressed_count, len(suppressed_families), suppressed_first_ts, suppressed_last_ts))
-            suppressed_count = 0
-            suppressed_families.clear()
-            suppressed_first_ts = None
-            suppressed_last_ts = None
+        suppressed_count, suppressed_families, suppressed_first_ts, suppressed_last_ts = _flush_suppressed_burst(
+            suppressed_count,
+            suppressed_families,
+            suppressed_first_ts,
+            suppressed_last_ts,
+        )
         print(_format_frame(frame))
 
     glyph_count = _flush_learning_line(glyph_count)
-    if suppressed_count and suppressed_first_ts is not None and suppressed_last_ts is not None:
-        print(_format_burst_summary(suppressed_count, len(suppressed_families), suppressed_first_ts, suppressed_last_ts))
+    _flush_suppressed_burst(
+        suppressed_count,
+        suppressed_families,
+        suppressed_first_ts,
+        suppressed_last_ts,
+    )
     return 0
 
 
@@ -265,6 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bootstrap-from-har", help="optional HAR file to override the built-in bootstrap and heartbeat messages")
     parser.add_argument("--signals", help="optional signal-info.json override")
     parser.add_argument("--source", help="optional HAR or NDJSON file to replay instead of connecting live")
+    parser.add_argument("--correlate-sends", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--response-window-seconds", type=float, default=0.75, help=argparse.SUPPRESS)
     parser.add_argument("--learn-seconds", type=float, default=30.0, help=argparse.SUPPRESS)
     parser.add_argument("--noise-threshold", type=int, default=3, help=argparse.SUPPRESS)
     parser.add_argument("--heartbeat-interval", type=float, default=4.0, help=argparse.SUPPRESS)

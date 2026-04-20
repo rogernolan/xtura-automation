@@ -146,6 +146,7 @@ class LiveWebsocketClient:
 
             def send_json(ws_app: websocket.WebSocketApp, raw: str) -> None:
                 ws_app.send(raw)
+                frame_queue.put((time.time(), "send", raw))
 
             def heartbeat_loop(ws_app: websocket.WebSocketApp) -> None:
                 while not heartbeat_stop.wait(self.heartbeat_interval):

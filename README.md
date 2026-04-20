@@ -82,6 +82,12 @@ Override the built-in startup sequence from a HAR if you want to compare against
 python empirbus_filter.py -f lights --bootstrap-from-har capture.har
 ```
 
+Show each matching send and then a short burst of likely related receive frames:
+
+```bash
+python empirbus_filter.py -f lights --correlate-sends
+```
+
 ## Output
 
 Learning phase output is intentionally compressed:
@@ -108,6 +114,8 @@ Repeated noisy receive traffic is collapsed into a burst summary:
 ```text
 burst suppressed=12 families=2 span=3.421s
 ```
+
+If `--correlate-sends` is enabled, receive frames for the same signal or an immediate neighbor in the next short window are shown even if that family is otherwise noisy. This is useful for seeing the likely response right after a browser-generated command.
 
 ## Recorder
 
