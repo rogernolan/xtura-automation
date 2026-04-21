@@ -1,162 +1,13 @@
-# EmpirBus Live CLI
+# EmpireBus Go Heating Service
 
-## Setup
+This repository is now centered on the Go heating client and the EmpireBus service work that wraps it.
+The older Python CLI, recorder, and test tooling have been split into a separate peer repository so this repo can stay focused on the Go control path and the Garmin investigation notes.
 
-```bash
-cd /Users/rog/Development/empirebus-tests
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip websocket-client
-```
+## Go Heating Client
 
-## Main Usage
+The Go heating client lives under [`cmd/heatingctl`](/Users/rog/Development/empirebus-tests/cmd/heatingctl/main.go) and [`heating/`](/Users/rog/Development/empirebus-tests/heating).
 
-Run the live analyzer against the Garmin websocket:
-
-```bash
-cd /Users/rog/Development/empirebus-tests
-. .venv/bin/activate
-python empirbus_filter.py -f lights
-```
-
-Default websocket:
-
-```text
-ws://192.168.1.1:8888/ws
-```
-
-The CLI:
-- connects to the websocket
-- replays built-in Garmin startup and heartbeat messages before filtering live traffic
-- learns noisy frame families for 30 seconds
-- prints compressed learning output during that window
-- prints matching sent control frames immediately
-- summarizes suppressed noisy receive bursts after learning
-- then prints full decoded frames for the selected group
-
-## Filter Groups
-
-Choose exactly one:
-
-```text
-lights
-heating
-fuses
-water
-options
-power
-```
-
-Examples:
-
-```bash
-python empirbus_filter.py -f power
-python empirbus_filter.py -f water
-python empirbus_filter.py -f fuses
-```
-
-## Optional Overrides
-
-Override the websocket URL:
-
-```bash
-python empirbus_filter.py -f lights --ws-url ws://192.168.1.1:8888/ws
-```
-
-Replay from a saved capture instead of connecting live:
-
-```bash
-python empirbus_filter.py -f lights --source capture-live.ndjson
-python empirbus_filter.py -f lights --source 192.168.1.1.har
-```
-
-Use a different signal dictionary:
-
-```bash
-python empirbus_filter.py -f power --signals signal-info.json
-```
-
-Override the built-in startup sequence from a HAR if you want to compare against a browser capture:
-
-```bash
-python empirbus_filter.py -f lights --bootstrap-from-har capture.har
-```
-
-Show each matching send and then a short burst of likely related receive frames:
-
-```bash
-python empirbus_filter.py -f lights --correlate-sends
-```
-
-## Output
-
-Learning phase output is intentionally compressed:
-
-```text
-learning 30s [lights] ws://192.168.1.1:8888/ws
-.!....!........!..
-```
-
-After learning completes, surviving frames are printed like:
-
-```text
-15:42:18.204 receive type=16 cmd=0 signal=48 label="All Exterior Lights Off" data=[48, 0, 1]
-```
-
-Matching send frames stay visible even during learning:
-
-```text
-15:42:10.100 send type=16 cmd=0 signal=47 label="All Exterior Lights On" data=[47, 0, 1]
-```
-
-Repeated noisy receive traffic is collapsed into a burst summary:
-
-```text
-burst suppressed=12 families=2 span=3.421s
-```
-
-If `--correlate-sends` is enabled, receive frames for the same signal or an immediate neighbor in the next short window are shown even if that family is otherwise noisy. This is useful for seeing the likely response right after a browser-generated command.
-
-## Recorder
-
-`capture_ws.py` is still available as a separate recorder if you want to save a raw capture:
-
-```bash
-. .venv/bin/activate
-python capture_ws.py --ws-url ws://192.168.1.1:8888/ws --out capture.ndjson
-```
-
-Send the known browser-captured exterior-lights-on action once, then disconnect:
-
-```bash
-. .venv/bin/activate
-python send_lights_on.py
-```
-
-Send all interior lights on instead:
-
-```bash
-. .venv/bin/activate
-python send_lights_on.py --lights interior
-```
-
-Use debug mode to print the startup frames, toggle write, and the first returned frames after the send:
-
-```bash
-. .venv/bin/activate
-python send_lights_on.py --debug --read-count-after-send 10
-```
-
-## Help
-
-```bash
-python empirbus_filter.py --help
-python capture_ws.py --help
-```
-
-## Go Heating CLI
-
-The repo now also includes a Go-based heater test client:
+Run the Go tests:
 
 ```bash
 cd /Users/rog/Development/empirebus-tests
@@ -176,5 +27,42 @@ The Go client currently:
 - replays the Garmin bootstrap and heartbeat traffic
 - tracks heater state from websocket messages
 - decodes target temperature from the observed `signal 105` payloads
-- uses press/release semantics for temperature up and down
+- uses press and release semantics for temperature up and down
+- supports explicit heater power-off via the browser-confirmed `signal 101` off command
 - prints relevant heater frames in verbose mode during an operation and for a short window afterwards
+
+## EmpireBus Service
+
+The service daemon entrypoint lives at [`cmd/empirebusd/main.go`](/Users/rog/Development/empirebus-tests/cmd/empirebusd/main.go).
+
+Start from the sample config in [config.example.yaml](/Users/rog/Development/empirebus-tests/config.example.yaml), then run:
+
+```bash
+cd /Users/rog/Development/empirebus-tests
+PATH=/opt/homebrew/bin:/opt/homebrew/opt/go/bin:$PATH go run ./cmd/empirebusd -config ./config.example.yaml
+```
+
+The sample config includes:
+
+- the everyday morning heating schedule from `05:30` to `08:00`
+- a commented short test pattern you can edit for quick live verification
+
+Current HTTP endpoints:
+
+- `GET /v1/health`
+- `GET /v1/heating/state`
+- `POST /v1/heating/power`
+- `POST /v1/heating/target-temperature`
+- `GET /v1/automation/heating-programs`
+- `GET /v1/events`
+
+Current design notes live in:
+
+- [2026-04-21-empirebus-service-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-empirebus-service-design.md)
+- [2026-04-21-heating-go-client-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-heating-go-client-design.md)
+- [garmin-empirbus-signals.md](/Users/rog/Development/empirebus-tests/docs/garmin-empirbus-signals.md)
+
+## Python Tooling
+
+The Python CLI, capture recorder, and related tests now live in the peer repo at `/Users/rog/Development/garmin-empirebus-python-tools`.
+This repo keeps the Garmin signal investigation docs, HAR captures, and Go implementation work.

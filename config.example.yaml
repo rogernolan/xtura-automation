@@ -1,0 +1,42 @@
+garmin:
+  ws_url: ws://192.168.1.1:8888/ws
+  heartbeat_interval: 4s
+  # origin: http://192.168.1.1
+  trace_window: 3s
+
+automation:
+  timezone: Europe/London
+  heating_programs:
+    - id: everyday-default
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+      periods:
+        - start: "00:00"
+          mode: "off"
+        - start: "13:34"
+          mode: "heat"
+          target_celsius: 20.0
+        - start: "13:36"
+          mode: "off"
+
+      # Quick local test pattern:
+      # Replace the periods above with something short and nearby, for example:
+      #
+      # periods:
+      #   - start: "00:00"
+      #     mode: "off"
+      #   - start: "14:00"
+      #     mode: "heat"
+      #     target_celsius: 18.0
+      #   - start: "14:10"
+      #     mode: "heat"
+      #     target_celsius: 21.0
+      #   - start: "14:20"
+      #     mode: "off"
+      #
+      # That lets you verify:
+      # - off -> heat
+      # - heat -> heat (setpoint only)
+      # - heat -> off
+
+api:
+  listen: 0.0.0.0:8080

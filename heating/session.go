@@ -108,6 +108,12 @@ func (s *Session) State() HeaterState {
 	return s.state.Clone()
 }
 
+func (s *Session) Err() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.readErr
+}
+
 func (s *Session) WithTraceWindow(d time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
