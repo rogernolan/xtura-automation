@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -46,6 +47,25 @@ type HeatingPeriodConfig struct {
 	TargetCelsius *float64 `yaml:"target_celsius,omitempty"`
 }
 
+type HeatingScheduleDocument struct {
+	Timezone string                           `json:"timezone"`
+	Programs []HeatingScheduleProgramDocument `json:"programs"`
+	Revision string                           `json:"revision,omitempty"`
+}
+
+type HeatingScheduleProgramDocument struct {
+	ID      string                          `json:"id"`
+	Enabled bool                            `json:"enabled"`
+	Days    []string                        `json:"days"`
+	Periods []HeatingSchedulePeriodDocument `json:"periods"`
+}
+
+type HeatingSchedulePeriodDocument struct {
+	Start         string   `json:"start"`
+	Mode          string   `json:"mode"`
+	TargetCelsius *float64 `json:"target_celsius,omitempty"`
+}
+
 type NormalizedConfig struct {
 	Garmin     GarminConfig
 	API        APIConfig
@@ -70,6 +90,33 @@ func LoadFile(path string) (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func SaveFile(path string, cfg Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "config-*.yaml")
+	if err != nil {
+		return fmt.Errorf("create temp config: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp config: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace config: %w", err)
+	}
+	return nil
 }
 
 func (c Config) Validate() error {
@@ -154,6 +201,62 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		out.Automation.HeatingPrograms = append(out.Automation.HeatingPrograms, normalized)
 	}
 	return out, nil
+}
+
+func (c Config) HeatingScheduleDocument(revision string) HeatingScheduleDocument {
+	programs := make([]HeatingScheduleProgramDocument, 0, len(c.Automation.HeatingPrograms))
+	for _, program := range c.Automation.HeatingPrograms {
+		enabled := true
+		if program.Enabled != nil {
+			enabled = *program.Enabled
+		}
+		periods := make([]HeatingSchedulePeriodDocument, 0, len(program.Periods))
+		for _, period := range program.Periods {
+			periods = append(periods, HeatingSchedulePeriodDocument{
+				Start:         period.Start,
+				Mode:          period.Mode,
+				TargetCelsius: period.TargetCelsius,
+			})
+		}
+		programs = append(programs, HeatingScheduleProgramDocument{
+			ID:      program.ID,
+			Enabled: enabled,
+			Days:    append([]string(nil), program.Days...),
+			Periods: periods,
+		})
+	}
+	return HeatingScheduleDocument{
+		Timezone: c.Automation.Timezone,
+		Programs: programs,
+		Revision: revision,
+	}
+}
+
+func (c Config) WithHeatingSchedule(doc HeatingScheduleDocument) (Config, error) {
+	next := c
+	next.Automation.Timezone = strings.TrimSpace(doc.Timezone)
+	next.Automation.HeatingPrograms = make([]HeatingProgramConfig, 0, len(doc.Programs))
+	for _, program := range doc.Programs {
+		enabled := program.Enabled
+		periods := make([]HeatingPeriodConfig, 0, len(program.Periods))
+		for _, period := range program.Periods {
+			periods = append(periods, HeatingPeriodConfig{
+				Start:         strings.TrimSpace(period.Start),
+				Mode:          strings.TrimSpace(period.Mode),
+				TargetCelsius: period.TargetCelsius,
+			})
+		}
+		next.Automation.HeatingPrograms = append(next.Automation.HeatingPrograms, HeatingProgramConfig{
+			ID:      strings.TrimSpace(program.ID),
+			Enabled: &enabled,
+			Days:    append([]string(nil), program.Days...),
+			Periods: periods,
+		})
+	}
+	if err := next.Validate(); err != nil {
+		return Config{}, err
+	}
+	return next, nil
 }
 
 func normalizeHeatingProgram(program HeatingProgramConfig) (domainheating.HeatingProgram, error) {

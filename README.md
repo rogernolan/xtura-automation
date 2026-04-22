@@ -51,15 +51,23 @@ Current HTTP endpoints:
 
 - `GET /v1/health`
 - `GET /v1/heating/state`
+- `GET /v1/heating/mode`
+- `POST /v1/heating/mode/schedule`
+- `POST /v1/heating/mode/off`
+- `POST /v1/heating/mode/manual`
+- `POST /v1/heating/mode/boost`
 - `POST /v1/heating/power`
 - `POST /v1/heating/target-temperature`
 - `GET /v1/automation/heating-programs`
+- `GET /v1/automation/heating-schedule`
+- `PUT /v1/automation/heating-schedule`
 - `GET /v1/events`
 
 Current design notes live in:
 
 - [2026-04-21-empirebus-service-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-empirebus-service-design.md)
 - [2026-04-21-heating-go-client-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-heating-go-client-design.md)
+- [heating-schedule-api.md](/Users/rog/Development/xtura-automation/docs/heating-schedule-api.md)
 - [garmin-empirbus-signals.md](/Users/rog/Development/empirebus-tests/docs/garmin-empirbus-signals.md)
 
 ## Python Tooling

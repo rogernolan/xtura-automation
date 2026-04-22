@@ -104,13 +104,13 @@ func TestValidateRejectsOverlappingProgramDays(t *testing.T) {
 			Timezone: "Europe/London",
 			HeatingPrograms: []HeatingProgramConfig{
 				{
-					ID:   "a",
-					Days: []string{"mon"},
+					ID:      "a",
+					Days:    []string{"mon"},
 					Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 				},
 				{
-					ID:   "b",
-					Days: []string{"monday"},
+					ID:      "b",
+					Days:    []string{"monday"},
 					Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 				},
 			},
@@ -120,4 +120,38 @@ func TestValidateRejectsOverlappingProgramDays(t *testing.T) {
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "overlaps") {
 		t.Fatalf("expected overlapping-day validation error, got %v", err)
 	}
+}
+
+func TestHeatingScheduleDocumentRoundTrip(t *testing.T) {
+	cfg := Config{
+		Garmin: GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},
+		Automation: AutomationConfig{
+			Timezone: "Europe/London",
+			HeatingPrograms: []HeatingProgramConfig{{
+				ID:      "weekday",
+				Enabled: ptrBool(false),
+				Days:    []string{"mon"},
+				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
+			}},
+		},
+		API: APIConfig{Listen: ":8080"},
+	}
+	doc := cfg.HeatingScheduleDocument("rev-1")
+	if doc.Revision != "rev-1" {
+		t.Fatalf("got revision %q", doc.Revision)
+	}
+	next, err := cfg.WithHeatingSchedule(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(next.Automation.HeatingPrograms); got != 1 {
+		t.Fatalf("got %d programs", got)
+	}
+	if next.Automation.HeatingPrograms[0].Enabled == nil || *next.Automation.HeatingPrograms[0].Enabled {
+		t.Fatalf("expected disabled program to round-trip")
+	}
+}
+
+func ptrBool(v bool) *bool {
+	return &v
 }

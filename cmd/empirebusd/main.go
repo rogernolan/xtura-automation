@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -33,7 +34,10 @@ func main() {
 	defer stop()
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-	app := runtime.New(ctx, normalized, logger)
+	app, err := runtime.New(ctx, *cfg, configPath, logger)
+	if err != nil {
+		log.Fatalf("start app: %v", err)
+	}
 	server := &http.Server{
 		Addr:              normalized.API.Listen,
 		Handler:           httpapi.New(app).Handler(),
@@ -47,8 +51,12 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
+	listener, err := net.Listen("tcp", normalized.API.Listen)
+	if err != nil {
+		log.Fatalf("listen %s: %v", normalized.API.Listen, err)
+	}
 	logger.Printf("empirebusd listening on %s", normalized.API.Listen)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server: %v", err)
 	}
 }

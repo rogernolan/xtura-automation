@@ -3,11 +3,14 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"empirebus-tests/service/api/events"
+	"empirebus-tests/service/config"
 	"empirebus-tests/service/runtime"
 )
 
@@ -22,6 +25,13 @@ type Application interface {
 	EnsurePower(context.Context, string) error
 	SetTargetTemperature(context.Context, float64) error
 	HeatingPrograms(time.Time) []runtime.ProgramStatus
+	HeatingMode() config.HeatingRuntimeState
+	SetHeatingModeSchedule(context.Context) (config.HeatingRuntimeState, error)
+	SetHeatingModeOff(context.Context) (config.HeatingRuntimeState, error)
+	SetHeatingModeManual(context.Context, float64) (config.HeatingRuntimeState, error)
+	SetHeatingModeBoost(context.Context, float64, time.Duration) (config.HeatingRuntimeState, error)
+	HeatingSchedule() config.HeatingScheduleDocument
+	UpdateHeatingSchedule(context.Context, config.HeatingScheduleDocument) (config.HeatingScheduleDocument, error)
 	Broker() *events.Broker
 }
 
@@ -35,7 +45,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/heating/state", s.handleHeatingState)
 	mux.HandleFunc("/v1/heating/power", s.handleHeatingPower)
 	mux.HandleFunc("/v1/heating/target-temperature", s.handleHeatingTargetTemperature)
+	mux.HandleFunc("/v1/heating/mode", s.handleHeatingMode)
+	mux.HandleFunc("/v1/heating/mode/schedule", s.handleHeatingModeSchedule)
+	mux.HandleFunc("/v1/heating/mode/off", s.handleHeatingModeOff)
+	mux.HandleFunc("/v1/heating/mode/manual", s.handleHeatingModeManual)
+	mux.HandleFunc("/v1/heating/mode/boost", s.handleHeatingModeBoost)
 	mux.HandleFunc("/v1/automation/heating-programs", s.handleHeatingPrograms)
+	mux.HandleFunc("/v1/automation/heating-schedule", s.handleHeatingSchedule)
 	mux.HandleFunc("/v1/events", s.handleEvents)
 	return mux
 }
@@ -106,6 +122,119 @@ func (s *Server) handleHeatingPrograms(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.app.HeatingPrograms(time.Now()))
 }
 
+func (s *Server) handleHeatingSchedule(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.app.HeatingSchedule())
+	case http.MethodPut:
+		var body config.HeatingScheduleDocument
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		doc, err := s.app.UpdateHeatingSchedule(ctx, body)
+		if err != nil {
+			switch {
+			case errors.Is(err, runtime.ErrScheduleRevisionConflict):
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			case isValidationError(err):
+				writeValidationError(w, err)
+			default:
+				writeError(w, http.StatusBadGateway, err)
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, doc)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleHeatingMode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.HeatingMode())
+}
+
+func (s *Server) handleHeatingModeSchedule(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	state, err := s.app.SetHeatingModeSchedule(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleHeatingModeOff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	state, err := s.app.SetHeatingModeOff(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleHeatingModeManual(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var body struct {
+		TargetCelsius float64 `json:"target_celsius"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	state, err := s.app.SetHeatingModeManual(ctx, body.TargetCelsius)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleHeatingModeBoost(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var body struct {
+		TargetCelsius   float64 `json:"target_celsius"`
+		DurationMinutes int     `json:"duration_minutes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	state, err := s.app.SetHeatingModeBoost(ctx, body.TargetCelsius, time.Duration(body.DurationMinutes)*time.Minute)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -153,4 +282,32 @@ func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
 
 func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]string{"error": err.Error()})
+}
+
+func writeValidationError(w http.ResponseWriter, err error) {
+	details := make([]map[string]string, 0)
+	for _, part := range strings.Split(err.Error(), "; ") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		details = append(details, map[string]string{"message": part})
+	}
+	writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+		"error":   "validation_failed",
+		"details": details,
+	})
+}
+
+func isValidationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "automation.") ||
+		strings.Contains(msg, "target_celsius") ||
+		strings.Contains(msg, "unsupported") ||
+		strings.Contains(msg, "redundant") ||
+		strings.Contains(msg, "overlaps") ||
+		strings.Contains(msg, "must contain at least one")
 }
