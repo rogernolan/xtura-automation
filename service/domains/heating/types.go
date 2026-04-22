@@ -71,9 +71,9 @@ func (p HeatingPeriod) Validate() error {
 }
 
 type HeatingProgram struct {
-	ID      string         `json:"id"`
-	Enabled bool           `json:"enabled"`
-	Days    []time.Weekday `json:"days"`
+	ID      string          `json:"id"`
+	Enabled bool            `json:"enabled"`
+	Days    []time.Weekday  `json:"days"`
 	Periods []HeatingPeriod `json:"periods"`
 }
 
