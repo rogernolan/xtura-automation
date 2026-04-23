@@ -142,9 +142,9 @@ Set these repository variables:
 Set these repository secrets:
 
 - `TS_OAUTH_CLIENT_ID`
-- `TS_AUDIENCE`
+- `TS_OAUTH_SECRET`
 
-Those come from your Tailscale GitHub integration / federated identity setup.
+Those come from your Tailscale OAuth client setup.
 
 Recommended GitHub environment:
 
