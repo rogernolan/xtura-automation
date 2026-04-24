@@ -185,6 +185,162 @@ func TestEnsureOffIsIdempotentWhenAlreadyOff(t *testing.T) {
 	}
 }
 
+func TestSessionSignalIsOnTracksLatestReceivedSignal(t *testing.T) {
+	t.Parallel()
+	session := NewSession(SessionConfig{TraceWindow: time.Second})
+
+	if on, known, at := session.SignalIsOn(47); known || on || !at.IsZero() {
+		t.Fatalf("expected unknown signal state, got on=%t known=%t at=%v", on, known, at)
+	}
+
+	receiveAt := time.Unix(1710000000, 0).UTC()
+	session.ingest(Frame{
+		At:        receiveAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{47, 0, 1}},
+	})
+
+	on, known, at := session.SignalIsOn(47)
+	if !known || !on {
+		t.Fatalf("expected signal 47 to be known on, got on=%t known=%t", on, known)
+	}
+	if !at.Equal(receiveAt) {
+		t.Fatalf("got signal time %v want %v", at, receiveAt)
+	}
+
+	sendAt := receiveAt.Add(time.Second)
+	session.ingest(Frame{
+		At:        sendAt,
+		Direction: DirectionSend,
+		Wire:      WireFrame{Data: []int{47, 0, 0}},
+	})
+
+	on, known, at = session.SignalIsOn(47)
+	if !known || !on {
+		t.Fatalf("expected send frame to leave received signal state unchanged, got on=%t known=%t", on, known)
+	}
+	if !at.Equal(receiveAt) {
+		t.Fatalf("got signal time %v want %v after send frame", at, receiveAt)
+	}
+
+	offAt := receiveAt.Add(2 * time.Second)
+	session.ingest(Frame{
+		At:        offAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{47, 0, 0}},
+	})
+
+	on, known, at = session.SignalIsOn(47)
+	if !known || on {
+		t.Fatalf("expected signal 47 to be known off, got on=%t known=%t", on, known)
+	}
+	if !at.Equal(offAt) {
+		t.Fatalf("got signal time %v want %v after off frame", at, offAt)
+	}
+}
+
+func TestSendSimpleCommandWritesSimpleActionFrame(t *testing.T) {
+	t.Parallel()
+	received := make(chan WireFrame, 8)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		for {
+			_, payload, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			wire, err := ParseWireFrame(string(payload))
+			if err != nil {
+				continue
+			}
+			select {
+			case received <- wire:
+			default:
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	session := NewSession(SessionConfig{
+		WSURL:             wsURL,
+		HeartbeatInterval: time.Hour,
+		TraceWindow:       time.Second,
+		BootstrapMessages: []string{
+			`{"messagetype":96,"messagecmd":0,"size":0,"data":[]}`,
+		},
+	})
+	client := NewClient(session)
+	if err := session.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = session.Close()
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	sentAt, err := client.SendSimpleCommandAt(ctx, 47, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sentAt.IsZero() {
+		t.Fatal("expected simple command to return send timestamp")
+	}
+
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case wire := <-received:
+			if len(wire.Data) >= 3 && wire.Data[0] == 47 && wire.Data[2] == 3 {
+				if wire.MessageType != 17 || wire.MessageCmd != 0 || wire.Size != 3 {
+					t.Fatalf("got frame type=%d cmd=%d size=%d want type=17 cmd=0 size=3", wire.MessageType, wire.MessageCmd, wire.Size)
+				}
+				return
+			}
+		case <-timeout:
+			t.Fatal("timed out waiting for simple command frame")
+		}
+	}
+}
+
+func TestWaitForSignalIsOnWaitsForReceivedUpdate(t *testing.T) {
+	t.Parallel()
+	session := NewSession(SessionConfig{TraceWindow: time.Second})
+
+	done := make(chan struct{})
+	var gotAt time.Time
+	var gotErr error
+	go func() {
+		defer close(done)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		gotAt, gotErr = session.WaitForSignalIsOn(ctx, 47, true)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	wantAt := time.Unix(1710000000, 0).UTC()
+	session.ingest(Frame{
+		At:        wantAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{47, 0, 1}},
+	})
+
+	<-done
+	if gotErr != nil {
+		t.Fatalf("wait returned error: %v", gotErr)
+	}
+	if !gotAt.Equal(wantAt) {
+		t.Fatalf("got time %v want %v", gotAt, wantAt)
+	}
+}
+
 func TestEnsureOffSendsPowerOffAndWaitsForConfirmation(t *testing.T) {
 	t.Parallel()
 	received := make(chan WireFrame, 8)

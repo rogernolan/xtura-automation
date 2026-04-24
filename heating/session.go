@@ -39,6 +39,8 @@ type Session struct {
 	mu        sync.Mutex
 	cond      *sync.Cond
 	state     HeaterState
+	signals   map[int]int
+	signalAt  map[int]time.Time
 	closed    bool
 	readErr   error
 	traceTill time.Time
@@ -61,6 +63,8 @@ func NewSession(cfg SessionConfig) *Session {
 		cfg.TraceWindow = 3 * time.Second
 	}
 	s := &Session{cfg: cfg}
+	s.signals = make(map[int]int)
+	s.signalAt = make(map[int]time.Time)
 	s.cond = sync.NewCond(&s.mu)
 	return s
 }
@@ -114,6 +118,16 @@ func (s *Session) Err() error {
 	return s.readErr
 }
 
+func (s *Session) SignalIsOn(signal int) (bool, bool, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.signals[signal]
+	if !ok {
+		return false, false, time.Time{}
+	}
+	return value == 1, true, s.signalAt[signal]
+}
+
 func (s *Session) WithTraceWindow(d time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -154,26 +168,75 @@ func (s *Session) waitFor(ctx context.Context, predicate func(HeaterState) bool)
 	}
 }
 
+func (s *Session) WaitForSignalIsOn(ctx context.Context, signal int, wantOn bool) (time.Time, error) {
+	return s.WaitForSignalIsOnAfter(ctx, signal, wantOn, time.Time{})
+}
+
+func (s *Session) WaitForSignalIsOnAfter(ctx context.Context, signal int, wantOn bool, after time.Time) (time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for {
+		if value, ok := s.signals[signal]; ok && (value == 1) == wantOn {
+			at := s.signalAt[signal]
+			if after.IsZero() || at.After(after) {
+				return at, nil
+			}
+		}
+		if s.readErr != nil {
+			return time.Time{}, s.readErr
+		}
+		if s.closed {
+			return time.Time{}, context.Canceled
+		}
+		done := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+				s.mu.Lock()
+				s.cond.Broadcast()
+				s.mu.Unlock()
+			case <-done:
+			}
+		}()
+		s.cond.Wait()
+		close(done)
+		if err := ctx.Err(); err != nil {
+			return time.Time{}, err
+		}
+	}
+}
+
 func (s *Session) sendCommand(frame WireFrame) error {
+	_, err := s.sendCommandAt(frame)
+	return err
+}
+
+func (s *Session) sendCommandAt(frame WireFrame) (time.Time, error) {
 	raw, err := marshalWireFrame(frame)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
-	return s.sendRaw(raw)
+	return s.sendRawAt(raw)
 }
 
 func (s *Session) sendRaw(raw string) error {
+	_, err := s.sendRawAt(raw)
+	return err
+}
+
+func (s *Session) sendRawAt(raw string) (time.Time, error) {
 	if s.conn == nil {
-		return fmt.Errorf("session not connected")
+		return time.Time{}, fmt.Errorf("session not connected")
 	}
+	sentAt := time.Now()
 	if err := s.conn.WriteMessage(websocket.TextMessage, []byte(raw)); err != nil {
-		return err
+		return time.Time{}, err
 	}
 	wire, err := ParseWireFrame(raw)
 	if err == nil {
-		s.ingest(Frame{At: time.Now(), Direction: DirectionSend, Wire: wire})
+		s.ingest(Frame{At: sentAt, Direction: DirectionSend, Wire: wire})
 	}
-	return nil
+	return sentAt, nil
 }
 
 func (s *Session) heartbeatLoop() {
@@ -211,6 +274,10 @@ func (s *Session) readLoop() {
 func (s *Session) ingest(frame Frame) {
 	s.mu.Lock()
 	changed := updateState(&s.state, frame)
+	if frame.Direction == DirectionReceive && len(frame.Wire.Data) >= 3 {
+		s.signals[frame.SignalID()] = frame.Wire.Data[2]
+		s.signalAt[frame.SignalID()] = frame.At
+	}
 	trace := s.cfg.Verbose && frame.RelevantToHeating() && (frame.Direction == DirectionSend || time.Now().Before(s.traceTill))
 	s.cond.Broadcast()
 	s.mu.Unlock()

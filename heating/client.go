@@ -65,6 +65,24 @@ func (c *Client) EnsureOff(ctx context.Context) error {
 	return err
 }
 
+func (c *Client) SendSimpleCommand(ctx context.Context, signal int, value int) error {
+	_, err := c.SendSimpleCommandAt(ctx, signal, value)
+	return err
+}
+
+func (c *Client) SendSimpleCommandAt(ctx context.Context, signal int, value int) (time.Time, error) {
+	if err := ctx.Err(); err != nil {
+		return time.Time{}, err
+	}
+	c.session.WithTraceWindow(c.session.cfg.TraceWindow)
+	return c.session.sendCommandAt(WireFrame{
+		MessageType: 17,
+		MessageCmd:  0,
+		Size:        3,
+		Data:        []int{signal, 0, value},
+	})
+}
+
 func (c *Client) GetTargetTemp(ctx context.Context) (float64, error) {
 	c.session.WithTraceWindow(c.session.cfg.TraceWindow)
 	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
