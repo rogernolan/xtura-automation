@@ -422,8 +422,8 @@ The backend currently enforces these schedule rules:
 
 ## Related Server Files
 
-- [service/api/httpapi/server.go](/Users/rog/Development/xtura-automation/service/api/httpapi/server.go)
-- [service/runtime/app.go](/Users/rog/Development/xtura-automation/service/runtime/app.go)
-- [service/config/config.go](/Users/rog/Development/xtura-automation/service/config/config.go)
-- [service/config/runtime_state.go](/Users/rog/Development/xtura-automation/service/config/runtime_state.go)
-- [service/runtime/mode.go](/Users/rog/Development/xtura-automation/service/runtime/mode.go)
+- `service/api/httpapi/server.go`
+- `service/runtime/app.go`
+- `service/config/config.go`
+- `service/config/runtime_state.go`
+- `service/runtime/mode.go`

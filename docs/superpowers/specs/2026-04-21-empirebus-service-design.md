@@ -30,7 +30,7 @@ The daemon should reuse the existing Go heating client as the first hardware ada
 
 ## Context
 
-The repo already contains a Go heating client and websocket session implementation in the `heating` package, plus a thin CLI in [`cmd/heatingctl/main.go`](/Users/rog/Development/empirebus-tests/cmd/heatingctl/main.go).
+The repo already contains a Go heating client and websocket session implementation in the `heating` package, plus a thin CLI in `cmd/heatingctl/main.go`.
 That client already handles:
 
 - Garmin websocket connection and bootstrap

@@ -5,13 +5,12 @@ The older Python CLI, recorder, and test tooling have been split into a separate
 
 ## Go Heating Client
 
-The Go heating client lives under [`cmd/heatingctl`](/Users/rog/Development/empirebus-tests/cmd/heatingctl/main.go) and [`heating/`](/Users/rog/Development/empirebus-tests/heating).
+The Go heating client lives under `cmd/heatingctl/main.go` and `heating/`.
 
 Run the Go tests:
 
 ```bash
-cd /Users/rog/Development/empirebus-tests
-PATH=/opt/homebrew/bin:/opt/homebrew/opt/go/bin:$PATH go test ./...
+go test ./...
 ```
 
 Build and run the CLI:
@@ -33,13 +32,12 @@ The Go client currently:
 
 ## EmpireBus Service
 
-The service daemon entrypoint lives at [`cmd/empirebusd/main.go`](/Users/rog/Development/empirebus-tests/cmd/empirebusd/main.go).
+The service daemon entrypoint lives at `cmd/empirebusd/main.go`.
 
-Start from the sample config in [config.example.yaml](/Users/rog/Development/empirebus-tests/config.example.yaml), then run:
+Start from the sample config in `config.example.yaml`, then run:
 
 ```bash
-cd /Users/rog/Development/empirebus-tests
-PATH=/opt/homebrew/bin:/opt/homebrew/opt/go/bin:$PATH go run ./cmd/empirebusd -config ./config.example.yaml
+go run ./cmd/empirebusd -config ./config.example.yaml
 ```
 
 The sample config includes:
@@ -65,24 +63,24 @@ Current HTTP endpoints:
 
 Current design notes live in:
 
-- [2026-04-21-empirebus-service-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-empirebus-service-design.md)
-- [2026-04-21-heating-go-client-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-heating-go-client-design.md)
-- [heating-schedule-api.md](/Users/rog/Development/xtura-automation/docs/heating-schedule-api.md)
-- [garmin-empirbus-signals.md](/Users/rog/Development/empirebus-tests/docs/garmin-empirbus-signals.md)
+- [2026-04-21-empirebus-service-design.md](docs/superpowers/specs/2026-04-21-empirebus-service-design.md)
+- [2026-04-21-heating-go-client-design.md](docs/superpowers/specs/2026-04-21-heating-go-client-design.md)
+- [heating-schedule-api.md](docs/heating-schedule-api.md)
+- [garmin-empirbus-signals.md](docs/garmin-empirbus-signals.md)
 
 ## Deployment
 
-The current preferred deployment path is Pi-local build/test/deploy, run as `rog` on `jones-pi.taile19bc2.ts.net`, not GitHub Actions.
+The current preferred deployment path is Pi-local build/test/deploy, run as a local user with passwordless sudo on the Pi host, not GitHub Actions.
 
 Useful files:
 
-- Pi-local deploy script: [deploy-on-pi.sh](/Users/rog/Development/xtura-automation/scripts/deploy/deploy-on-pi.sh)
-- Mac helper to trigger deploy remotely: [run-deploy-from-mac.sh](/Users/rog/Development/xtura-automation/scripts/deploy/run-deploy-from-mac.sh)
-- `systemd` unit: [empirebusd.service](/Users/rog/Development/xtura-automation/ops/systemd/empirebusd.service)
+- Pi-local deploy script: [deploy-on-pi.sh](scripts/deploy/deploy-on-pi.sh)
+- Mac helper to trigger deploy remotely: [run-deploy-from-mac.sh](scripts/deploy/run-deploy-from-mac.sh)
+- `systemd` unit: [empirebusd.service](ops/systemd/empirebusd.service)
 
 Expected host layout:
 
-- repo checkout for `rog`, for example `/home/rog/src/xtura-automation`
+- repo checkout for a local user with passwordless sudo, for example `/home/local-user/src/xtura-automation`
 - deployed releases in `/opt/xtura/releases/<git-sha>`
 - active symlink at `/opt/xtura/current`
 - writable service config at `/var/lib/xtura/config.yaml`
@@ -91,14 +89,13 @@ Expected host layout:
 Typical deploy flow on the Pi:
 
 ```bash
-cd /home/rog/src/xtura-automation
+cd /home/local-user/src/xtura-automation
 ./scripts/deploy/deploy-on-pi.sh
 ```
 
 Typical remote trigger from the Mac:
 
 ```bash
-cd /Users/rog/Development/xtura-automation
 ./scripts/deploy/run-deploy-from-mac.sh
 ```
 
@@ -124,5 +121,5 @@ That workflow-based path has now been removed from the repo in favor of the simp
 
 ## Python Tooling
 
-The Python CLI, capture recorder, and related tests now live in the peer repo at `/Users/rog/Development/garmin-empirebus-python-tools`.
+The Python CLI, capture recorder, and related tests now live in a peer repository for the Python tooling.
 This repo keeps the Garmin signal investigation docs, HAR captures, and Go implementation work.

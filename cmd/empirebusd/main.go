@@ -38,6 +38,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("start app: %v", err)
 	}
+	logger.Printf("empirebusd starting: config=%s listen=%s", configPath, normalized.API.Listen)
 	server := &http.Server{
 		Addr:              normalized.API.Listen,
 		Handler:           httpapi.New(app).Handler(),
@@ -46,6 +47,7 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
+		logger.Printf("empirebusd shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)

@@ -11,6 +11,8 @@ WorkingDirectory=/opt/xtura/current
 ExecStart=/opt/xtura/current/empirebusd -config /var/lib/xtura/config.yaml
 Restart=on-failure
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 NoNewPrivileges=true
 PrivateTmp=true
 

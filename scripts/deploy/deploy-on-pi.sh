@@ -61,6 +61,8 @@ echo "==> Restarting ${SERVICE_NAME}"
 sudo systemctl daemon-reload
 sudo systemctl restart "${SERVICE_NAME}.service"
 sudo systemctl --no-pager --full status "${SERVICE_NAME}.service"
+echo "==> Recent ${SERVICE_NAME} logs"
+sudo journalctl -u "${SERVICE_NAME}.service" -n 50 --no-pager
 
 echo "==> Health check"
 curl --fail --silent --show-error http://127.0.0.1:8080/v1/health

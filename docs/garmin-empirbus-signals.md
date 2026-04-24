@@ -72,7 +72,7 @@ Observed action values:
 
 ## Domain Summary
 
-The current domain groupings come from [empirbus_filter.py](/Users/rog/Development/empirebus-tests/empirbus_filter.py):
+The current domain groupings come from `empirbus_filter.py` in the related tooling repo:
 
 - `lights`
 - `heating`
@@ -85,7 +85,7 @@ The current domain groupings come from [empirbus_filter.py](/Users/rog/Developme
 
 ### Known commands
 
-Browser-confirmed from [192.168.1.1.har](/Users/rog/Development/empirebus-tests/192.168.1.1.har):
+Browser-confirmed from `192.168.1.1.har`:
 
 | Action | Confidence | Frame | Notes |
 | --- | --- | --- | --- |
@@ -135,7 +135,7 @@ For all-lights commands observed so far:
 
 ### Known commands
 
-Browser-confirmed from [Heating.har](/Users/rog/Development/empirebus-tests/Heating.har):
+Browser-confirmed from `Heating.har`:
 
 | Action | Confidence | Frame | Notes |
 | --- | --- | --- | --- |
@@ -185,7 +185,7 @@ Power, hot-water, and energy-source related heating-domain signals:
 
 ### Known target-temperature evidence
 
-From [docs/superpowers/specs/2026-04-21-heating-go-client-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-heating-go-client-design.md), signal `105` is the strongest current candidate for target-temperature decoding.
+From `docs/superpowers/specs/2026-04-21-heating-go-client-design.md`, signal `105` is the strongest current candidate for target-temperature decoding.
 
 Observed values:
 
@@ -219,7 +219,7 @@ For heater temp up/down:
 - `data[1]`: `0`
 - `data[2]`: `1` for press, `0` for release
 
-For target temperature (`105`), the Go logger currently renders inferred interpretations like `set_temp=20.0C` from the payload using the decode logic in [heating/state.go](/Users/rog/Development/xtura-automation/heating/state.go:109). This remains inference from repo-local captures such as [Heating.har](/Users/rog/Development/xtura-automation/Heating.har) and [Heating 13C-20C.har](/Users/rog/Development/xtura-automation/Heating%2013C-20C.har), not a browser-confirmed field specification.
+For target temperature (`105`), the Go logger currently renders inferred interpretations like `set_temp=20.0C` from the payload using the decode logic in `heating/state.go`. This remains inference from repo-local captures such as `Heating.har` and `Heating 13C-20C.har`, not a browser-confirmed field specification.
 
 ## Fuses
 
