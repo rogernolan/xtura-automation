@@ -68,8 +68,59 @@ Current design notes live in:
 - [2026-04-21-empirebus-service-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-empirebus-service-design.md)
 - [2026-04-21-heating-go-client-design.md](/Users/rog/Development/empirebus-tests/docs/superpowers/specs/2026-04-21-heating-go-client-design.md)
 - [heating-schedule-api.md](/Users/rog/Development/xtura-automation/docs/heating-schedule-api.md)
-- [pi-deployment.md](/Users/rog/Development/xtura-automation/docs/pi-deployment.md)
 - [garmin-empirbus-signals.md](/Users/rog/Development/empirebus-tests/docs/garmin-empirbus-signals.md)
+
+## Deployment
+
+The current preferred deployment path is Pi-local build/test/deploy, run as `rog` on `jones-pi.taile19bc2.ts.net`, not GitHub Actions.
+
+Useful files:
+
+- Pi-local deploy script: [deploy-on-pi.sh](/Users/rog/Development/xtura-automation/scripts/deploy/deploy-on-pi.sh)
+- Mac helper to trigger deploy remotely: [run-deploy-from-mac.sh](/Users/rog/Development/xtura-automation/scripts/deploy/run-deploy-from-mac.sh)
+- `systemd` unit: [empirebusd.service](/Users/rog/Development/xtura-automation/ops/systemd/empirebusd.service)
+
+Expected host layout:
+
+- repo checkout for `rog`, for example `/home/rog/src/xtura-automation`
+- deployed releases in `/opt/xtura/releases/<git-sha>`
+- active symlink at `/opt/xtura/current`
+- writable service config at `/var/lib/xtura/config.yaml`
+- runtime mode state at `/var/lib/xtura/config.yaml.runtime.yaml`
+
+Typical deploy flow on the Pi:
+
+```bash
+cd /home/rog/src/xtura-automation
+./scripts/deploy/deploy-on-pi.sh
+```
+
+Typical remote trigger from the Mac:
+
+```bash
+cd /Users/rog/Development/xtura-automation
+./scripts/deploy/run-deploy-from-mac.sh
+```
+
+### GitHub Actions Attempt
+
+The GitHub Actions deployment attempt was preserved up to commit `99c9c73fe8932255e3b60caa37cc96e275b77124`.
+
+State reached there:
+
+- GitHub Actions workflow could build and start the Tailscale join flow
+- Tailscale OAuth/tag setup was partially working after switching to lowercase `tag:xtura-ci`
+- the CI runner could reach the Pi over Tailscale DNS
+- SSH auth still fell through to normal `publickey,password`, which meant the setup still needed more Tailscale SSH policy or key-based SSH work
+
+Known lessons from that attempt:
+
+- Tailscale tags must match exactly, including case
+- OAuth client permissions needed both device write and auth key write
+- `scp` uses `-P` for port while `ssh` uses `-p`
+- the extra CI-to-tailnet auth and Tailscale SSH policy work was more setup than wanted for on-the-road fixes
+
+That workflow-based path has now been removed from the repo in favor of the simpler Pi-local deploy flow.
 
 ## Python Tooling
 
