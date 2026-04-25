@@ -12,6 +12,7 @@ import (
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/config"
 	domainheating "empirebus-tests/service/domains/heating"
+	domainlights "empirebus-tests/service/domains/lights"
 	"empirebus-tests/service/runtime"
 )
 
@@ -20,6 +21,8 @@ type fakeApp struct {
 	schedule          config.HeatingScheduleDocument
 	mode              config.HeatingRuntimeState
 	cancelBoostCalled *bool
+	lights            domainlights.State
+	flashLightsErr    error
 }
 
 func (f fakeApp) Health() runtime.ServiceHealthView {
@@ -75,6 +78,14 @@ func (f fakeApp) HeatingSchedule() config.HeatingScheduleDocument {
 
 func (f fakeApp) UpdateHeatingSchedule(context.Context, config.HeatingScheduleDocument) (config.HeatingScheduleDocument, error) {
 	return f.schedule, nil
+}
+
+func (f fakeApp) LightsState() domainlights.State {
+	return f.lights
+}
+
+func (f fakeApp) FlashExteriorLights(context.Context, int) error {
+	return f.flashLightsErr
 }
 
 func (f fakeApp) Broker() *events.Broker {
@@ -212,5 +223,51 @@ func TestHandleHeatingModeBoostCancel(t *testing.T) {
 	}
 	if mode.Mode != config.HeatingModeSchedule {
 		t.Fatalf("got mode %q", mode.Mode)
+	}
+}
+
+func TestHandleLightsStateGet(t *testing.T) {
+	server := New(fakeApp{
+		broker: events.NewBroker(1),
+		lights: domainlights.State{ExternalKnown: true, ExternalOn: true},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/lights/state", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d", rr.Code)
+	}
+	var state domainlights.State
+	if err := json.Unmarshal(rr.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.ExternalKnown || !state.ExternalOn {
+		t.Fatalf("got known=%t on=%t", state.ExternalKnown, state.ExternalOn)
+	}
+}
+
+func TestHandleExteriorFlashRejectsBusy(t *testing.T) {
+	server := New(fakeApp{
+		broker:         events.NewBroker(1),
+		flashLightsErr: runtime.ErrLightsFlashInProgress,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/lights/external/flash", bytes.NewBufferString(`{"count":2}`))
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleExteriorFlashRejectsInvalidCount(t *testing.T) {
+	server := New(fakeApp{
+		broker:         events.NewBroker(1),
+		flashLightsErr: runtime.ErrInvalidFlashCount,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/lights/external/flash", bytes.NewBufferString(`{"count":0}`))
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
 	}
 }

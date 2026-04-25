@@ -11,6 +11,7 @@ import (
 
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/config"
+	domainlights "empirebus-tests/service/domains/lights"
 	"empirebus-tests/service/runtime"
 )
 
@@ -33,6 +34,8 @@ type Application interface {
 	CancelHeatingModeBoost(context.Context) (config.HeatingRuntimeState, error)
 	HeatingSchedule() config.HeatingScheduleDocument
 	UpdateHeatingSchedule(context.Context, config.HeatingScheduleDocument) (config.HeatingScheduleDocument, error)
+	LightsState() domainlights.State
+	FlashExteriorLights(context.Context, int) error
 	Broker() *events.Broker
 }
 
@@ -54,6 +57,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/heating/mode/boost/cancel", s.handleHeatingModeBoostCancel)
 	mux.HandleFunc("/v1/automation/heating-programs", s.handleHeatingPrograms)
 	mux.HandleFunc("/v1/automation/heating-schedule", s.handleHeatingSchedule)
+	mux.HandleFunc("/v1/lights/state", s.handleLightsState)
+	mux.HandleFunc("/v1/lights/external/flash", s.handleExteriorFlash)
 	mux.HandleFunc("/v1/events", s.handleEvents)
 	return mux
 }
@@ -250,6 +255,42 @@ func (s *Server) handleHeatingModeBoostCancel(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleLightsState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.LightsState())
+}
+
+func (s *Server) handleExteriorFlash(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var body struct {
+		Count int `json:"count"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := s.app.FlashExteriorLights(ctx, body.Count); err != nil {
+		switch {
+		case errors.Is(err, runtime.ErrInvalidFlashCount):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		case errors.Is(err, runtime.ErrLightsFlashInProgress):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "flash_in_progress"})
+		default:
+			writeError(w, http.StatusBadGateway, err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.LightsState())
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
