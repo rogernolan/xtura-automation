@@ -1,7 +1,10 @@
-# EmpireBus Go Heating Service
+# EmpireBus Service
 
-This repository is now centered on the Go heating client and the EmpireBus service work that wraps it.
-The older Python CLI, recorder, and test tooling have been split into a separate peer repository so this repo can stay focused on the Go control path and the Garmin investigation notes.
+A small go service to monitor a garmin empire bus event stream and convert it to a sensible Rest api. includes some automation such as a heating schedule.
+
+the system is designed to run on a raspberry pi and is tested (and to be fair) developed for a EuraMobil stura. Eventual target is a pi zero2w.
+
+The service assumes its running on the same network as the garmin SERV/WDU and specifically that it can connect to the garmin web socket. I run the whole thing over Tailscale but thats not a requirement.
 
 ## Go Heating Client
 
@@ -70,7 +73,7 @@ Current design notes live in:
 
 ## Deployment
 
-The current preferred deployment path is Pi-local build/test/deploy, run as a local user with passwordless sudo on the Pi host, not GitHub Actions.
+The current deployment path is Pi-local build/test/deploy, run as a local user with passwordless sudo on the Pi host, i wound back work on GitHub Actions because complexity.
 
 Useful files:
 
@@ -119,7 +122,3 @@ Known lessons from that attempt:
 
 That workflow-based path has now been removed from the repo in favor of the simpler Pi-local deploy flow.
 
-## Python Tooling
-
-The Python CLI, capture recorder, and related tests now live in a peer repository for the Python tooling.
-This repo keeps the Garmin signal investigation docs, HAR captures, and Go implementation work.
