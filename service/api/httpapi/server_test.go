@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -283,5 +285,71 @@ func TestHandleExteriorFlashRejectsInvalidCount(t *testing.T) {
 	server.Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandlerServesWebIndex(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("unexpected content type %q", ct)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `id="app"`) {
+		t.Fatalf("index body did not contain app root: %s", body)
+	}
+}
+
+func TestHandlerServesStaticJavaScript(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	req := httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
+		t.Fatalf("unexpected content type %q", ct)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("javascript body did not contain %q: %s", want, body)
+		}
+	}
+}
+
+func TestHandleEventsFlushesInitialConnectionComment(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/v1/events", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		server.Handler().ServeHTTP(rr, req)
+	}()
+
+	deadline := time.After(500 * time.Millisecond)
+	for {
+		if strings.Contains(rr.Body.String(), ": connected") {
+			cancel()
+			wg.Wait()
+			return
+		}
+		select {
+		case <-deadline:
+			cancel()
+			wg.Wait()
+			t.Fatalf("expected initial SSE connection comment, got %q", rr.Body.String())
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 }

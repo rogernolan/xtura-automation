@@ -11,7 +11,7 @@ Derived from current Go code only. This service can send hardware commands over 
 | HTTP mutators | Treat POST/PUT endpoints as live controls when service is pointed at the real Garmin websocket. | `service/api/httpapi/server.go` |
 | Schedule edits | `PUT /v1/automation/heating-schedule` rewrites the YAML config and reconciles current schedule state. | `runtime.App.UpdateHeatingSchedule` |
 | Runtime mode edits | Mode changes immediately apply hardware commands for `off`, `manual`, and `boost`, then persist to `<config>.runtime.yaml` after apply succeeds. | `service/runtime/mode.go` |
-| Temperature changes | Target changes require a finite setpoint in `0.5C` increments where `5.0C < target < 25.0C`, then call `EnsureOn` before stepping temperature. | `domainheating.ValidateTargetCelsius`, `heating.Client.SetTargetTemp` |
+| Temperature changes | Target changes require a finite setpoint in `0.5C` increments where `5.0C <= target < 25.0C`, then call `EnsureOn` before stepping temperature. | `domainheating.ValidateTargetCelsius`, `heating.Client.SetTargetTemp` |
 | Exterior flash | Flash sends hardware commands repeatedly and restores previous known on/off state when possible. | `runtime.App.FlashExteriorLights` |
 | Websocket confirmations | Exterior commands wait for post-send received confirmation, not just command write success. | `Adapter.ensureExteriorState`, `WaitForSignalIsOnAfter` |
 
@@ -21,7 +21,7 @@ Derived from current Go code only. This service can send hardware commands over 
 |---|---|---|---|
 | `POST /v1/heating/power {"state":"on"}` | HTTP -> `App.EnsurePower` -> `Adapter.EnsureOn` -> `Client.EnsureOn` | `SignalHeatingPower` (`101`) command value `3` if not already on | Waits up to 20s for `Ready()`. |
 | `POST /v1/heating/power {"state":"off"}` | HTTP -> `App.EnsurePower` -> `Adapter.EnsureOff` -> `Client.EnsureOff` | `SignalHeatingPower` (`101`) command value `5` | Idempotent if already off; waits up to 20s for off state. |
-| `POST /v1/heating/target-temperature` | HTTP -> `App.SetTargetTemperature` -> `Client.SetTargetTemp` | `107` or `108` press/release steps | Requires a finite target in `0.5C` increments where `5.0C < target < 25.0C`; waits after each step and detects overshoot. |
+| `POST /v1/heating/target-temperature` | HTTP -> `App.SetTargetTemperature` -> `Client.SetTargetTemp` | `107` or `108` press/release steps | Requires a finite target in `0.5C` increments where `5.0C <= target < 25.0C`; waits after each step and detects overshoot. |
 | Schedule transition to heat | Scheduler -> `applyPeriod` | `EnsureOn`, then `SetTargetTemperature` | Requires `target_celsius`; unsupported modes error. |
 | Schedule transition to off | Scheduler -> `applyPeriod` | `EnsureOff` | No target change. |
 | `POST /v1/heating/mode/manual` | HTTP -> `SetHeatingModeManual` -> `applyRuntimeMode` | `EnsureOn`, then target set | Applies hardware command first, then persists runtime mode only after apply succeeds. |
@@ -36,7 +36,7 @@ Derived from current Go code only. This service can send hardware commands over 
 | Invalid JSON | Returns `400 {"error":"decode request: ..."}`. | HTTP handlers |
 | Schedule validation | Returns `400 {"error":"validation_failed","details":[...]}` for recognized validation text. | `handleHeatingSchedule`, `isValidationError` |
 | Schedule revision conflict | Returns `409 {"error":"schedule revision conflict"}`. | `UpdateHeatingSchedule`, `handleHeatingSchedule` |
-| Heating target range | Direct commands, manual/boost modes, and schedule heat periods reject targets that are not finite, are outside `5.0C < target < 25.0C`, or are not in `0.5C` increments. | `domainheating.ValidateTargetCelsius` |
+| Heating target range | Direct commands, manual/boost modes, and schedule heat periods reject targets that are not finite, are outside `5.0C <= target < 25.0C`, or are not in `0.5C` increments. | `domainheating.ValidateTargetCelsius` |
 | Invalid flash count | Returns `400 {"error":"invalid flash count"}` and records last light command error. | `FlashExteriorLights`, `handleExteriorFlash` |
 | Flash while busy | Returns `409 {"error":"flash_in_progress"}` and records last light command error. | `FlashExteriorLights`, `handleExteriorFlash` |
 | Adapter not connected | Command path returns `"garmin adapter not connected"` and records command error. | `Adapter.withClient`, `ensureExteriorState` |

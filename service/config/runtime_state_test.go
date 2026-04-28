@@ -40,7 +40,7 @@ func TestHeatingRuntimeStateValidateRejectsMissingManualTarget(t *testing.T) {
 
 func TestHeatingRuntimeStateValidateRejectsTargetOutsideSafeRange(t *testing.T) {
 	t.Parallel()
-	for _, target := range []float64{5.0, 25.0} {
+	for _, target := range []float64{4.5, 25.0} {
 		target := target
 		t.Run("manual", func(t *testing.T) {
 			t.Parallel()

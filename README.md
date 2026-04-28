@@ -43,6 +43,14 @@ Start from the sample config in `config.example.yaml`, then run:
 go run ./cmd/empirebusd -config ./config.example.yaml
 ```
 
+The daemon also serves a small mobile-first web UI from the same process:
+
+- `GET /`
+- `GET /ui`
+- `GET /static/...`
+
+The UI is plain embedded HTML/CSS/JavaScript, uses the same `/v1/...` API as other clients, and listens to `GET /v1/events` rather than polling.
+
 The sample config includes:
 
 - the everyday morning heating schedule from `05:30` to `08:00`
@@ -122,4 +130,3 @@ Known lessons from that attempt:
 - the extra CI-to-tailnet auth and Tailscale SSH policy work was more setup than wanted for on-the-road fixes
 
 That workflow-based path has now been removed from the repo in favor of the simpler Pi-local deploy flow.
-

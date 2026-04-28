@@ -60,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/lights/state", s.handleLightsState)
 	mux.HandleFunc("/v1/lights/external/flash", s.handleExteriorFlash)
 	mux.HandleFunc("/v1/events", s.handleEvents)
+	registerStaticRoutes(mux)
 	return mux
 }
 
@@ -320,6 +321,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	ch, cancel := s.broker.Subscribe()
 	defer cancel()
+	_, _ = fmt.Fprint(w, ": connected\n\n")
+	flusher.Flush()
 	notify := r.Context().Done()
 	for {
 		select {

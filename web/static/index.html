@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Xtura</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main id="app" class="app-shell" aria-live="polite">
+      <section class="control-surface">
+        <header class="app-header">
+          <div>
+            <p class="eyebrow">Xtura</p>
+            <h1>Van control</h1>
+          </div>
+          <span id="connectionStatus" class="connection-pill">Connecting</span>
+        </header>
+
+        <nav class="tabs" aria-label="Controls">
+          <button id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Lighting</button>
+          <button id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heating</button>
+        </nav>
+
+        <section id="lightingPanel" class="tab-panel">
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Exterior lights</h2>
+              <span id="lightsState" class="state-text">Loading</span>
+            </div>
+            <div class="flash-control">
+              <label for="flashCount">Flashes</label>
+              <input id="flashCount" name="flash-count" type="number" min="1" max="5" step="1" value="1" inputmode="numeric">
+            </div>
+            <button id="flashLights" class="primary-action" type="button">Flash exterior lights</button>
+            <p id="lightsDetail" class="detail-text">Waiting for light state.</p>
+          </div>
+        </section>
+
+        <section id="heatingPanel" class="tab-panel" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Heating</h2>
+              <span id="modeState" class="state-text">Loading</span>
+            </div>
+            <div class="mode-switch" aria-label="Heating mode">
+              <button id="modeOn" class="mode-option" type="button">On</button>
+              <button id="modeSchedule" class="mode-option" type="button">Schedule</button>
+              <button id="modeOff" class="mode-option" type="button">Off</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Target</h2>
+              <span id="targetState" class="state-text">Set point</span>
+            </div>
+            <div class="target-stepper" aria-label="Heating target">
+              <button id="targetDown" class="icon-button" type="button" aria-label="Decrease target">-</button>
+              <div id="targetValue" class="target-value">18.0C</div>
+              <button id="targetUp" class="icon-button" type="button" aria-label="Increase target">+</button>
+            </div>
+            <div class="quick-targets" aria-label="Quick targets">
+              <button class="secondary-action" type="button" data-target="5">5C</button>
+              <button class="secondary-action" type="button" data-target="18">18C</button>
+              <button class="secondary-action" type="button" data-target="21">21C</button>
+            </div>
+            <p id="modeDetail" class="detail-text">Waiting for heating mode.</p>
+          </div>
+
+          <div id="boostPanel" class="panel">
+            <button id="boostButton" class="primary-action" type="button">Boost to 21C for 1 hour</button>
+            <div id="boostRunning" class="boost-running" hidden>
+              <div>
+                <strong id="boostTarget">21.0C</strong>
+                <span id="boostRemaining">-- remaining</span>
+              </div>
+              <button id="cancelBoostButton" class="secondary-wide" type="button">CANCEL BOOST</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Schedule</h2>
+              <span id="scheduleState" class="state-text">Loading</span>
+            </div>
+            <form id="scheduleForm" class="schedule-form">
+              <div id="scheduleSlots" class="schedule-slots"></div>
+              <button id="saveSchedule" class="primary-action" type="submit">Save schedule</button>
+            </form>
+            <p id="scheduleDetail" class="detail-text">Waiting for schedule.</p>
+          </div>
+        </section>
+
+        <p id="statusMessage" class="status-message">Loading controls.</p>
+      </section>
+    </main>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

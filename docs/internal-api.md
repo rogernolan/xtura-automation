@@ -47,8 +47,8 @@ All mutating HTTP handlers use a `30s` request context timeout in `service/api/h
 | Endpoint | Body | Validation source | Notes |
 |---|---|---|---|
 | `POST /v1/heating/power` | `{"state":"on"}` or `{"state":"off"}` | `runtime.App.EnsurePower` | Other strings return an error that HTTP maps to `502`. |
-| `POST /v1/heating/target-temperature` | `{"celsius":20.0}` | `runtime.App.SetTargetTemperature`, `heating.Client.SetTargetTemp` | Must be finite, in `0.5C` increments, greater than `5.0C`, and less than `25.0C`. |
-| `POST /v1/heating/mode/manual` | `{"target_celsius":19.0}` | `config.HeatingRuntimeState.Validate` plus hardware client | `target_celsius` must be finite, in `0.5C` increments, greater than `5.0C`, and less than `25.0C`. |
+| `POST /v1/heating/target-temperature` | `{"celsius":20.0}` | `runtime.App.SetTargetTemperature`, `heating.Client.SetTargetTemp` | Must be finite, in `0.5C` increments, at least `5.0C`, and less than `25.0C`. |
+| `POST /v1/heating/mode/manual` | `{"target_celsius":19.0}` | `config.HeatingRuntimeState.Validate` plus hardware client | `target_celsius` must be finite, in `0.5C` increments, at least `5.0C`, and less than `25.0C`. |
 | `POST /v1/heating/mode/boost` | `{"target_celsius":22.0,"duration_minutes":60}` | `runtime.App.SetHeatingModeBoost` | Duration must be greater than zero; `target_celsius` uses the same safe range as manual mode. |
 | `PUT /v1/automation/heating-schedule` | `HeatingScheduleDocument` | `config.Config.WithHeatingSchedule`, `Validate` | `revision` is optional; if both current and supplied revisions exist and differ, returns `409`; heat periods use the same safe target range. |
 | `POST /v1/lights/external/flash` | `{"count":1}` | `runtime.App.FlashExteriorLights` | Count must be `1..5`. |

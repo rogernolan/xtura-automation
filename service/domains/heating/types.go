@@ -60,8 +60,8 @@ func ValidateTargetCelsius(target float64) error {
 	if math.IsNaN(target) || math.IsInf(target, 0) {
 		return fmt.Errorf("target_celsius must be finite")
 	}
-	if target <= MinTargetCelsius || target >= MaxTargetCelsius {
-		return fmt.Errorf("target_celsius must be greater than %.1fC and less than %.1fC", MinTargetCelsius, MaxTargetCelsius)
+	if target < MinTargetCelsius || target >= MaxTargetCelsius {
+		return fmt.Errorf("target_celsius must be at least %.1fC and less than %.1fC", MinTargetCelsius, MaxTargetCelsius)
 	}
 	if math.Abs(math.Round(target*2)-(target*2)) > 0.000001 {
 		return fmt.Errorf("target_celsius must be in 0.5C increments")

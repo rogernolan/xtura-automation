@@ -116,7 +116,7 @@ func TestSetTargetTempRejectsTargetOutsideSafeRange(t *testing.T) {
 	t.Parallel()
 	session := NewSession(SessionConfig{})
 	client := NewClient(session)
-	for _, target := range []float64{5.0, 25.0} {
+	for _, target := range []float64{4.5, 25.0} {
 		target := target
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
