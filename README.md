@@ -111,6 +111,24 @@ Typical remote trigger from the Mac:
 ./scripts/deploy/run-deploy-from-mac.sh
 ```
 
+On the Raspberry Pi, stop the running service without changing boot startup:
+
+```bash
+sudo systemctl stop empirebusd.service
+```
+
+Stop the service and prevent it from starting on boot:
+
+```bash
+sudo systemctl disable --now empirebusd.service
+```
+
+Start the service again and re-enable boot startup:
+
+```bash
+sudo systemctl enable --now empirebusd.service
+```
+
 ### GitHub Actions Attempt
 
 The GitHub Actions deployment attempt was preserved up to commit `99c9c73fe8932255e3b60caa37cc96e275b77124`.
