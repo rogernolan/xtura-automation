@@ -19,7 +19,7 @@ Characteristics:
 - two tabs: Lighting and Heating
 - quiet utility styling rather than a marketing page
 - compact panels with large touch targets
-- no decorative imagery or heavy assets
+- use `assets/XturaBackground.png` as a subtle background texture
 - plain HTML, CSS, and JavaScript
 - visible product text uses `Xtura`, not `XTura`
 
@@ -88,6 +88,7 @@ Add:
 - `web/static/index.html`
 - `web/static/styles.css`
 - `web/static/app.js`
+- `web/static/xtura-background.png`, copied or moved from `assets/XturaBackground.png`
 - optional small SVG favicon or no favicon
 
 Use Go `embed` for these assets so the deployed binary contains the UI. Mount routes:
