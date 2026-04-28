@@ -29,6 +29,10 @@
               <h2>Exterior lights</h2>
               <span id="lightsState" class="state-text">Loading</span>
             </div>
+            <div class="flash-control">
+              <label for="flashCount">Flashes</label>
+              <input id="flashCount" name="flash-count" type="number" min="1" max="5" step="1" value="1" inputmode="numeric">
+            </div>
             <button id="flashLights" class="primary-action" type="button">Flash exterior lights</button>
             <p id="lightsDetail" class="detail-text">Waiting for light state.</p>
           </div>

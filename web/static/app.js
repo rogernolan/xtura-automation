@@ -121,6 +121,14 @@ function clampTarget(value) {
   return Math.min(24.5, Math.max(5, Math.round(Number(value) * 2) / 2));
 }
 
+function clampInteger(value, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, parsed));
+}
+
 function setStatus(message, tone = "normal") {
   const element = byId("statusMessage");
   element.textContent = message;
@@ -164,6 +172,7 @@ function renderLights() {
     : lights.external_known
       ? `Exterior lights are ${knownText.toLowerCase()}.`
       : "Exterior light state has not been observed yet.";
+  byId("flashCount").disabled = state.requestInFlight || lights.flash_in_progress;
   flashButton.disabled = state.requestInFlight || lights.flash_in_progress;
 }
 
@@ -561,11 +570,15 @@ function bindActions() {
   byId("heatingTab").addEventListener("click", () => setActiveTab("heating"));
   byId("flashLights").addEventListener("click", async () => {
     try {
-      const lights = await withRequest(() => api.flashExteriorLights(1), "Flashing exterior lights");
+      const count = flashCount();
+      const lights = await withRequest(() => api.flashExteriorLights(count), `Flashing exterior lights ${count} time${count === 1 ? "" : "s"}`);
       state.lights = lights;
     } catch (_) {
       return;
     }
+  });
+  byId("flashCount").addEventListener("change", () => {
+    byId("flashCount").value = String(flashCount());
   });
   document.querySelectorAll("[data-target]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -629,6 +642,13 @@ function bindActions() {
       setStatus(error.message, "error");
     }
   });
+}
+
+function flashCount() {
+  const input = byId("flashCount");
+  const count = clampInteger(input.value, 1, 5);
+  input.value = String(count);
+  return count;
 }
 
 async function adjustTarget(delta) {
