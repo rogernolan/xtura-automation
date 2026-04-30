@@ -78,7 +78,7 @@ echo "==> Recent ${SERVICE_NAME} logs"
 sudo journalctl -u "${SERVICE_NAME}.service" -n 50 --no-pager
 
 echo "==> Health check"
-curl --fail --silent --show-error http://127.0.0.1:8080/v1/health
+curl --fail --silent --show-error http://127.0.0.1/v1/health
 echo
 
 if [[ "${1:-HEAD}" != "HEAD" ]]; then
