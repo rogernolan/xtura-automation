@@ -130,9 +130,6 @@ func (p HeatingProgram) Validate() error {
 		if curr.Start.Minutes() <= prev.Start.Minutes() {
 			return fmt.Errorf("period %d must start after the previous period", i)
 		}
-		if SameEffectiveState(prev, curr) {
-			return fmt.Errorf("period %d is redundant with the previous period", i)
-		}
 		prev = curr
 	}
 	return nil

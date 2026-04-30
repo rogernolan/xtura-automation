@@ -514,7 +514,7 @@ The backend currently enforces these schedule rules:
 - each program must have at least one period
 - the first period must start at `00:00`
 - periods must be strictly increasing by time
-- consecutive periods must not be redundant
+- consecutive periods may have the same effective state
 - `off` periods must not include `target_celsius`
 - `heat` periods must include `target_celsius`
 

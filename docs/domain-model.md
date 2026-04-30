@@ -24,7 +24,7 @@ Derived from current Go code only. Signal meanings are documented only where cur
 | Period mode | `off` or `heat` | `parseMode`, `HeatingPeriod.Validate` | `TestValidateRejectsMissingHeatTarget` |
 | `off` period | Must not set `target_celsius` | `HeatingPeriod.Validate` | unknown direct test |
 | `heat` period | Must set `target_celsius` | `HeatingPeriod.Validate` | `TestValidateRejectsMissingHeatTarget` |
-| Redundant period | Consecutive periods with same effective state are rejected | `SameEffectiveState`, `HeatingProgram.Validate` | `TestValidateRejectsRedundantPeriods` |
+| Adjacent matching periods | Consecutive periods with same effective state are allowed; runtime scheduling skips no-op transitions | `HeatingProgram.Validate`, `SameEffectiveState`, `nextDistinctTransition` | `TestValidateAllowsAdjacentPeriodsWithSameEffectiveState` |
 | Revision | File modtime formatted RFC3339Nano | `readConfigRevision` | `TestHeatingScheduleDocumentRoundTrip` covers document flow, not file modtime. |
 
 ## Scheduling Semantics
@@ -77,4 +77,3 @@ Derived from current Go code only. Signal meanings are documented only where cur
 | API auth | No auth is implemented in HTTP server code. Deployment/network access policy is outside code. |
 | Non-exterior lights | Signal labels exist in captures/docs, but current service API only controls exterior flash/on/off through signals `47`/`48`. |
 | Hardware failure recovery | Adapter records command errors and reconnects websocket sessions; deeper retry/backoff semantics beyond 1-second loop are not modeled. |
-
