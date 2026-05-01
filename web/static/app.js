@@ -92,6 +92,7 @@ const state = {
   heatingState: null,
   schedule: null,
   scheduleEditable: false,
+  scheduleRenderSignature: "",
   requestInFlight: false,
   countdownRefresh: null,
 };
@@ -308,6 +309,7 @@ function visiblePeriods(program) {
   const periods = program.periods || [];
   const visible = periods
     .filter((period) => !(period.start === "00:00" && period.mode === "off"))
+    .map((period) => ({ ...period }))
     .slice(0, scheduleSlotCount);
   const usedStarts = new Set(visible.map((period) => period.start));
   for (const fallback of fallbackVisibleSlots) {
@@ -380,12 +382,15 @@ function normalizeSlotStarts(starts, editedIndex) {
 
 function renderSchedule() {
   const slots = byId("scheduleSlots");
-  slots.innerHTML = "";
   const schedule = state.schedule;
   if (!schedule) {
     byId("scheduleState").textContent = "Loading";
     byId("scheduleDetail").textContent = "Waiting for schedule.";
     byId("saveSchedule").disabled = true;
+    if (!hasActiveScheduleControl()) {
+      slots.innerHTML = "";
+      state.scheduleRenderSignature = "";
+    }
     return;
   }
   const program = editableProgram(schedule);
@@ -394,39 +399,66 @@ function renderSchedule() {
     byId("scheduleState").textContent = "Unsupported";
     byId("scheduleDetail").textContent = "This editor only supports one enabled all-days schedule.";
     byId("saveSchedule").disabled = true;
+    if (!hasActiveScheduleControl()) {
+      slots.innerHTML = "";
+      state.scheduleRenderSignature = "";
+    }
     return;
   }
   byId("scheduleState").textContent = "Every day";
   byId("scheduleDetail").textContent = "Each slot ends when the next one starts. The final slot ends at midnight.";
   byId("saveSchedule").disabled = state.requestInFlight;
+  const signature = scheduleRenderSignature(schedule, program);
+  if (slots.children.length > 0 && (state.scheduleRenderSignature === signature || hasActiveScheduleControl())) {
+    updateScheduleEndTimes();
+    return;
+  }
+  slots.innerHTML = "";
   visiblePeriods(program).forEach((period, index) => {
     slots.appendChild(scheduleSlot(period, index));
   });
+  state.scheduleRenderSignature = signature;
   updateScheduleEndTimes();
+}
+
+function scheduleRenderSignature(schedule, program) {
+  return JSON.stringify({
+    timezone: schedule.timezone || "",
+    revision: schedule.revision || "",
+    id: program.id || "",
+    enabled: Boolean(program.enabled),
+    days: program.days || [],
+    periods: program.periods || [],
+  });
+}
+
+function hasActiveScheduleControl() {
+  const form = byId("scheduleForm");
+  return Boolean(form && form.contains(document.activeElement));
 }
 
 function scheduleSlot(period, index) {
   const row = document.createElement("div");
   row.className = "schedule-slot";
   row.innerHTML = `
-    <div class="field">
+    <div class="field field-start">
       <label for="slotStart${index}">Start</label>
       <input id="slotStart${index}" name="start" type="time" value="${period.start || ""}">
     </div>
-    <div class="field">
-      <label>End</label>
-      <div class="end-time" data-end-time>--:--</div>
-    </div>
-    <div class="field">
+    <div class="field field-mode">
       <label for="slotMode${index}">Mode</label>
       <select id="slotMode${index}" name="mode">
         <option value="heat">Heat</option>
         <option value="off">Off</option>
       </select>
     </div>
-    <div class="field">
+    <div class="field field-target">
       <label for="slotTarget${index}">Target</label>
       <input id="slotTarget${index}" name="target" type="number" min="5" max="24.5" step="0.5" value="${period.target_celsius || 18}">
+    </div>
+    <div class="field field-end">
+      <label>Ends</label>
+      <div class="end-time" data-end-time>--:--</div>
     </div>
   `;
   const start = row.querySelector("[name='start']");

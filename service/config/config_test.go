@@ -55,7 +55,7 @@ api:
 	}
 }
 
-func TestValidateRejectsRedundantPeriods(t *testing.T) {
+func TestValidateAllowsAdjacentPeriodsWithSameEffectiveState(t *testing.T) {
 	cfg := Config{
 		Garmin: GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},
 		Automation: AutomationConfig{
@@ -71,8 +71,8 @@ func TestValidateRejectsRedundantPeriods(t *testing.T) {
 		},
 		API: APIConfig{Listen: ":8080"},
 	}
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "redundant") {
-		t.Fatalf("expected redundant-period validation error, got %v", err)
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected adjacent matching periods to validate, got %v", err)
 	}
 }
 

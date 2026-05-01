@@ -329,13 +329,19 @@ h2 {
 
 .schedule-slot {
   display: grid;
-  grid-template-columns: minmax(78px, 1fr) minmax(68px, 0.72fr) minmax(78px, 1fr) minmax(68px, 0.72fr);
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.8fr);
+  column-gap: 8px;
+  row-gap: 8px;
 }
 
 .field {
   display: grid;
   gap: 4px;
+  min-width: 0;
+}
+
+.field-mode {
+  padding-left: 12px;
 }
 
 .field label {
@@ -345,23 +351,33 @@ h2 {
 }
 
 .field input,
-.field select,
-.end-time {
+.field select {
   width: 100%;
+  min-width: 0;
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-strong);
   color: var(--text);
-  padding: 8px;
+  padding: 8px 6px;
   font-size: 14px;
   font-weight: 750;
 }
 
-.end-time {
+.field-end {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-height: 14px;
+}
+
+.field-end label,
+.end-time {
   color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .field input:disabled {

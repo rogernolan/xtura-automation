@@ -344,7 +344,7 @@ automation:
           mode: "off"
 
 api:
-  listen: 0.0.0.0:8080
+  listen: 0.0.0.0:80
 ```
 
 The config schema should be generic enough to absorb future domains without needing a redesign.

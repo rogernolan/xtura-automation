@@ -66,8 +66,8 @@ Assume the service is running on a host reachable over Tailscale.
 
 Recommended client configuration:
 
-- base URL: `http://<tailscale-hostname-or-ip>:8080`
-- example: `http://vanpi.tail1234.ts.net:8080`
+- base URL: `http://<tailscale-hostname-or-ip>`
+- example: `http://vanpi.tail1234.ts.net`
 - authentication: none currently, assuming access is restricted by the Tailscale network
 - transport: plain HTTP over the private Tailscale network
 
@@ -115,7 +115,7 @@ Recommended exterior-light flash flow:
 
 ## iOS Networking Notes
 
-- if the iOS app talks directly to `http://...:8080` over Tailscale, App Transport Security settings may need an exception for this private HTTP endpoint
+- if the iOS app talks directly to `http://...` over Tailscale, App Transport Security settings may need an exception for this private HTTP endpoint
 - if you later put the service behind HTTPS or a local proxy, the API contract can stay the same and only the base URL changes
 - the client should treat network failures as transport errors, separate from `400` validation and `409` revision conflicts
 
@@ -514,7 +514,7 @@ The backend currently enforces these schedule rules:
 - each program must have at least one period
 - the first period must start at `00:00`
 - periods must be strictly increasing by time
-- consecutive periods must not be redundant
+- consecutive periods may have the same effective state
 - `off` periods must not include `target_celsius`
 - `heat` periods must include `target_celsius`
 
