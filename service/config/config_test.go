@@ -13,7 +13,7 @@ func TestLoadFileAndNormalize(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(path, []byte(strings.TrimSpace(`
 garmin:
-  ws_url: ws://192.168.1.1:8888/ws
+  ws_url: ws://172.16.11.7:8888/ws
   heartbeat_interval: 4s
 automation:
   timezone: Europe/London

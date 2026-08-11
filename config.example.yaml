@@ -1,7 +1,11 @@
 garmin:
-  ws_url: ws://192.168.1.1:8888/ws
+  # Direct Ethernet connection to the Garmin SERV on the motorhome's
+  # internal network. The SERV no longer exposes WiFi (its bootstrap
+  # message reports hasWifi:false), so the Pi must be cabled to the same
+  # Ethernet network. The web UI runs at http://172.16.11.7:8888/.
+  ws_url: ws://172.16.11.7:8888/ws
   heartbeat_interval: 4s
-  # origin: http://192.168.1.1
+  # origin: http://172.16.11.7:8888
   trace_window: 3s
 
 location:

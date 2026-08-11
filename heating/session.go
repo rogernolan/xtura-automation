@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DefaultWSURL            = "ws://192.168.1.1:8888/ws"
+	DefaultWSURL            = "ws://172.16.11.7:8888/ws"
 	DefaultHeartbeatMessage = "{\"messagetype\":128,\"messagecmd\":0,\"size\":1,\"data\":[0]}"
 )
 
