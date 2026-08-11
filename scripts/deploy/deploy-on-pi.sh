@@ -70,6 +70,17 @@ sudo install -m 0644 "${SERVICE_UNIT_SOURCE}" "${SERVICE_UNIT_DEST}"
 sudo install -m 0440 "${SUDOERS_TIMEZONE_SOURCE}" "${SUDOERS_TIMEZONE_DEST}"
 sudo chown -R xtura:xtura "${INSTALL_ROOT}" /var/lib/xtura
 
+echo "==> Migrating garmin.ws_url to the SERV Ethernet endpoint"
+LEGACY_WS_URL="ws://192.168.1.1:8888/ws"
+SERV_WS_URL="ws://172.16.11.7:8888/ws"
+if sudo grep -q "${LEGACY_WS_URL}" "${CONFIG_PATH}"; then
+  sudo cp "${CONFIG_PATH}" "${CONFIG_PATH}.bak-ws-migration"
+  sudo sed -i "s#${LEGACY_WS_URL}#${SERV_WS_URL}#g" "${CONFIG_PATH}"
+  echo "Migrated garmin.ws_url to ${SERV_WS_URL} in ${CONFIG_PATH} (backup: ${CONFIG_PATH}.bak-ws-migration)"
+else
+  echo "garmin.ws_url in ${CONFIG_PATH} left unchanged"
+fi
+
 echo "==> Enabling ${SERVICE_NAME} on boot"
 sudo systemctl daemon-reload
 sudo systemctl enable "${SERVICE_NAME}.service"

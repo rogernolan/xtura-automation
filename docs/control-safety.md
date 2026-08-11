@@ -7,7 +7,7 @@ Derived from current Go code only. This service can send hardware commands over 
 | Area | Rule | Source |
 |---|---|---|
 | Tests | `go test ./...` should be safe to run without hardware; current tests use temp files, fake controllers, HAR replay, or `httptest` websocket servers. | `*_test.go` files |
-| Live commands | Do not run `cmd/heatingctl` or `cmd/empirebusd` against `ws://192.168.1.1:8888/ws` unless intentionally controlling the vehicle hardware. | `heating/session.go`, `config.example.yaml` |
+| Live commands | Do not run `cmd/heatingctl` or `cmd/empirebusd` against the real SERV web socket (`ws://172.16.11.7:8888/ws`) unless intentionally controlling the vehicle hardware. | `heating/session.go`, `config.example.yaml` |
 | HTTP mutators | Treat POST/PUT endpoints as live controls when service is pointed at the real Garmin websocket. | `service/api/httpapi/server.go` |
 | Schedule edits | `PUT /v1/automation/heating-schedule` rewrites the YAML config and reconciles current schedule state. | `runtime.App.UpdateHeatingSchedule` |
 | Runtime mode edits | Mode changes immediately apply hardware commands for `off`, `manual`, and `boost`, then persist to `<config>.runtime.yaml` after apply succeeds. | `service/runtime/mode.go` |
@@ -57,7 +57,7 @@ Derived from current Go code only. This service can send hardware commands over 
 | Situation | Caution |
 |---|---|
 | Editing `config.example.yaml` into a live config | Short test patterns can trigger real schedule transitions quickly. |
-| Running daemon locally on a network with Garmin device | Default websocket URL is the real-looking `ws://192.168.1.1:8888/ws`; override before experiments. |
+| Running daemon locally on a network with Garmin device | Default websocket URL is the real SERV on the internal Ethernet, `ws://172.16.11.7:8888/ws`; override before experiments on another network. |
 | Testing API with curl against deployed service | `POST` and `PUT` routes are not dry-run operations. |
 | Changing signal mappings | Update `docs/garmin-empirbus-signals.md` as required by repository instructions. |
 

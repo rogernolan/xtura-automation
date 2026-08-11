@@ -4,7 +4,7 @@ A small go service to monitor a garmin empire bus event stream and convert it to
 
 the system is designed to run on a raspberry pi and is tested (and to be fair) developed for a EuraMobil stura. Eventual target is a pi zero2w.
 
-The service assumes its running on the same network as the garmin SERV/WDU and specifically that it can connect to the garmin web socket. I run the whole thing over Tailscale but thats not a requirement.
+The service assumes it can reach the Garmin SERV/WDU web socket. On the EuraMobil the SERV connects over the motorhome's internal Ethernet at `172.16.11.7`: the web UI is at `http://172.16.11.7:8888/` and the web socket at `ws://172.16.11.7:8888/ws`. The SERV no longer exposes WiFi (its bootstrap message reports `hasWifi:false`), so connect the Pi to that Ethernet network rather than expecting a SERV WiFi network. The IP may move if the internal network reassigns it, and the Origin header is not required (the SERV only rejects a wrong one). I run the whole thing over Tailscale but thats not a requirement.
 
 ## Go Heating Client
 
