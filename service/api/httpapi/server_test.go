@@ -566,6 +566,11 @@ func TestHandlerServesWebIndex(t *testing.T) {
 	if body := rr.Body.String(); !strings.Contains(body, `id="buildInfo"`) {
 		t.Fatalf("index body did not contain build footer: %s", body)
 	}
+	for _, want := range []string{`id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>`, `id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>`, `id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>`, `id="settingsTab" class="tab" type="button" aria-controls="settingsPanel">Settings</button>`} {
+		if !strings.Contains(rr.Body.String(), want) {
+			t.Fatalf("index body did not contain compact tab %q: %s", want, rr.Body.String())
+		}
+	}
 }
 
 func TestWebIndexUsesNativeTimePickerForGreyWaterSchedule(t *testing.T) {
@@ -593,7 +598,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
 		t.Fatalf("unexpected content type %q", ct)
 	}
-	if cacheControl := rr.Header().Get("Cache-Control"); cacheControl != "public, max-age=31536000, immutable" {
+	if cacheControl := rr.Header().Get("Cache-Control"); cacheControl != "no-cache" {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()

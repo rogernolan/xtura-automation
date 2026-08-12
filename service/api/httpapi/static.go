@@ -19,7 +19,7 @@ func registerStaticRoutes(mux *http.ServeMux) {
 			methodNotAllowed(w)
 			return
 		}
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("Cache-Control", "no-cache")
 		fileServer.ServeHTTP(w, r)
 	})))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
