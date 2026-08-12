@@ -195,6 +195,13 @@ func TestRecordingRoutes(t *testing.T) {
 	if start.Code != http.StatusOK {
 		t.Fatalf("start status = %d body=%s", start.Code, start.Body.String())
 	}
+	var started recording.State
+	if err := json.Unmarshal(start.Body.Bytes(), &started); err != nil {
+		t.Fatalf("decode start response: %v", err)
+	}
+	if started != app.recording {
+		t.Fatalf("start state = %#v, want %#v", started, app.recording)
+	}
 }
 
 func TestRecordingStartRejectsBadDurationAndConflict(t *testing.T) {
@@ -222,6 +229,12 @@ func TestRecordingStartRejectsMalformedJSONAndUnexpectedFailure(t *testing.T) {
 	server.ServeHTTP(malformed, httptest.NewRequest(http.MethodPost, "/v1/recording/start", strings.NewReader(`{"wait_for":`)))
 	if malformed.Code != http.StatusBadRequest {
 		t.Fatalf("malformed status = %d", malformed.Code)
+	}
+
+	concatenated := httptest.NewRecorder()
+	server.ServeHTTP(concatenated, httptest.NewRequest(http.MethodPost, "/v1/recording/start", strings.NewReader(`{"wait_for":"immediate","duration_minutes":1}{"wait_for":"immediate","duration_minutes":1}`)))
+	if concatenated.Code != http.StatusBadRequest {
+		t.Fatalf("concatenated status = %d", concatenated.Code)
 	}
 
 	failure := httptest.NewRecorder()

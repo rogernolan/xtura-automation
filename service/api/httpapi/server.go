@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -438,8 +439,13 @@ func (s *Server) handleRecordingStart(w http.ResponseWriter, r *http.Request) {
 		WaitFor         recording.WaitFor `json:"wait_for"`
 		DurationMinutes int               `json:"duration_minutes"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: expected a single JSON object"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
