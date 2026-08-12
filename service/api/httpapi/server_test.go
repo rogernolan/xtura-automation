@@ -469,6 +469,9 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "javascript") {
 		t.Fatalf("unexpected content type %q", ct)
 	}
+	if cacheControl := rr.Header().Get("Cache-Control"); cacheControl != "public, max-age=31536000, immutable" {
+		t.Fatalf("unexpected cache control %q", cacheControl)
+	}
 	body := rr.Body.String()
 	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff"} {
 		if !strings.Contains(body, want) {
@@ -487,7 +490,7 @@ func TestHandlerServesPortraitMobileBackgroundStyle(t *testing.T) {
 		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.png")`} {
+	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.avif?v=1")`, `url("/static/xtura-background.avif?v=1")`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("stylesheet did not contain %q: %s", want, body)
 		}
