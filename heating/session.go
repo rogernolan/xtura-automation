@@ -31,6 +31,7 @@ type SessionConfig struct {
 	Verbose           bool
 	TraceWindow       time.Duration
 	Logger            *log.Logger
+	RecordFrame       func(time.Time, Direction, string)
 }
 
 type Session struct {
@@ -243,6 +244,7 @@ func (s *Session) sendRawAt(raw string) (time.Time, error) {
 	if err := s.conn.WriteMessage(websocket.TextMessage, []byte(raw)); err != nil {
 		return time.Time{}, err
 	}
+	s.record(sentAt, DirectionSend, raw)
 	wire, err := ParseWireFrame(raw)
 	if err == nil {
 		s.ingest(Frame{At: sentAt, Direction: DirectionSend, Wire: wire})
@@ -260,11 +262,20 @@ func (s *Session) readLoop() {
 			s.mu.Unlock()
 			return
 		}
-		wire, err := ParseWireFrame(string(payload))
+		receivedAt := time.Now()
+		raw := string(payload)
+		s.record(receivedAt, DirectionReceive, raw)
+		wire, err := ParseWireFrame(raw)
 		if err != nil {
 			continue
 		}
-		s.ingest(Frame{At: time.Now(), Direction: DirectionReceive, Wire: wire})
+		s.ingest(Frame{At: receivedAt, Direction: DirectionReceive, Wire: wire})
+	}
+}
+
+func (s *Session) record(at time.Time, direction Direction, raw string) {
+	if s.cfg.RecordFrame != nil {
+		s.cfg.RecordFrame(at, direction, raw)
 	}
 }
 

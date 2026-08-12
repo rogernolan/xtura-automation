@@ -48,11 +48,19 @@ type Manager struct {
 	now         func() time.Time
 	timeoutUnit time.Duration
 	logger      *log.Logger
+	onChange    func(State)
 
 	state   State
 	file    *os.File
 	encoder *json.Encoder
 	timer   *time.Timer
+}
+
+// SetOnChange installs a callback invoked after each recording state transition.
+func (m *Manager) SetOnChange(onChange func(State)) {
+	m.mu.Lock()
+	m.onChange = onChange
+	m.mu.Unlock()
 }
 
 type record struct {
@@ -115,19 +123,27 @@ func (m *Manager) Start(request StartRequest) (State, error) {
 		LastFileName:    m.state.LastFileName,
 	}
 	if request.WaitFor != WaitImmediate {
-		return m.snapshotLocked(), nil
+		state := m.snapshotLocked()
+		m.notifyLocked(state)
+		return state, nil
 	}
 	if err := m.beginLocked(); err != nil {
-		return m.snapshotLocked(), err
+		state := m.snapshotLocked()
+		m.notifyLocked(state)
+		return state, err
 	}
-	return m.snapshotLocked(), nil
+	state := m.snapshotLocked()
+	m.notifyLocked(state)
+	return state, nil
 }
 
 func (m *Manager) Stop(reason string) State {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.stopLocked(reason)
-	return m.snapshotLocked()
+	state := m.snapshotLocked()
+	m.notifyLocked(state)
+	return state
 }
 
 func (m *Manager) Observe(at time.Time, direction heating.Direction, raw string) {
@@ -140,19 +156,25 @@ func (m *Manager) Observe(at time.Time, direction heating.Direction, raw string)
 			return
 		}
 		if err := m.beginLocked(); err != nil {
+			state := m.snapshotLocked()
+			m.notifyLocked(state)
 			return
 		}
+		state := m.snapshotLocked()
+		m.notifyLocked(state)
 	}
 	if m.state.Status != "recording" {
 		return
 	}
-	m.writeLocked(webSocketRecord(at, direction, raw))
+	if !m.writeLocked(webSocketRecord(at, direction, raw)) {
+		state := m.snapshotLocked()
+		m.notifyLocked(state)
+		return
+	}
 }
 
 func (m *Manager) Shutdown() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.stopLocked("service_shutdown")
+	m.Stop("service_shutdown")
 }
 
 func (m *Manager) State() State {
@@ -275,6 +297,13 @@ func (m *Manager) snapshotLocked() State {
 		state.StartedAt = &startedAt
 	}
 	return state
+}
+
+func (m *Manager) notifyLocked(state State) {
+	onChange := m.onChange
+	if onChange != nil {
+		onChange(state)
+	}
 }
 
 func validWaitFor(wait WaitFor) bool {

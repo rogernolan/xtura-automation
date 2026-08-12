@@ -348,6 +348,64 @@ func TestSessionAcknowledgesReceivedWDUHeartbeat(t *testing.T) {
 	}
 }
 
+func TestSessionReportsSuccessfulSentAndReceivedRawFrames(t *testing.T) {
+	t.Parallel()
+	command := `{"messagetype":17,"messagecmd":0,"size":3,"data":[101,0,3]}`
+	response := `{"messagetype":16,"messagecmd":0,"size":3,"data":[101,0,1]}`
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		if _, _, err := conn.ReadMessage(); err != nil {
+			t.Error(err)
+			return
+		}
+		if _, _, err := conn.ReadMessage(); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(response)); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	got := make(chan string, 3)
+	session := NewSession(SessionConfig{
+		WSURL:             "ws" + strings.TrimPrefix(server.URL, "http"),
+		HeartbeatInterval: time.Hour,
+		BootstrapMessages: []string{`{"messagetype":96,"messagecmd":0,"size":0,"data":[]}`},
+		RecordFrame: func(_ time.Time, direction Direction, raw string) {
+			got <- string(direction) + ":" + raw
+		},
+	})
+	if err := session.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	if err := session.sendRaw(command); err != nil {
+		t.Fatal(err)
+	}
+
+	wantSent := "send:" + command
+	wantReceived := "receive:" + response
+	sawSent, sawReceived := false, false
+	timeout := time.After(time.Second)
+	for !sawSent || !sawReceived {
+		select {
+		case frame := <-got:
+			sawSent = sawSent || frame == wantSent
+			sawReceived = sawReceived || frame == wantReceived
+		case <-timeout:
+			t.Fatalf("recorded frames sent=%t received=%t", sawSent, sawReceived)
+		}
+	}
+}
+
 func TestSendSimpleCommandWritesSimpleActionFrame(t *testing.T) {
 	t.Parallel()
 	received := make(chan WireFrame, 8)

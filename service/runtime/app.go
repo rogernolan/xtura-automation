@@ -23,7 +23,10 @@ import (
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	domainwater "empirebus-tests/service/domains/water"
+	"empirebus-tests/service/recording"
 )
+
+var recordingDirectory = "/var/lib/xtura/recordings"
 
 type HeatingController interface {
 	EnsureOn(context.Context) error
@@ -70,6 +73,7 @@ type App struct {
 	location              LocationProvider
 	timezoneResolver      TimezoneResolver
 	broker                *events.Broker
+	recording             *recording.Manager
 	sleep                 func(time.Duration)
 	now                   func() time.Time
 
@@ -111,12 +115,21 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		return nil, err
 	}
 	broker := events.NewBroker(32)
+	recorder := recording.New(recordingDirectory, time.Now, logger)
+	recorder.SetOnChange(func(state recording.State) {
+		broker.Publish(events.Event{
+			Type:      "recording.state_changed",
+			Timestamp: time.Now().UTC(),
+			Payload:   state,
+		})
+	})
 	adapter := garmin.New(garmin.Config{
 		WSURL:             cfg.Garmin.WSURL,
 		Origin:            cfg.Garmin.Origin,
 		HeartbeatInterval: cfg.Garmin.HeartbeatInterval,
 		TraceWindow:       cfg.Garmin.TraceWindow,
 		Logger:            logger,
+		RecordFrame:       recorder.Observe,
 	})
 	adapter.Start(ctx)
 	var lights LightsController
@@ -165,10 +178,15 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		location:              location,
 		timezoneResolver:      timezoneResolver,
 		broker:                broker,
+		recording:             recorder,
 		now:                   time.Now,
 		schedulerWake:         make(chan struct{}, 1),
 		waterSchedulerWake:    make(chan struct{}, 1),
 	}
+	go func() {
+		<-ctx.Done()
+		recorder.Shutdown()
+	}()
 	app.revision = readConfigRevision(configPath)
 	if err := app.loadRuntimeState(); err != nil {
 		return nil, err
@@ -193,6 +211,18 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 
 func (a *App) Broker() *events.Broker {
 	return a.broker
+}
+
+func (a *App) RecordingState() recording.State {
+	return a.recording.State()
+}
+
+func (a *App) StartRecording(_ context.Context, request recording.StartRequest) (recording.State, error) {
+	return a.recording.Start(request)
+}
+
+func (a *App) StopRecording(_ context.Context) recording.State {
+	return a.recording.Stop("stopped")
 }
 
 func (a *App) HeatingState() domainheating.State {

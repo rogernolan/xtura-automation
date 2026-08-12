@@ -19,6 +19,7 @@ type Config struct {
 	HeartbeatInterval time.Duration
 	TraceWindow       time.Duration
 	Logger            *log.Logger
+	RecordFrame       func(time.Time, rootheating.Direction, string)
 }
 
 type Adapter struct {
@@ -85,6 +86,7 @@ func (a *Adapter) tryConnect(parent context.Context) {
 		HeartbeatInterval: a.cfg.HeartbeatInterval,
 		TraceWindow:       a.cfg.TraceWindow,
 		Logger:            a.logger,
+		RecordFrame:       a.cfg.RecordFrame,
 	})
 	if err := session.Connect(ctx); err != nil {
 		a.mu.Lock()
