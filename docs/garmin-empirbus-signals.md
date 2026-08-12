@@ -58,7 +58,7 @@ The signal `105` target-temperature reports use scalar status with value type `2
 
 ### Session bootstrap
 
-Known startup traffic sent by the browser at websocket open:
+Observed session bootstrap traffic:
 
 ```json
 {"messagetype":96,"messagecmd":0,"size":306,"data":[152,0,1,0,4,0,5,0,6,0,7,0,9,0,10,0,11,0,20,0,21,0,22,0,23,0,27,0,30,0,31,0,32,0,33,0,34,0,35,0,36,0,37,0,38,0,39,0,40,0,41,0,51,0,52,0,53,0,54,0,55,0,56,0,57,0,58,0,59,0,60,0,68,0,69,0,70,0,71,0,72,0,73,0,78,0,79,0,83,0,76,0,49,0,50,0,225,0,226,0,227,0,228,0,229,0,230,0,231,0,232,0,233,0,45,0,46,0,47,0,48,0,77,0,84,0,85,0,177,0,178,0,172,0,179,0,2,0,38,1,3,0,237,0,238,0,239,0,12,0,13,0,61,0,62,0,63,0,14,0,66,0,25,0,24,0,74,0,75,0,101,0,102,0,103,0,105,0,106,0,107,0,108,0,110,0,113,0,114,0,115,0,119,0,97,0,87,0,88,0,89,0,90,0,91,0,92,0,96,0,99,0,98,0,248,0,153,0,15,0,16,0,17,0,18,0,19,0,111,0,93,0,95,0,240,0,26,0,200,0,201,0,202,0,203,0,204,0,205,0,206,0,208,0,209,0,211,0,212,0,213,0,214,0,215,0,216,0,217,0,218,0,199,0,221,0,222,0,223,0,181,0,182,0,185,0,183,0,197,0,196,0,28,0,220,0,195,0,180,0,189,0,191,0,190,0]}
@@ -118,7 +118,7 @@ The current domain groupings come from `empirbus_filter.py` in the related tooli
 
 ## Lights
 
-### Known commands
+### Command evidence
 
 Browser-confirmed from `192.168.1.1.har`:
 
@@ -129,7 +129,7 @@ Browser-confirmed from `192.168.1.1.har`:
 | All interior lights ON | inferred, then live-confirmed by receive state | `{"messagetype":17,"messagecmd":0,"size":3,"data":[45,0,3]}` | Inferred from the 45/46 label pair in `signal-info.json`, then corroborated by live receive `signal=45 data=[45,0,1]`. |
 | All interior lights OFF | inferred | `{"messagetype":17,"messagecmd":0,"size":3,"data":[46,0,3]}` | Strong inference from the signal naming pattern, but not yet browser-confirmed in a HAR. |
 
-### Known state / indication signals
+### Signal evidence
 
 High-confidence signals:
 
@@ -172,7 +172,7 @@ Repo usage note:
 
 ## Heating
 
-### Known commands
+### Command evidence
 
 Browser-confirmed from `Heating.har`:
 
@@ -185,7 +185,7 @@ Browser-confirmed from `Heating.har`:
 | Heater temperature DOWN press | browser-confirmed | `{"messagetype":17,"messagecmd":1,"size":3,"data":[108,0,1]}` | Button-like interaction. |
 | Heater temperature DOWN release | browser-confirmed | `{"messagetype":17,"messagecmd":1,"size":3,"data":[108,0,0]}` | Release following press. |
 
-### Known state / indication signals
+### Signal evidence
 
 High-confidence signals:
 
@@ -222,7 +222,7 @@ Power, hot-water, and energy-source related heating-domain signals:
 - `117`: `HeatingHotWaterNormal`
 - `118`: `HeatingHotWaterBoost`
 
-### Known target-temperature evidence
+### Target-temperature evidence
 
 From `docs/superpowers/specs/2026-04-21-heating-go-client-design.md`, signal `105` is the strongest current candidate for target-temperature decoding.
 
@@ -262,11 +262,11 @@ For target temperature (`105`), the Go logger currently renders inferred interpr
 
 ## Fuses
 
-### Known commands
+### Command evidence
 
 No browser-confirmed write commands are captured yet for fuse-domain controls.
 
-### Known state / indication signals
+### Signal evidence
 
 Examples from `signal-info.json`:
 
@@ -292,7 +292,7 @@ Working assumption:
 
 ## Water
 
-### Known commands
+### Command evidence
 
 No browser-confirmed outbound write frames are captured yet for water-domain controls.
 
@@ -308,7 +308,7 @@ Inferred write-command shape, not browser-confirmed: these controls likely use p
 
 Repo implementation note: `service/adapters/garmin/adapter.go` and `heating/client.go` use the inferred `messagetype=17`, `messagecmd=1` press/release shape for grey-water open and close, with the runtime hold duration set to five seconds in `service/runtime/water.go`.
 
-### Known state / indication signals
+### Signal evidence
 
 - `4`: `Tank Discharge Open`
 - `5`: `Tank Discharge Close`
@@ -326,11 +326,11 @@ Working assumption:
 
 ## Options
 
-### Known commands
+### Command evidence
 
 No browser-confirmed write commands are captured yet for option-domain controls.
 
-### Known state / indication signals
+### Signal evidence
 
 - `150`: `Unhide Engine Control`
 - `151`: `Unhide Vehicle Voltage`
@@ -348,9 +348,19 @@ Working assumption:
 - this domain mixes capability flags, presence detection, and UI-state toggles
 - no write frames are confirmed yet from the captures in this repo
 
+### Habitation-step inference
+
+The labels `Engine Control extract` (`125`) and `Engine Contract retract` (`126`) in the local `signal-info.json` catalogue are likely mistranslated or generic names for the habitation entry step extending and retracting, rather than controls for the vehicle engine itself. This matches the related signals:
+
+- `6`: `Footstep Open`
+- `7`: `Footstep Close`
+- `11`: `Engine Running Signal Indication`
+
+Inference: the engine-running indication is probably an interlock which retracts, or prevents extension of, the habitation step while driving. This is not source-confirmed or capture-confirmed. Confirm it by capturing Garmin traffic while extending/retracting the step and while transitioning the engine-running state.
+
 ## Power
 
-### Known commands
+### Command evidence
 
 No browser-confirmed write commands are captured yet for power-domain controls.
 
@@ -366,7 +376,7 @@ Potential command-like signals from names only:
 
 These names suggest control semantics, but there is not yet a confirming browser write frame in this repo.
 
-### Known state / indication signals
+### Signal evidence
 
 - `28`: `Shore Power Indication`
 - `61`: `Victron Silent Mode`
