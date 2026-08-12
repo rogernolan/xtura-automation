@@ -2,6 +2,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_PATH="${REPO_ROOT}/scripts/deploy/$(basename "${BASH_SOURCE[0]}")"
 INSTALL_ROOT="/opt/xtura"
 CONFIG_PATH="/var/lib/xtura/config.yaml"
 SERVICE_NAME="empirebusd"
@@ -44,6 +45,10 @@ TARGET_SHA="${1:-HEAD}"
 if [[ "${TARGET_SHA}" == "HEAD" ]]; then
   git pull --ff-only origin "${CURRENT_BRANCH}"
   TARGET_SHA="$(git rev-parse HEAD)"
+  if [[ "${TARGET_SHA}" != "${CURRENT_SHA}" ]]; then
+    echo "==> Reloading updated deploy script"
+    exec "${SCRIPT_PATH}" "${TARGET_SHA}"
+  fi
 else
   git checkout --detach "${TARGET_SHA}"
 fi

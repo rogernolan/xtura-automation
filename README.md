@@ -117,7 +117,7 @@ Useful files:
 
 Expected host layout:
 
-- repo checkout for a local user with passwordless sudo, for example `/home/local-user/src/xtura-automation`
+- repo checkout for a local user with passwordless sudo, for example `/home/local-user/development/xtura-automation`
 - deployed releases in `/opt/xtura/releases/<git-sha>`
 - active symlink at `/opt/xtura/current`
 - writable service config at `/var/lib/xtura/config.yaml`
