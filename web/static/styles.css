@@ -425,3 +425,9 @@ h2 {
     padding-block: 34px;
   }
 }
+
+@media (max-width: 759px) and (orientation: portrait) {
+  body {
+    background-image: linear-gradient(rgba(231, 226, 216, 0.4), rgba(231, 226, 216, 0.72)), url("/static/xtura-background-mobile.png");
+  }
+}

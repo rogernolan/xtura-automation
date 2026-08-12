@@ -444,6 +444,20 @@ func TestHandlerServesWebIndex(t *testing.T) {
 	}
 }
 
+func TestWebIndexUsesNativeTimePickerForGreyWaterSchedule(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `id="greyScheduleTime" name="grey-schedule-time" type="time" value="03:00" step="60"`) {
+		t.Fatalf("grey-water schedule must use a native minute-precision time input: %s", body)
+	}
+}
+
 func TestHandlerServesStaticJavaScript(t *testing.T) {
 	server := New(fakeApp{broker: events.NewBroker(1)})
 	req := httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
@@ -459,6 +473,23 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
+		}
+	}
+}
+
+func TestHandlerServesPortraitMobileBackgroundStyle(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	req := httptest.NewRequest(http.MethodGet, "/static/styles.css", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.png")`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("stylesheet did not contain %q: %s", want, body)
 		}
 	}
 }
