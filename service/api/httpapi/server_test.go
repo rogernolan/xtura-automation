@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,22 +19,26 @@ import (
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	domainwater "empirebus-tests/service/domains/water"
+	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 )
 
 type fakeApp struct {
-	broker            *events.Broker
-	schedule          config.HeatingScheduleDocument
-	mode              config.HeatingRuntimeState
-	cancelBoostCalled *bool
-	scheduledWater    domainwater.State
-	cancelWaterCalled *bool
-	lights            domainlights.State
-	water             domainwater.State
-	location          domainlocation.State
-	flashLightsErr    error
-	waterErr          error
-	setTargetErr      error
+	broker             *events.Broker
+	schedule           config.HeatingScheduleDocument
+	mode               config.HeatingRuntimeState
+	cancelBoostCalled  *bool
+	scheduledWater     domainwater.State
+	cancelWaterCalled  *bool
+	lights             domainlights.State
+	water              domainwater.State
+	location           domainlocation.State
+	flashLightsErr     error
+	waterErr           error
+	setTargetErr       error
+	recording          recording.State
+	startRecordingErr  error
+	stopRecordingCalls *int
 }
 
 func (f fakeApp) Health() runtime.ServiceHealthView {
@@ -126,6 +131,24 @@ func (f fakeApp) LocationState() domainlocation.State {
 	return f.location
 }
 
+func (f fakeApp) RecordingState() recording.State {
+	return f.recording
+}
+
+func (f fakeApp) StartRecording(_ context.Context, request recording.StartRequest) (recording.State, error) {
+	if request.DurationMinutes < 0 {
+		return f.recording, errors.New("recording duration must not be negative")
+	}
+	return f.recording, f.startRecordingErr
+}
+
+func (f fakeApp) StopRecording(context.Context) recording.State {
+	if f.stopRecordingCalls != nil {
+		*f.stopRecordingCalls++
+	}
+	return f.recording
+}
+
 func (f fakeApp) Broker() *events.Broker {
 	return f.broker
 }
@@ -154,6 +177,73 @@ func TestHandlerRoutesBuild(t *testing.T) {
 	}
 	if view.GitSHA != "dev" {
 		t.Fatalf("got git_sha %q", view.GitSHA)
+	}
+}
+
+func TestRecordingRoutes(t *testing.T) {
+	app := fakeApp{broker: events.NewBroker(1), recording: recording.State{Status: "armed"}}
+	server := New(app).Handler()
+
+	state := httptest.NewRecorder()
+	server.ServeHTTP(state, httptest.NewRequest(http.MethodGet, "/v1/recording/state", nil))
+	if state.Code != http.StatusOK {
+		t.Fatalf("state status = %d body=%s", state.Code, state.Body.String())
+	}
+
+	start := httptest.NewRecorder()
+	server.ServeHTTP(start, httptest.NewRequest(http.MethodPost, "/v1/recording/start", strings.NewReader(`{"wait_for":"victron_on","duration_minutes":0}`)))
+	if start.Code != http.StatusOK {
+		t.Fatalf("start status = %d body=%s", start.Code, start.Body.String())
+	}
+}
+
+func TestRecordingStartRejectsBadDurationAndConflict(t *testing.T) {
+	app := fakeApp{broker: events.NewBroker(1), startRecordingErr: recording.ErrActive}
+	server := New(app).Handler()
+
+	bad := httptest.NewRecorder()
+	server.ServeHTTP(bad, httptest.NewRequest(http.MethodPost, "/v1/recording/start", strings.NewReader(`{"wait_for":"immediate","duration_minutes":-1}`)))
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("bad status = %d", bad.Code)
+	}
+
+	conflict := httptest.NewRecorder()
+	server.ServeHTTP(conflict, httptest.NewRequest(http.MethodPost, "/v1/recording/start", strings.NewReader(`{"wait_for":"immediate","duration_minutes":1}`)))
+	if conflict.Code != http.StatusConflict {
+		t.Fatalf("conflict status = %d", conflict.Code)
+	}
+}
+
+func TestRecordingStartRejectsMalformedJSONAndUnexpectedFailure(t *testing.T) {
+	app := fakeApp{broker: events.NewBroker(1), startRecordingErr: errors.New("storage unavailable")}
+	server := New(app).Handler()
+
+	malformed := httptest.NewRecorder()
+	server.ServeHTTP(malformed, httptest.NewRequest(http.MethodPost, "/v1/recording/start", strings.NewReader(`{"wait_for":`)))
+	if malformed.Code != http.StatusBadRequest {
+		t.Fatalf("malformed status = %d", malformed.Code)
+	}
+
+	failure := httptest.NewRecorder()
+	server.ServeHTTP(failure, httptest.NewRequest(http.MethodPost, "/v1/recording/start", strings.NewReader(`{"wait_for":"immediate","duration_minutes":1}`)))
+	if failure.Code != http.StatusInternalServerError {
+		t.Fatalf("failure status = %d", failure.Code)
+	}
+}
+
+func TestRecordingStopIsIdempotent(t *testing.T) {
+	stops := 0
+	app := fakeApp{broker: events.NewBroker(1), stopRecordingCalls: &stops}
+	server := New(app).Handler()
+	for range 2 {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/recording/stop", nil))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d", rr.Code)
+		}
+	}
+	if stops != 2 {
+		t.Fatalf("stops = %d", stops)
 	}
 }
 

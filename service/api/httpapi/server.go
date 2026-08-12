@@ -15,6 +15,7 @@ import (
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	domainwater "empirebus-tests/service/domains/water"
+	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 )
 
@@ -45,6 +46,9 @@ type Application interface {
 	ScheduleGreyWaterOpening(context.Context, string, time.Duration) (domainwater.State, error)
 	CancelGreyWaterOpening(context.Context) (domainwater.State, error)
 	LocationState() domainlocation.State
+	RecordingState() recording.State
+	StartRecording(context.Context, recording.StartRequest) (recording.State, error)
+	StopRecording(context.Context) recording.State
 	Broker() *events.Broker
 }
 
@@ -75,6 +79,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/water/grey-valve/schedule", s.handleGreyWaterSchedule)
 	mux.HandleFunc("/v1/water/grey-valve/schedule/cancel", s.handleGreyWaterScheduleCancel)
 	mux.HandleFunc("/v1/location/state", s.handleLocationState)
+	mux.HandleFunc("/v1/recording/state", s.handleRecordingState)
+	mux.HandleFunc("/v1/recording/start", s.handleRecordingStart)
+	mux.HandleFunc("/v1/recording/stop", s.handleRecordingStop)
 	mux.HandleFunc("/v1/events", s.handleEvents)
 	registerStaticRoutes(mux)
 	return mux
@@ -412,6 +419,57 @@ func (s *Server) handleLocationState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.app.LocationState())
+}
+
+func (s *Server) handleRecordingState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.RecordingState())
+}
+
+func (s *Server) handleRecordingStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var body struct {
+		WaitFor         recording.WaitFor `json:"wait_for"`
+		DurationMinutes int               `json:"duration_minutes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	state, err := s.app.StartRecording(ctx, recording.StartRequest{
+		WaitFor:         body.WaitFor,
+		DurationMinutes: body.DurationMinutes,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, recording.ErrActive):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		case isValidationError(err):
+			writeValidationError(w, err)
+		default:
+			writeError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleRecordingStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, s.app.StopRecording(ctx))
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
