@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"empirebus-tests/service/api/events"
+	"empirebus-tests/service/buildinfo"
 	"empirebus-tests/service/config"
 	domainheating "empirebus-tests/service/domains/heating"
 	domainlights "empirebus-tests/service/domains/lights"
@@ -136,6 +137,23 @@ func TestHandlerRoutesHealth(t *testing.T) {
 	server.Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("got status %d", rr.Code)
+	}
+}
+
+func TestHandlerRoutesBuild(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	req := httptest.NewRequest(http.MethodGet, "/v1/build", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+	var view buildinfo.View
+	if err := json.Unmarshal(rr.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.GitSHA != "dev" {
+		t.Fatalf("got git_sha %q", view.GitSHA)
 	}
 }
 
@@ -442,6 +460,9 @@ func TestHandlerServesWebIndex(t *testing.T) {
 	if body := rr.Body.String(); !strings.Contains(body, `id="app"`) {
 		t.Fatalf("index body did not contain app root: %s", body)
 	}
+	if body := rr.Body.String(); !strings.Contains(body, `id="buildInfo"`) {
+		t.Fatalf("index body did not contain build footer: %s", body)
+	}
 }
 
 func TestWebIndexUsesNativeTimePickerForGreyWaterSchedule(t *testing.T) {
@@ -473,7 +494,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff"} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}

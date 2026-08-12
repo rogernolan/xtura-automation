@@ -67,6 +67,10 @@ class XturaApi {
     return this.request("/v1/automation/heating-schedule");
   }
 
+  async getBuildInfo() {
+    return this.request("/v1/build");
+  }
+
   async saveHeatingSchedule(document) {
     return this.request("/v1/automation/heating-schedule", {
       method: "PUT",
@@ -110,6 +114,7 @@ const fallbackVisibleSlots = [
 const api = new XturaApi();
 const state = {
   activeTab: "lighting",
+  build: null,
   lights: null,
   water: null,
   heatingMode: null,
@@ -181,7 +186,26 @@ function render() {
   renderWater();
   renderHeating();
   renderSchedule();
+  renderBuild();
   syncCountdownRefresh();
+}
+
+function renderBuild() {
+  const element = byId("buildInfo");
+  const build = state.build;
+  if (!build) {
+    element.textContent = "";
+    return;
+  }
+  const parts = [];
+  if (build.deployed_at) {
+    const date = new Date(build.deployed_at);
+    if (!Number.isNaN(date.getTime())) {
+      parts.push(`Deployed ${date.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`);
+    }
+  }
+  parts.push(build.git_sha || "dev");
+  element.textContent = parts.join(" · ");
 }
 
 function renderLights() {
@@ -645,16 +669,18 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule] = await Promise.all([
+  const [lights, water, mode, schedule, build] = await Promise.all([
     api.getLightsState(),
     api.getWaterState(),
     api.getHeatingMode(),
     api.getHeatingSchedule(),
+    api.getBuildInfo(),
   ]);
   state.lights = lights;
   state.water = water;
   state.heatingMode = mode;
   state.schedule = schedule;
+  state.build = build;
   setStatus("Loaded");
   render();
 }

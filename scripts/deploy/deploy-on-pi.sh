@@ -54,7 +54,11 @@ echo "==> Running tests"
 echo "==> Building ${BINARY_NAME}"
 BUILD_DIR="$(mktemp -d)"
 trap 'rm -rf "${BUILD_DIR}"' EXIT
-CGO_ENABLED=0 "${GO_BIN}" build -trimpath -ldflags="-s -w" -o "${BUILD_DIR}/${BINARY_NAME}" ./cmd/empirebusd
+SHORT_SHA="${TARGET_SHA:0:7}"
+BUILD_LDFLAGS="-s -w"
+BUILD_LDFLAGS="${BUILD_LDFLAGS} -X empirebus-tests/service/buildinfo.GitSHA=${SHORT_SHA}"
+BUILD_LDFLAGS="${BUILD_LDFLAGS} -X empirebus-tests/service/buildinfo.DeployedAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+CGO_ENABLED=0 "${GO_BIN}" build -trimpath -ldflags="${BUILD_LDFLAGS}" -o "${BUILD_DIR}/${BINARY_NAME}" ./cmd/empirebusd
 
 RELEASES_DIR="${INSTALL_ROOT}/releases"
 RELEASE_DIR="${RELEASES_DIR}/${TARGET_SHA}"

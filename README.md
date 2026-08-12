@@ -74,6 +74,7 @@ The sample config includes:
 Current HTTP endpoints:
 
 - `GET /v1/health`
+- `GET /v1/build`
 - `GET /v1/location/state`
 - `GET /v1/heating/state`
 - `GET /v1/heating/mode`

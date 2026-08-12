@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"empirebus-tests/service/api/events"
+	"empirebus-tests/service/buildinfo"
 	"empirebus-tests/service/config"
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
@@ -54,6 +55,7 @@ func New(app Application) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/health", s.handleHealth)
+	mux.HandleFunc("/v1/build", s.handleBuild)
 	mux.HandleFunc("/v1/heating/state", s.handleHeatingState)
 	mux.HandleFunc("/v1/heating/power", s.handleHeatingPower)
 	mux.HandleFunc("/v1/heating/target-temperature", s.handleHeatingTargetTemperature)
@@ -84,6 +86,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.app.Health())
+}
+
+func (s *Server) handleBuild(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, buildinfo.Current())
 }
 
 func (s *Server) handleHeatingState(w http.ResponseWriter, r *http.Request) {
