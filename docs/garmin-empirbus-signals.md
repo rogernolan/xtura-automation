@@ -6,7 +6,8 @@ This document is the working reference for what we currently know about the Garm
 
 It is intentionally evidence-driven:
 
-- browser-confirmed commands are called out as such
+- WDU-client source-confirmed protocol mechanics are authoritative unless a live-device test disproves them
+- browser-confirmed commands are called out as vehicle-specific behaviour
 - inferred commands are labeled as inferred
 - unresolved or low-confidence areas are listed as open questions rather than treated as facts
 
@@ -16,12 +17,44 @@ Local sources used for this version:
 
 - various har dumps
 - live testing
+- extracted Garmin WDU web client source map: `/Users/rog/Library/Mobile Documents/com~apple~CloudDocs/Downloads/Xtura garmin software/Xtura Display_v3 (1)/web/index.16816f2f5a38188c2b13.js.map` (reviewed 2026-08-12)
 
 External source requested by the project:
 
 - Code Red module https://github.com/litti/node-red-contrib-garmin-empirbus.
 
+### Evidence hierarchy
+
+1. **WDU-client source-confirmed:** message families, fields, byte order, flag bits, and data-type conversions implemented by the copied Garmin client. This is the default authority for wire mechanics.
+2. **Browser-confirmed / live-device:** Xtura-specific signal assignments, control availability, long-press duration, and accepted session behaviour. These observations can refine or disprove source-derived assumptions.
+3. **Capture-derived inference:** retained when neither source nor an explicit control action proves the meaning.
+
+The copied client is a WebSocket UI client; it documents the Garmin-facing WDU protocol, not the lower-level EmpirBus/CAN protocol behind the WDU.
+
 ## Frame Conventions
+
+### JSON envelope and endpoint
+
+WDU-client source-confirmed:
+
+- The UI opens `ws://<current-host>/ws`; the deployed SERV is currently reached at `ws://172.16.11.7:8888/ws`.
+- Every WebSocket text frame is JSON with `messagetype`, `messagecmd`, `size`, and `data`.
+- Component/signal IDs in `data[0]` and `data[1]` are unsigned 16-bit little-endian values.
+
+### MFD status updates
+
+WDU-client source-confirmed incoming `messagetype=16` (`0x10`) forms:
+
+| `messagecmd` | Meaning | Data layout |
+| ---: | --- | --- |
+| `0` | Toggle status | `[signal-id LE, flags]` |
+| `1` | Momentary status | `[signal-id LE, flags]` |
+| `3` | Dimmer status | `[signal-id LE, flags, dimmer-value LE]` |
+| `5` | Scalar status | `[signal-id LE, flags, value-type, signed-int32-value LE]` |
+
+For toggle, momentary, and dimmer status, `flags & 0x01` is the on bit; `0x02` is fault/error 1, `0x08` is fault/error 2, and `0x80` is unavailable. Consumers must test the bit, rather than require `flags == 1`.
+
+The signal `105` target-temperature reports use scalar status with value type `22`: signed millikelvin. Convert with `C = value / 1000 - 273.15`; the Garmin UI renders this to its configured display precision. The service rounds this source-derived numeric value to the vehicle's observed 0.5 C setpoint grid for automation decisions.
 
 ### Session bootstrap
 
@@ -39,36 +72,38 @@ Then, after the first receive frame:
 {"messagetype":49,"messagecmd":1,"size":3,"data":[0,0,0]}
 ```
 
-### Heartbeat
+### WDU heartbeat acknowledgement
 
-Observed periodic keepalive:
+WDU-client source-confirmed: a received WDU heartbeat (`messagetype=48`, `messagecmd=5`) requires this acknowledgement:
 
 ```json
 {"messagetype":128,"messagecmd":0,"size":1,"data":[0]}
 ```
 
+Older capture evidence showed this frame sent periodically by the browser. That is retained as an observed compatibility behaviour, but it is not the canonical mechanism in the copied WDU client. The service now acknowledges actual WDU heartbeats rather than sending this frame on a timer; live SERV verification remains required.
+
 ### Common action frame shape
 
-Most browser-confirmed control writes so far use:
+WDU-client source-confirmed control writes use `messagetype=17` (`0x11`):
 
 - `messagetype=17`
 - `messagecmd=0` for simple action writes
 - `messagecmd=1` for button-like press/release interactions
 
-For simple action writes, the observed shape is:
+For simple action writes, the source-confirmed shape is:
 
 ```text
-data[0] = signal id
-data[1] = sub-index, so far always 0
+data[0..1] = signal id, unsigned 16-bit little-endian
 data[2] = action value
 ```
 
-Observed action values:
+Source-confirmed action values:
 
-- `3`: activate command or ON-style action
-- `5`: OFF-style action for heater power
+- Toggle command: `3` is on/set and `5` is on/reset; the target component determines the user-visible action.
 - `1`: button press for heater temp up/down
 - `0`: button release for heater temp up/down
+
+Dimmer command uses `messagecmd=3` and `[signal-id LE, 0, value LE]`.
 
 ## Domain Summary
 
@@ -201,7 +236,7 @@ Observed values:
 | `9.5 C` | `[105,0,0,22,232,79,4,0]` |
 | `10.0 C` | `[105,0,0,22,230,81,4,0]` |
 
-This is still decoding evidence, not yet a finished wire-level field definition.
+The current implementation now decodes the full source-confirmed signed 32-bit millikelvin scalar, then rounds to the observed 0.5 C setpoint grid. The signal-to-setpoint interpretation and grid remain Xtura-specific evidence pending a live test.
 
 ### Argument notes
 

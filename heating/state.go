@@ -131,31 +131,10 @@ func updateState(state *HeaterState, frame Frame) bool {
 }
 
 func decodeTargetTemperature(data []int) (int, float64, bool) {
-	if len(data) < 6 || data[0] != SignalHeatingTargetTemp {
+	if len(data) < 8 || (data[0]|(data[1]<<8)) != SignalHeatingTargetTemp || data[3] != 22 {
 		return 0, 0, false
 	}
-	raw := data[4] + (data[5] << 8)
-	bestTemp := 0.0
-	bestDelta := math.MaxInt
-	for step := 0; step <= 80; step++ {
-		temp := float64(step) / 2
-		expected := encodeTargetTemperature(temp)
-		delta := expected - raw
-		if delta < 0 {
-			delta = -delta
-		}
-		if delta < bestDelta {
-			bestDelta = delta
-			bestTemp = temp
-		}
-	}
-	if bestDelta > 20 {
-		return raw, 0, false
-	}
-	return raw, bestTemp, true
-}
-
-func encodeTargetTemperature(tempC float64) int {
-	wholeTens := int(math.Floor(tempC / 10.0))
-	return 10956 + int(math.Round(tempC*1000)) + (wholeTens * 10)
+	raw := int32(data[4] | (data[5] << 8) | (data[6] << 16) | (data[7] << 24))
+	celsius := float64(raw)/1000 - 273.15
+	return int(raw), math.Round(celsius*2) / 2, true
 }

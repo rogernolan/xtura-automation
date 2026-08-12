@@ -92,7 +92,6 @@ func (s *Session) Connect(ctx context.Context) error {
 		}
 	}
 	go s.readLoop()
-	go s.heartbeatLoop()
 	return nil
 }
 
@@ -129,7 +128,7 @@ func (s *Session) SignalIsOn(signal int) (bool, bool, time.Time) {
 	if !ok {
 		return false, false, time.Time{}
 	}
-	return value == 1, true, s.signalAt[signal]
+	return value&0x01 != 0, true, s.signalAt[signal]
 }
 
 func (s *Session) WithTraceWindow(d time.Duration) {
@@ -251,20 +250,6 @@ func (s *Session) sendRawAt(raw string) (time.Time, error) {
 	return sentAt, nil
 }
 
-func (s *Session) heartbeatLoop() {
-	ticker := time.NewTicker(s.cfg.HeartbeatInterval)
-	defer ticker.Stop()
-	for range ticker.C {
-		s.mu.Lock()
-		closed := s.closed
-		s.mu.Unlock()
-		if closed {
-			return
-		}
-		_ = s.sendRaw(s.cfg.HeartbeatMessage)
-	}
-}
-
 func (s *Session) readLoop() {
 	for {
 		_, payload, err := s.conn.ReadMessage()
@@ -295,6 +280,9 @@ func (s *Session) ingest(frame Frame) {
 	s.mu.Unlock()
 	if changed || trace {
 		s.logFrame(frame)
+	}
+	if frame.Direction == DirectionReceive && frame.Wire.MessageType == 0x30 && frame.Wire.MessageCmd == 0x05 {
+		_ = s.sendCommand(WireFrame{MessageType: 0x80, MessageCmd: 0x00, Size: 1, Data: []int{0x00}})
 	}
 }
 

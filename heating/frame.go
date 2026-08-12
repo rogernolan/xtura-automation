@@ -54,7 +54,10 @@ func (f Frame) SignalID() int {
 	if len(f.Wire.Data) == 0 {
 		return -1
 	}
-	return f.Wire.Data[0]
+	if len(f.Wire.Data) == 1 {
+		return f.Wire.Data[0]
+	}
+	return f.Wire.Data[0] | (f.Wire.Data[1] << 8)
 }
 
 func (f Frame) RelevantToHeating() bool {

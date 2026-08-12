@@ -101,7 +101,7 @@ Current design notes live in:
 - [2026-04-21-empirebus-service-design.md](docs/superpowers/specs/2026-04-21-empirebus-service-design.md)
 - [2026-04-21-heating-go-client-design.md](docs/superpowers/specs/2026-04-21-heating-go-client-design.md)
 - [heating-schedule-api.md](docs/heating-schedule-api.md)
-- [garmin-empirbus-signals.md](docs/garmin-empirbus-signals.md)
+- [garmin-empirbus-signals.md](docs/garmin-empirbus-signals.md) — source-backed Garmin WDU WebSocket protocol, signal catalogue, and capture evidence
 - [location-service.md](docs/location-service.md)
 
 ## Deployment

@@ -39,6 +39,20 @@ func TestDecodeTargetTemperatureSamples(t *testing.T) {
 	}
 }
 
+func TestDecodeTargetTemperatureUsesFullMillikelvinScalar(t *testing.T) {
+	t.Parallel()
+	raw, got, ok := decodeTargetTemperature([]int{105, 0, 0, 22, 12, 74, 4, 0})
+	if !ok {
+		t.Fatal("decode failed")
+	}
+	if raw != 281100 {
+		t.Fatalf("got raw %d want 281100", raw)
+	}
+	if got != 8.0 {
+		t.Fatalf("got %.1f want displayed setpoint 8.0", got)
+	}
+}
+
 func TestReplayHeatingHAR(t *testing.T) {
 	t.Parallel()
 	frames, err := LoadHARFrames(filepath.Join("..", "Heating.har"))
@@ -255,6 +269,82 @@ func TestSessionSignalIsOnTracksLatestReceivedSignal(t *testing.T) {
 	}
 	if !at.Equal(offAt) {
 		t.Fatalf("got signal time %v want %v after off frame", at, offAt)
+	}
+}
+
+func TestSessionSignalIsOnUsesTheStatusOnBit(t *testing.T) {
+	t.Parallel()
+	session := NewSession(SessionConfig{TraceWindow: time.Second})
+	session.ingest(Frame{
+		At:        time.Unix(1710000000, 0).UTC(),
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{47, 0, 3}},
+	})
+
+	on, known, _ := session.SignalIsOn(47)
+	if !known || !on {
+		t.Fatalf("expected bit-0 on status to be on, got on=%t known=%t", on, known)
+	}
+}
+
+func TestFrameSignalIDUsesLittleEndianUint16(t *testing.T) {
+	t.Parallel()
+	frame := Frame{Wire: WireFrame{Data: []int{38, 1, 0}}}
+	if got := frame.SignalID(); got != 294 {
+		t.Fatalf("got signal id %d want 294", got)
+	}
+}
+
+func TestSessionAcknowledgesReceivedWDUHeartbeat(t *testing.T) {
+	t.Parallel()
+	acknowledgements := make(chan WireFrame, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		if _, _, err := conn.ReadMessage(); err != nil {
+			t.Error(err)
+			return
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"messagetype":48,"messagecmd":5,"size":0,"data":[]}`)); err != nil {
+			t.Error(err)
+			return
+		}
+		_, payload, err := conn.ReadMessage()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		frame, err := ParseWireFrame(string(payload))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		acknowledgements <- frame
+	}))
+	t.Cleanup(server.Close)
+
+	session := NewSession(SessionConfig{
+		WSURL:             "ws" + strings.TrimPrefix(server.URL, "http"),
+		HeartbeatInterval: time.Hour,
+		BootstrapMessages: []string{`{"messagetype":96,"messagecmd":0,"size":0,"data":[]}`},
+	})
+	if err := session.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	select {
+	case frame := <-acknowledgements:
+		if frame.MessageType != 128 || frame.MessageCmd != 0 || frame.Size != 1 || len(frame.Data) != 1 || frame.Data[0] != 0 {
+			t.Fatalf("got acknowledgement %+v", frame)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for WDU heartbeat acknowledgement")
 	}
 }
 
