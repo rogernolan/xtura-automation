@@ -25,6 +25,8 @@ const (
 
 var ErrActive = errors.New("recording is already armed or active")
 
+const maxDurationMinutes = int64(1<<63-1) / int64(time.Minute)
+
 type StartRequest struct {
 	WaitFor         WaitFor
 	DurationMinutes int
@@ -96,6 +98,9 @@ func (m *Manager) Start(request StartRequest) (State, error) {
 	}
 	if request.DurationMinutes < 0 {
 		return m.State(), fmt.Errorf("recording duration must not be negative")
+	}
+	if int64(request.DurationMinutes) > maxDurationMinutes {
+		return m.State(), fmt.Errorf("recording duration is too large")
 	}
 
 	m.mu.Lock()

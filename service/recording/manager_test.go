@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -44,6 +45,43 @@ func TestManagerStartsOnlyAfterNewMatchingOnFrame(t *testing.T) {
 	manager.Observe(time.Now(), heating.DirectionReceive, `{"messagetype":16,"messagecmd":0,"size":3,"data":[197,0,1]}`)
 	if got := manager.State().Status; got != "recording" {
 		t.Fatalf("status = %q", got)
+	}
+}
+
+func TestManagerArmedRecordingRequiresReceivedOnFrame(t *testing.T) {
+	manager := recording.New(t.TempDir(), time.Now, log.New(io.Discard, "", 0))
+	if _, err := manager.Start(recording.StartRequest{WaitFor: recording.WaitVictronOn, DurationMinutes: 1}); err != nil {
+		t.Fatal(err)
+	}
+	manager.Observe(time.Now(), heating.DirectionSend, `{"messagetype":16,"messagecmd":0,"size":3,"data":[197,0,1]}`)
+	if got := manager.State().Status; got != "armed" {
+		t.Fatalf("status after sent match = %q", got)
+	}
+	manager.Observe(time.Now(), heating.DirectionReceive, `{"messagetype":16,"messagecmd":0,"size":3,"data":[197,0,0]}`)
+	if got := manager.State().Status; got != "armed" {
+		t.Fatalf("status after received off frame = %q", got)
+	}
+}
+
+func TestManagerStartsAfterReceivedEngineAndHeatingOnFrames(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		waitFor recording.WaitFor
+		signal  int
+	}{
+		{name: "engine", waitFor: recording.WaitEngineOn, signal: 11},
+		{name: "heating", waitFor: recording.WaitHeatingOn, signal: 101},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			manager := recording.New(t.TempDir(), time.Now, log.New(io.Discard, "", 0))
+			if _, err := manager.Start(recording.StartRequest{WaitFor: test.waitFor, DurationMinutes: 1}); err != nil {
+				t.Fatal(err)
+			}
+			manager.Observe(time.Now(), heating.DirectionReceive, frameForSignal(test.signal, 1))
+			if got := manager.State().Status; got != "recording" {
+				t.Fatalf("status = %q", got)
+			}
+		})
 	}
 }
 
@@ -108,6 +146,20 @@ func TestStartRejectsInvalidRequestAndSecondActiveRecorder(t *testing.T) {
 	}
 }
 
+func TestStartRejectsDurationThatOverflowsMinutes(t *testing.T) {
+	manager := recording.New(t.TempDir(), time.Now, log.New(io.Discard, "", 0))
+	state, err := manager.Start(recording.StartRequest{
+		WaitFor:         recording.WaitImmediate,
+		DurationMinutes: int(^uint(0) >> 1),
+	})
+	if err == nil {
+		t.Fatal("expected duration overflow validation error")
+	}
+	if state.Status != "idle" {
+		t.Fatalf("status = %q", state.Status)
+	}
+}
+
 func readNDJSON(t *testing.T, path string) []map[string]interface{} {
 	t.Helper()
 	file, err := os.Open(path)
@@ -139,4 +191,9 @@ func lastEvent(t *testing.T, path string) string {
 	}
 	event, _ := records[len(records)-1]["event"].(string)
 	return event
+}
+
+func frameForSignal(signal, value int) string {
+	return fmt.Sprintf(`{"messagetype":16,"messagecmd":0,"size":3,"data":[%d,%d,%d]}`,
+		signal&0xff, signal>>8, value)
 }
