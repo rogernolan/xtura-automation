@@ -1,0 +1,10 @@
+{
+  "name": "xtura-automation",
+  "private": true,
+  "scripts": {
+    "lint": "eslint web/static/app.js"
+  },
+  "devDependencies": {
+    "eslint": "8.57.1"
+  }
+}
