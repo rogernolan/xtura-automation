@@ -50,7 +50,16 @@ if [[ "${TARGET_SHA}" == "HEAD" ]]; then
     exec "${SCRIPT_PATH}" "${TARGET_SHA}"
   fi
 else
+  if [[ ! "${TARGET_SHA}" =~ ^[0-9a-f]{7,40}$ ]]; then
+    echo "invalid deploy target: ${TARGET_SHA} (expected HEAD or a git commit SHA)" >&2
+    exit 1
+  fi
+  if ! git rev-parse --verify --quiet "${TARGET_SHA}^{commit}" >/dev/null 2>&1; then
+    echo "unknown commit: ${TARGET_SHA}" >&2
+    exit 1
+  fi
   git checkout --detach "${TARGET_SHA}"
+  TARGET_SHA="$(git rev-parse HEAD)"
 fi
 
 echo "==> Running tests"
