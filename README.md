@@ -93,7 +93,26 @@ Current HTTP endpoints:
 - `GET /v1/water/state`
 - `POST /v1/water/grey-valve/open`
 - `POST /v1/water/grey-valve/close`
+- `GET /v1/recording/state`
+- `POST /v1/recording/start`
+- `POST /v1/recording/stop`
 - `GET /v1/events`
+
+### WebSocket recording
+
+The Settings tab controls an on-demand recording of the daemon's existing Garmin WebSocket session. Choose whether to start immediately or wait for an engine-on, heating-on, or Victron-inverter-on indication, enter a duration in whole minutes, then press **Start recording**. The status and remaining duration update through the `recording.state_changed` event on `GET /v1/events`; press **Stop recording** to cancel either an armed or active recording.
+
+`POST /v1/recording/start` accepts this JSON body and returns the current recording state:
+
+```json
+{"wait_for":"immediate","duration_minutes":1}
+```
+
+`wait_for` may be `immediate`, `engine_on`, `heating_on`, or `victron_on`. A delayed recording only begins when the daemon receives an on-frame after it is armed: signal `11` for engine running, signal `101` for heating on, or signal `197` for the Victron inverter on. `GET /v1/recording/state` and `POST /v1/recording/stop` also return that state. Stop is idempotent and takes priority over both an armed wait condition and a running duration timer.
+
+Recordings are written to `/var/lib/xtura/recordings/` as unique UTC filenames such as `garmin-ws-20260812T153045Z.ndjson` (a numeric suffix is added if needed). Each newline-delimited JSON record has `at`, `direction`, `message`, and `message_len`; parsed Garmin frames additionally include `frame`, `signal`, and `value` when available, while unparsable frames include `error`. Lifecycle records use `direction: "event"` and an `event` value: `recording_started`, `timeout`, `stopped`, or `service_shutdown`.
+
+A duration of `0` records until stopped or the service restarts. Armed and active recordings are not restored after restart; service shutdown cancels them and appends a `service_shutdown` lifecycle record to an active trace where possible.
 
 The location service defaults to the Teltonika RUTX50 GPS position endpoint at `http://192.168.51.1/api/gps/position/status` when `location.enabled` is true. It exposes the latest longitude, latitude, and timezone at `GET /v1/location/state`; see [location-service.md](docs/location-service.md) for the RUTX50 endpoint config, timezone lookup, and Pi timezone update setup.
 

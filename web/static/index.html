@@ -22,6 +22,7 @@
           <button id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Lighting</button>
           <button id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>
           <button id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heating</button>
+          <button id="settingsTab" class="tab" type="button" aria-controls="settingsPanel">Settings</button>
         </nav>
 
         <section id="lightingPanel" class="tab-panel">
@@ -118,6 +119,33 @@
               <button id="saveSchedule" class="primary-action" type="submit">Save schedule</button>
             </form>
             <p id="scheduleDetail" class="detail-text">Waiting for schedule.</p>
+          </div>
+        </section>
+
+        <section id="settingsPanel" class="tab-panel" hidden>
+          <div id="recordingPanel" class="panel">
+            <div class="panel-heading">
+              <h2>WebSocket recording</h2>
+              <span id="recordingState" class="state-text">Idle</span>
+            </div>
+            <div class="recording-fields">
+              <div class="field">
+                <label for="recordingWaitFor">Wait for</label>
+                <select id="recordingWaitFor">
+                  <option value="immediate" selected>Start immediately</option>
+                  <option value="engine_on">Engine on</option>
+                  <option value="heating_on">Heating on</option>
+                  <option value="victron_on">Victron inverter on</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="recordingDuration">Record for minutes</label>
+                <input id="recordingDuration" type="number" min="0" step="1" value="1" inputmode="numeric">
+              </div>
+            </div>
+            <button id="recordingButton" class="primary-action" type="button">Start recording</button>
+            <p class="detail-text">0 records until you press Stop or the service restarts.</p>
+            <p id="recordingDetail" class="detail-text">No recording is active.</p>
           </div>
         </section>
 

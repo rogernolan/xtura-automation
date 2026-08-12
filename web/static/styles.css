@@ -99,7 +99,7 @@ h1 {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border-radius: 12px;
@@ -425,6 +425,11 @@ h2 {
 .field input:disabled {
   color: var(--muted);
   background: rgba(255, 255, 255, 0.5);
+}
+
+.recording-fields {
+  display: grid;
+  gap: 10px;
 }
 
 @media (min-width: 760px) {

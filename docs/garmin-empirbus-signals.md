@@ -252,6 +252,12 @@ Observed receive-state interpretations used by this repo's Go logger and state t
 - receive `data[2]=0`: heater power off
 - receive `data[2]=129`: heater transition / changing state
 
+### Recording feature repo-usage note
+
+This is a repo implementation dependency, not new signal evidence: the on-demand WebSocket recorder waits only for received on-frames after arming. It uses signal `11` as the engine-running indication, `101` as the heating-on indication, and `197` as the Victron-inverter-on indication. The confidence labels and evidence above remain unchanged: signal `11` is still inference in the habitation-step discussion, while `101` remains browser-confirmed for its heater command and has the documented observed receive-state interpretation; `197` remains listed as power-domain signal evidence.
+
+Source files: `service/recording/manager.go` maps the wait conditions and validates received on-frames; `service/runtime/app.go` supplies the daemon WebSocket traffic; `web/static/app.js` exposes the conditions in the Settings UI.
+
 For heater temp up/down:
 
 - `data[0]`: `107` or `108`

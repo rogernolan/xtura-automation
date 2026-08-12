@@ -78,6 +78,21 @@ class XturaApi {
     });
   }
 
+  async startRecording(waitFor, durationMinutes) {
+    return this.request("/v1/recording/start", {
+      method: "POST",
+      body: { wait_for: waitFor, duration_minutes: durationMinutes },
+    });
+  }
+
+  async stopRecording() {
+    return this.request("/v1/recording/stop", { method: "POST" });
+  }
+
+  async recordingState() {
+    return this.request("/v1/recording/state");
+  }
+
   async request(path, options = {}) {
     const init = {
       method: options.method || "GET",
@@ -119,6 +134,7 @@ const state = {
   water: null,
   heatingMode: null,
   heatingState: null,
+  recording: null,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -176,9 +192,11 @@ function setActiveTab(tab) {
   byId("lightingTab").classList.toggle("is-active", tab === "lighting");
   byId("waterTab").classList.toggle("is-active", tab === "water");
   byId("heatingTab").classList.toggle("is-active", tab === "heating");
+  byId("settingsTab").classList.toggle("is-active", tab === "settings");
   byId("lightingPanel").hidden = tab !== "lighting";
   byId("waterPanel").hidden = tab !== "water";
   byId("heatingPanel").hidden = tab !== "heating";
+  byId("settingsPanel").hidden = tab !== "settings";
 }
 
 function render() {
@@ -187,6 +205,7 @@ function render() {
   renderHeating();
   renderSchedule();
   renderBuild();
+  renderRecording();
   syncCountdownRefresh();
 }
 
@@ -206,6 +225,91 @@ function renderBuild() {
   }
   parts.push(build.git_sha || "dev");
   element.textContent = parts.join(" · ");
+function renderRecording() {
+  const recording = state.recording;
+  const panel = byId("recordingPanel");
+  const waitFor = byId("recordingWaitFor");
+  const duration = byId("recordingDuration");
+  const button = byId("recordingButton");
+  if (!recording) {
+    panel.setAttribute("aria-busy", "true");
+    byId("recordingState").textContent = "Loading";
+    byId("recordingDetail").textContent = "Waiting for recording state.";
+    waitFor.disabled = true;
+    duration.disabled = true;
+    button.textContent = "Loading";
+    button.disabled = true;
+    return;
+  }
+  const idle = recording.status === "idle";
+  const active = recording.status === "armed" || recording.status === "recording";
+  panel.setAttribute("aria-busy", String(state.requestInFlight));
+  if (active && ["immediate", "engine_on", "heating_on", "victron_on"].includes(recording.wait_for)) {
+    waitFor.value = recording.wait_for;
+    duration.value = String(recording.duration_minutes || 0);
+  }
+  byId("recordingState").textContent = recordingStateText(recording.status);
+  waitFor.disabled = state.requestInFlight || !idle;
+  duration.disabled = state.requestInFlight || !idle;
+  button.textContent = idle ? "Start recording" : active ? "Stop recording" : "Unavailable";
+  button.disabled = state.requestInFlight || !idle && !active;
+  byId("recordingDetail").textContent = recordingDetailText(recording);
+}
+
+function recordingStateText(status) {
+  if (status === "armed") {
+    return "Armed";
+  }
+  if (status === "recording") {
+    return "Recording";
+  }
+  return status === "idle" ? "Idle" : "Unavailable";
+}
+
+function recordingDetailText(recording) {
+  let detail;
+  if (recording.status === "armed") {
+    detail = `Waiting for ${recordingWaitText(recording.wait_for)}; it will record ${recordingDurationText(recording.duration_minutes)}.`;
+  } else if (recording.status === "recording") {
+    const fileName = recording.file_name ? ` to ${recording.file_name}` : "";
+    detail = `Recording${fileName} ${recordingRemainingText(recording)}.`;
+  } else {
+    detail = recording.last_file_name ? `Last recording: ${recording.last_file_name}.` : "No recording is active.";
+  }
+  return recording.error ? `${detail} Error: ${recording.error}` : detail;
+}
+
+function recordingWaitText(waitFor) {
+  const labels = {
+    engine_on: "engine on",
+    heating_on: "heating on",
+    victron_on: "Victron inverter on",
+  };
+  return labels[waitFor] || "the selected condition";
+}
+
+function recordingDurationText(durationMinutes) {
+  const minutes = Number(durationMinutes) || 0;
+  if (minutes === 0) {
+    return "until stopped";
+  }
+  return `for ${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+function recordingRemainingText(recording) {
+  const minutes = Number(recording.duration_minutes) || 0;
+  if (minutes === 0) {
+    return "until stopped";
+  }
+  const startedAt = new Date(recording.started_at).getTime();
+  if (!Number.isFinite(startedAt)) {
+    return recordingDurationText(minutes);
+  }
+  const remainingSeconds = Math.ceil((startedAt + minutes * 60 * 1000 - Date.now()) / 1000);
+  if (remainingSeconds <= 0) {
+    return "finishing";
+  }
+  return `${formatRemainingSeconds(remainingSeconds)} remaining`;
 }
 
 function renderLights() {
@@ -343,27 +447,34 @@ function boostRemainingText(expiresAt) {
   if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
     return "expires soon";
   }
-  const totalSeconds = Math.ceil(remainingMs / 1000);
+  return `${formatRemainingSeconds(Math.ceil(remainingMs / 1000))} remaining`;
+}
+
+function formatRemainingSeconds(totalSeconds) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   if (minutes >= 60) {
     const hours = Math.floor(minutes / 60);
     const remainder = minutes % 60;
-    return `${hours}h ${remainder}m remaining`;
+    return `${hours}h ${remainder}m`;
   }
-  return `${minutes}:${String(seconds).padStart(2, "0")} remaining`;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function syncCountdownRefresh() {
   const hasActiveBoost = Boolean(state.heatingMode && state.heatingMode.mode === "boost" && state.heatingMode.boost);
-  if (hasActiveBoost && state.countdownRefresh === null) {
+  const hasTimedRecording = Boolean(state.recording && state.recording.status === "recording" && Number(state.recording.duration_minutes) > 0);
+  if ((hasActiveBoost || hasTimedRecording) && state.countdownRefresh === null) {
     state.countdownRefresh = window.setInterval(() => {
       if (state.heatingMode && state.heatingMode.mode === "boost" && state.heatingMode.boost) {
         byId("boostRemaining").textContent = boostRemainingText(state.heatingMode.boost.expires_at);
       }
+      if (state.recording && state.recording.status === "recording") {
+        renderRecording();
+      }
     }, 1000);
   }
-  if (!hasActiveBoost && state.countdownRefresh !== null) {
+  if (!hasActiveBoost && !hasTimedRecording && state.countdownRefresh !== null) {
     window.clearInterval(state.countdownRefresh);
     state.countdownRefresh = null;
   }
@@ -669,18 +780,20 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule, build] = await Promise.all([
+  const [lights, water, mode, schedule, build, recording] = await Promise.all([
     api.getLightsState(),
     api.getWaterState(),
     api.getHeatingMode(),
     api.getHeatingSchedule(),
     api.getBuildInfo(),
+    api.recordingState(),
   ]);
   state.lights = lights;
   state.water = water;
   state.heatingMode = mode;
   state.schedule = schedule;
   state.build = build;
+  state.recording = recording;
   setStatus("Loaded");
   render();
 }
@@ -709,12 +822,17 @@ function connectEvents() {
     state.schedule = JSON.parse(event.data).payload;
     render();
   });
+  events.addEventListener("recording.state_changed", (event) => {
+    state.recording = JSON.parse(event.data).payload;
+    render();
+  });
 }
 
 function bindActions() {
   byId("lightingTab").addEventListener("click", () => setActiveTab("lighting"));
   byId("waterTab").addEventListener("click", () => setActiveTab("water"));
   byId("heatingTab").addEventListener("click", () => setActiveTab("heating"));
+  byId("settingsTab").addEventListener("click", () => setActiveTab("settings"));
   byId("flashLights").addEventListener("click", async () => {
     try {
       const count = flashCount();
@@ -759,6 +877,23 @@ function bindActions() {
   });
   byId("greyScheduleDuration").addEventListener("change", () => {
     byId("greyScheduleDuration").value = String(greyScheduleDuration());
+  });
+  byId("recordingButton").addEventListener("click", async () => {
+    try {
+      const recording = state.recording && state.recording.status === "idle"
+        ? await withRequest(
+          () => api.startRecording(byId("recordingWaitFor").value, recordingDuration()),
+          "Starting recording",
+        )
+        : await withRequest(() => api.stopRecording(), "Stopping recording");
+      state.recording = recording;
+      render();
+    } catch (_) {
+      return;
+    }
+  });
+  byId("recordingDuration").addEventListener("change", () => {
+    byId("recordingDuration").value = String(recordingDuration());
   });
   document.querySelectorAll("[data-target]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -842,6 +977,17 @@ function greyScheduleTime() {
 function greyScheduleDuration() {
   const input = byId("greyScheduleDuration");
   const duration = clampInteger(input.value, 1, 1440);
+  input.value = String(duration);
+  return duration;
+}
+
+function recordingDuration() {
+  const input = byId("recordingDuration");
+  const duration = Number.parseInt(input.value, 10);
+  if (!Number.isFinite(duration) || duration < 0) {
+    input.value = "0";
+    return 0;
+  }
   input.value = String(duration);
   return duration;
 }
