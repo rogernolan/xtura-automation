@@ -566,6 +566,11 @@ func TestHandlerServesWebIndex(t *testing.T) {
 	if body := rr.Body.String(); !strings.Contains(body, `id="buildInfo"`) {
 		t.Fatalf("index body did not contain build footer: %s", body)
 	}
+	for _, want := range []string{`href="/static/styles.css?v=dev"`, `src="/static/app.js?v=dev"`} {
+		if !strings.Contains(rr.Body.String(), want) {
+			t.Fatalf("index body did not contain versioned asset %q: %s", want, rr.Body.String())
+		}
+	}
 	for _, want := range []string{`id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>`, `id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>`, `id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>`, `id="settingsTab" class="tab" type="button" aria-controls="settingsPanel">Settings</button>`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("index body did not contain compact tab %q: %s", want, rr.Body.String())

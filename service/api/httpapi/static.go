@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"empirebus-tests/service/buildinfo"
 	webui "empirebus-tests/web"
 )
 
@@ -35,6 +36,16 @@ func registerStaticRoutes(mux *http.ServeMux) {
 			http.NotFound(w, r)
 			return
 		}
-		http.ServeFileFS(w, r, staticFS, "index.html")
+		index, err := fs.ReadFile(staticFS, "index.html")
+		if err != nil {
+			http.Error(w, "load web UI", http.StatusInternalServerError)
+			return
+		}
+		version := buildinfo.Current().GitSHA
+		body := strings.ReplaceAll(string(index), `href="/static/styles.css"`, `href="/static/styles.css?v=`+version+`"`)
+		body = strings.ReplaceAll(body, `src="/static/app.js"`, `src="/static/app.js?v=`+version+`"`)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write([]byte(body))
 	})
 }
