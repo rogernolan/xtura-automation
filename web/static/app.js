@@ -225,6 +225,8 @@ function renderBuild() {
   }
   parts.push(build.git_sha || "dev");
   element.textContent = parts.join(" · ");
+}
+
 function renderRecording() {
   const recording = state.recording;
   const panel = byId("recordingPanel");
