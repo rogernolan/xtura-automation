@@ -606,6 +606,41 @@ func TestStartSamplesOnIntervalAndFinalizesOnCancel(t *testing.T) {
 	}
 }
 
+func TestConfigureChangesSampleIntervalLive(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
+	clock := newFakeClock(start)
+	poll := newFakePoll()
+	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
+	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
+	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 30 * time.Second})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	manager.Start(ctx)
+
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if got := manager.State().PointCount; got != 0 {
+			t.Fatalf("sampled %d times before interval change, want 0", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 10 * time.Millisecond})
+
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := manager.State().PointCount; got > 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := manager.State().PointCount; got < 1 {
+		t.Fatal("no sample within deadline after live interval change")
+	}
+}
+
 func TestStateAndFileInfoJSONShape(t *testing.T) {
 	now := time.Date(2026, 8, 13, 9, 40, 5, 0, time.UTC)
 	state := tracking.State{

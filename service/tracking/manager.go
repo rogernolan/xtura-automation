@@ -77,6 +77,8 @@ type Manager struct {
 	lastError    string
 	lastErrorAt  *time.Time
 	track        *activeTrack
+
+	wake chan struct{}
 }
 
 // New creates a tracking manager. nil now and logger fall back to sensible
@@ -93,7 +95,7 @@ func New(dir string, poll func(context.Context) (domainlocation.Fix, error), now
 			return domainlocation.Fix{}, errors.New("no location provider configured")
 		}
 	}
-	return &Manager{dir: dir, poll: poll, now: now, logger: logger}
+	return &Manager{dir: dir, poll: poll, now: now, logger: logger, wake: make(chan struct{}, 1)}
 }
 
 // SetOnChange installs a callback invoked after each sample and lifecycle
@@ -104,7 +106,9 @@ func (m *Manager) SetOnChange(onChange func(State)) {
 	m.mu.Unlock()
 }
 
-// Configure applies settings live. Disabling finalizes the active track.
+// Configure applies settings live. Disabling finalizes the active track. A
+// wake signal prompts Start to recreate its ticker so a sample-interval change
+// takes effect immediately.
 func (m *Manager) Configure(settings Settings) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -112,7 +116,18 @@ func (m *Manager) Configure(settings Settings) {
 		m.finalizeLocked()
 	}
 	m.settings = settings
+	m.signalWakeLocked()
 	m.notifyLocked(m.snapshotLocked())
+}
+
+// signalWakeLocked notifies Start's loop that settings changed. The buffered,
+// non-blocking send is level-triggered: Start re-reads the current settings
+// whenever it wakes, so a dropped signal is harmless as long as one is pending.
+func (m *Manager) signalWakeLocked() {
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
 }
 
 // ObserveFrame tracks engine state from Garmin receive frames for signal 11.
@@ -142,7 +157,8 @@ func (m *Manager) ObserveFrame(at time.Time, direction heating.Direction, raw st
 }
 
 // Start launches the sampling goroutine using the sample interval. Interval
-// changes applied via Configure are picked up on the next tick.
+// changes applied via Configure take effect immediately: Configure signals a
+// wake channel and Start recreates the ticker when it observes a change.
 func (m *Manager) Start(ctx context.Context) {
 	m.mu.Lock()
 	interval := m.settings.SampleInterval
@@ -157,6 +173,7 @@ func (m *Manager) Start(ctx context.Context) {
 				return
 			case <-ticker.C:
 				m.Sample(ctx)
+			case <-m.wake:
 			}
 			m.mu.Lock()
 			next := m.settings.SampleInterval
