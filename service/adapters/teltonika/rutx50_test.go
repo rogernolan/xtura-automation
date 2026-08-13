@@ -30,6 +30,83 @@ func TestCoordinatesFromPayloadRejectsMissingLongitude(t *testing.T) {
 	}
 }
 
+func TestAltitudeFromPayloadString(t *testing.T) {
+	payload := map[string]interface{}{
+		"data": map[string]interface{}{
+			"gps": map[string]interface{}{
+				"latitude":  "51.5007",
+				"longitude": -0.1246,
+				"altitude":  "7",
+			},
+		},
+	}
+	alt, ok := altitudeFromPayload(payload)
+	if !ok {
+		t.Fatal("expected altitude")
+	}
+	if alt != 7 {
+		t.Fatalf("got altitude %f", alt)
+	}
+}
+
+func TestAltitudeFromPayloadNumeric(t *testing.T) {
+	payload := map[string]interface{}{
+		"data": map[string]interface{}{
+			"gps": map[string]interface{}{
+				"latitude":  "51.5007",
+				"longitude": -0.1246,
+				"altitude":  123.4,
+			},
+		},
+	}
+	alt, ok := altitudeFromPayload(payload)
+	if !ok {
+		t.Fatal("expected altitude")
+	}
+	if alt != 123.4 {
+		t.Fatalf("got altitude %f", alt)
+	}
+}
+
+func TestAltitudeFromPayloadAbsent(t *testing.T) {
+	payload := map[string]interface{}{
+		"data": map[string]interface{}{
+			"gps": map[string]interface{}{
+				"latitude":  "51.5007",
+				"longitude": -0.1246,
+			},
+		},
+	}
+	if _, ok := altitudeFromPayload(payload); ok {
+		t.Fatal("expected no altitude")
+	}
+}
+
+func TestFixFromStatusSetsAltitude(t *testing.T) {
+	r := &RUTX50{}
+	fix, err := r.fixFromStatus([]byte(`{"data":{"gps":{"latitude":"51.5007","longitude":-0.1246,"altitude":"7"}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fix.Altitude == nil {
+		t.Fatal("expected altitude")
+	}
+	if *fix.Altitude != 7 {
+		t.Fatalf("got altitude %f", *fix.Altitude)
+	}
+}
+
+func TestFixFromStatusWithoutAltitudeLeavesNil(t *testing.T) {
+	r := &RUTX50{}
+	fix, err := r.fixFromStatus([]byte(`{"data":{"gps":{"latitude":"51.5007","longitude":-0.1246}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fix.Altitude != nil {
+		t.Fatalf("got altitude %v", *fix.Altitude)
+	}
+}
+
 func TestTokenFromPayloadFindsNestedToken(t *testing.T) {
 	payload := map[string]interface{}{
 		"success": true,

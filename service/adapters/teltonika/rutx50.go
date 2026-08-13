@@ -103,12 +103,22 @@ func (r *RUTX50) fixFromStatus(data []byte) (domainlocation.Fix, error) {
 	if err != nil {
 		return domainlocation.Fix{}, err
 	}
-	return domainlocation.Fix{
+	fix := domainlocation.Fix{
 		Latitude:  lat,
 		Longitude: lon,
 		Source:    "rutx50:" + endpointPath(r.cfg.Endpoint),
 		UpdatedAt: time.Now().UTC(),
-	}, nil
+	}
+	if alt, ok := altitudeFromPayload(payload); ok {
+		fix.Altitude = &alt
+	}
+	return fix, nil
+}
+
+func altitudeFromPayload(payload interface{}) (float64, bool) {
+	values := map[string]float64{}
+	walkPayload(payload, values)
+	return firstCoordinate(values, "altitude", "alt", "elevation")
 }
 
 func (r *RUTX50) token(ctx context.Context, forceLogin bool) (string, error) {
