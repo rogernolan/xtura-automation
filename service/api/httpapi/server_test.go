@@ -21,6 +21,7 @@ import (
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
+	"empirebus-tests/service/tracking"
 )
 
 type fakeApp struct {
@@ -39,6 +40,16 @@ type fakeApp struct {
 	recording          recording.State
 	startRecordingErr  error
 	stopRecordingCalls *int
+	trackingSettings   tracking.Settings
+	updateTrackingErr  error
+	trackingState      tracking.State
+	trackFiles         []tracking.FileInfo
+	trackListErr       error
+	trackReadData      []byte
+	trackReadErr       error
+	trackReadNames     *[]string
+	trackDeleteErr     error
+	trackDeleteNames   *[]string
 }
 
 func (f fakeApp) Health() runtime.ServiceHealthView {
@@ -149,6 +160,39 @@ func (f fakeApp) StopRecording(context.Context) recording.State {
 	return f.recording
 }
 
+func (f fakeApp) TrackingSettings() tracking.Settings {
+	return f.trackingSettings
+}
+
+func (f fakeApp) UpdateTrackingSettings(_ context.Context, settings tracking.Settings) (tracking.Settings, error) {
+	if f.updateTrackingErr != nil {
+		return tracking.Settings{}, f.updateTrackingErr
+	}
+	return settings, nil
+}
+
+func (f fakeApp) TrackingState() tracking.State {
+	return f.trackingState
+}
+
+func (f fakeApp) TrackList() ([]tracking.FileInfo, error) {
+	return f.trackFiles, f.trackListErr
+}
+
+func (f fakeApp) TrackRead(name string) ([]byte, error) {
+	if f.trackReadNames != nil {
+		*f.trackReadNames = append(*f.trackReadNames, name)
+	}
+	return f.trackReadData, f.trackReadErr
+}
+
+func (f fakeApp) TrackDelete(name string) error {
+	if f.trackDeleteNames != nil {
+		*f.trackDeleteNames = append(*f.trackDeleteNames, name)
+	}
+	return f.trackDeleteErr
+}
+
 func (f fakeApp) Broker() *events.Broker {
 	return f.broker
 }
@@ -257,6 +301,171 @@ func TestRecordingStopIsIdempotent(t *testing.T) {
 	}
 	if stops != 2 {
 		t.Fatalf("stops = %d", stops)
+	}
+}
+
+func TestTrackingSettingsRoutes(t *testing.T) {
+	settings := tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 2 * time.Second}
+	app := fakeApp{broker: events.NewBroker(1), trackingSettings: settings}
+	server := New(app).Handler()
+
+	get := httptest.NewRecorder()
+	server.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/v1/tracking/settings", nil))
+	if get.Code != http.StatusOK {
+		t.Fatalf("get status = %d body=%s", get.Code, get.Body.String())
+	}
+	var got tracking.Settings
+	if err := json.Unmarshal(get.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if got != settings {
+		t.Fatalf("get settings = %#v, want %#v", got, settings)
+	}
+
+	body, err := json.Marshal(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	put := httptest.NewRecorder()
+	server.ServeHTTP(put, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", bytes.NewReader(body)))
+	if put.Code != http.StatusOK {
+		t.Fatalf("put status = %d body=%s", put.Code, put.Body.String())
+	}
+	var updated tracking.Settings
+	if err := json.Unmarshal(put.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode put response: %v", err)
+	}
+	if updated != settings {
+		t.Fatalf("put settings = %#v, want %#v", updated, settings)
+	}
+
+	malformed := httptest.NewRecorder()
+	server.ServeHTTP(malformed, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", strings.NewReader(`{"Enabled":`)))
+	if malformed.Code != http.StatusBadRequest {
+		t.Fatalf("malformed status = %d", malformed.Code)
+	}
+
+	badMethod := httptest.NewRecorder()
+	server.ServeHTTP(badMethod, httptest.NewRequest(http.MethodPost, "/v1/tracking/settings", nil))
+	if badMethod.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("post status = %d", badMethod.Code)
+	}
+}
+
+func TestTrackingSettingsUpdateRejectsValidationError(t *testing.T) {
+	app := fakeApp{broker: events.NewBroker(1), updateTrackingErr: errors.New("tracking.enabled requires location.enabled")}
+	server := New(app).Handler()
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", bytes.NewBufferString(`{"Enabled":true}`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestTrackingStateRoute(t *testing.T) {
+	state := tracking.State{Enabled: true, Tracking: true, PointCount: 3}
+	server := New(fakeApp{broker: events.NewBroker(1), trackingState: state}).Handler()
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/tracking/state", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var got tracking.State
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Enabled || !got.Tracking || got.PointCount != 3 {
+		t.Fatalf("state = %#v, want %#v", got, state)
+	}
+}
+
+func TestTracksRoutes(t *testing.T) {
+	data := []byte(`{"type":"FeatureCollection"}`)
+	readNames := []string{}
+	deleteNames := []string{}
+	app := fakeApp{
+		broker:           events.NewBroker(1),
+		trackFiles:       []tracking.FileInfo{{Name: "track-20260813.geojson", Bytes: 42, PointCount: 3}},
+		trackReadData:    data,
+		trackReadNames:   &readNames,
+		trackDeleteNames: &deleteNames,
+	}
+	server := New(app).Handler()
+
+	list := httptest.NewRecorder()
+	server.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/v1/tracks", nil))
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	var files []tracking.FileInfo
+	if err := json.Unmarshal(list.Body.Bytes(), &files); err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Name != "track-20260813.geojson" {
+		t.Fatalf("list = %#v", files)
+	}
+
+	download := httptest.NewRecorder()
+	server.ServeHTTP(download, httptest.NewRequest(http.MethodGet, "/v1/tracks/track-20260813.geojson", nil))
+	if download.Code != http.StatusOK {
+		t.Fatalf("download status = %d body=%s", download.Code, download.Body.String())
+	}
+	if ct := download.Header().Get("Content-Type"); ct != "application/geo+json" {
+		t.Fatalf("content type = %q", ct)
+	}
+	if cd := download.Header().Get("Content-Disposition"); !strings.Contains(cd, "attachment; filename=") || !strings.Contains(cd, "track-20260813.geojson") {
+		t.Fatalf("content disposition = %q", cd)
+	}
+	if body := download.Body.String(); body != string(data) {
+		t.Fatalf("body = %q, want %q", body, data)
+	}
+	if len(readNames) != 1 || readNames[0] != "track-20260813.geojson" {
+		t.Fatalf("read names = %#v", readNames)
+	}
+
+	del := httptest.NewRecorder()
+	server.ServeHTTP(del, httptest.NewRequest(http.MethodDelete, "/v1/tracks/track-20260813.geojson", nil))
+	if del.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d body=%s", del.Code, del.Body.String())
+	}
+	if len(deleteNames) != 1 || deleteNames[0] != "track-20260813.geojson" {
+		t.Fatalf("delete names = %#v", deleteNames)
+	}
+}
+
+func TestTrackRouteRejectsTraversalName(t *testing.T) {
+	readNames := []string{}
+	app := fakeApp{
+		broker:         events.NewBroker(1),
+		trackReadErr:   errors.New(`invalid track name "../x.geojson"`),
+		trackReadNames: &readNames,
+	}
+	server := New(app).Handler()
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/tracks/..%2Fx.geojson", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(readNames) != 1 || readNames[0] != "../x.geojson" {
+		t.Fatalf("read names = %#v", readNames)
+	}
+}
+
+func TestTrackDeleteRejectsTraversalName(t *testing.T) {
+	deleteNames := []string{}
+	app := fakeApp{
+		broker:           events.NewBroker(1),
+		trackDeleteErr:   errors.New(`invalid track name "../x.geojson"`),
+		trackDeleteNames: &deleteNames,
+	}
+	server := New(app).Handler()
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodDelete, "/v1/tracks/..%2Fx.geojson", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(deleteNames) != 1 || deleteNames[0] != "../x.geojson" {
+		t.Fatalf("delete names = %#v", deleteNames)
 	}
 }
 

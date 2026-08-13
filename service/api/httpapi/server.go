@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
+	"empirebus-tests/service/tracking"
 )
 
 type Server struct {
@@ -50,6 +53,12 @@ type Application interface {
 	RecordingState() recording.State
 	StartRecording(context.Context, recording.StartRequest) (recording.State, error)
 	StopRecording(context.Context) recording.State
+	TrackingSettings() tracking.Settings
+	UpdateTrackingSettings(context.Context, tracking.Settings) (tracking.Settings, error)
+	TrackingState() tracking.State
+	TrackList() ([]tracking.FileInfo, error)
+	TrackRead(string) ([]byte, error)
+	TrackDelete(string) error
 	Broker() *events.Broker
 }
 
@@ -83,6 +92,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/recording/state", s.handleRecordingState)
 	mux.HandleFunc("/v1/recording/start", s.handleRecordingStart)
 	mux.HandleFunc("/v1/recording/stop", s.handleRecordingStop)
+	mux.HandleFunc("/v1/tracking/settings", s.handleTrackingSettings)
+	mux.HandleFunc("/v1/tracking/state", s.handleTrackingState)
+	mux.HandleFunc("/v1/tracks", s.handleTracks)
+	mux.HandleFunc("/v1/tracks/{name}", s.handleTrack)
 	mux.HandleFunc("/v1/events", s.handleEvents)
 	registerStaticRoutes(mux)
 	return mux
@@ -478,6 +491,88 @@ func (s *Server) handleRecordingStop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.app.StopRecording(ctx))
 }
 
+func (s *Server) handleTrackingSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.app.TrackingSettings())
+	case http.MethodPut:
+		var body tracking.Settings
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		settings, err := s.app.UpdateTrackingSettings(ctx, body)
+		if err != nil {
+			if isValidationError(err) {
+				writeValidationError(w, err)
+				return
+			}
+			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, settings)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleTrackingState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.TrackingState())
+}
+
+func (s *Server) handleTracks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	files, err := s.app.TrackList()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, files)
+}
+
+func (s *Server) handleTrack(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	switch r.Method {
+	case http.MethodGet:
+		data, err := s.app.TrackRead(name)
+		if err != nil {
+			writeTrackError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/geo+json")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+		_, _ = w.Write(data)
+	case http.MethodDelete:
+		if err := s.app.TrackDelete(name); err != nil {
+			writeTrackError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func writeTrackError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		writeError(w, http.StatusNotFound, err)
+	case strings.Contains(err.Error(), "invalid track name"):
+		writeError(w, http.StatusBadRequest, err)
+	default:
+		writeError(w, http.StatusInternalServerError, err)
+	}
+}
+
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -550,6 +645,7 @@ func isValidationError(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "automation.") ||
+		strings.Contains(msg, "tracking.") ||
 		strings.Contains(msg, "target_celsius") ||
 		strings.Contains(msg, "duration") ||
 		strings.Contains(msg, "HH:MM") ||
