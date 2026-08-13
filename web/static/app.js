@@ -366,7 +366,9 @@ function renderTracking() {
   byId("trackingState").textContent = trackingStateText(tracking);
   enabled.checked = settings.enabled;
   engineOnly.checked = settings.only_when_engine_on;
-  interval.value = String(settings.sample_interval_seconds || 5);
+  if (interval !== document.activeElement) {
+    interval.value = String(settings.sample_interval_seconds || 5);
+  }
   enabled.disabled = state.requestInFlight;
   engineOnly.disabled = state.requestInFlight;
   interval.disabled = state.requestInFlight;
