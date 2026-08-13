@@ -36,6 +36,9 @@ func TestAppTrackingWiring(t *testing.T) {
 	if !settings.Enabled || settings.OnlyWhenEngineOn || settings.SampleInterval != time.Second {
 		t.Fatalf("tracking settings = %#v", settings)
 	}
+	if got := app.TrackingDirectory(); got != trackDir {
+		t.Fatalf("tracking directory = %q, want %q", got, trackDir)
+	}
 	waitForTrackingStateEvent(t, events)
 	waitForCondition(t, "tracking sample", func() bool {
 		return app.TrackingState().Tracking

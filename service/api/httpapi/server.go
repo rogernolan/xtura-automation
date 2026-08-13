@@ -54,6 +54,7 @@ type Application interface {
 	StartRecording(context.Context, recording.StartRequest) (recording.State, error)
 	StopRecording(context.Context) recording.State
 	TrackingSettings() tracking.Settings
+	TrackingDirectory() string
 	UpdateTrackingSettings(context.Context, tracking.Settings) (tracking.Settings, error)
 	TrackingState() tracking.State
 	TrackList() ([]tracking.FileInfo, error)
@@ -491,19 +492,45 @@ func (s *Server) handleRecordingStop(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.app.StopRecording(ctx))
 }
 
+// trackingSettingsDTO is the wire shape for GET/PUT /v1/tracking/settings.
+// Directory is fixed at construction and ignored on PUT.
+type trackingSettingsDTO struct {
+	Enabled               bool    `json:"enabled"`
+	OnlyWhenEngineOn      bool    `json:"only_when_engine_on"`
+	SampleIntervalSeconds float64 `json:"sample_interval_seconds"`
+	Directory             string  `json:"directory"`
+}
+
+func trackingSettingsFromDTO(body trackingSettingsDTO) tracking.Settings {
+	return tracking.Settings{
+		Enabled:          body.Enabled,
+		OnlyWhenEngineOn: body.OnlyWhenEngineOn,
+		SampleInterval:   time.Duration(body.SampleIntervalSeconds * float64(time.Second)),
+	}
+}
+
+func trackingSettingsToDTO(settings tracking.Settings, directory string) trackingSettingsDTO {
+	return trackingSettingsDTO{
+		Enabled:               settings.Enabled,
+		OnlyWhenEngineOn:      settings.OnlyWhenEngineOn,
+		SampleIntervalSeconds: settings.SampleInterval.Seconds(),
+		Directory:             directory,
+	}
+}
+
 func (s *Server) handleTrackingSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.app.TrackingSettings())
+		writeJSON(w, http.StatusOK, trackingSettingsToDTO(s.app.TrackingSettings(), s.app.TrackingDirectory()))
 	case http.MethodPut:
-		var body tracking.Settings
+		var body trackingSettingsDTO
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
-		settings, err := s.app.UpdateTrackingSettings(ctx, body)
+		settings, err := s.app.UpdateTrackingSettings(ctx, trackingSettingsFromDTO(body))
 		if err != nil {
 			if isValidationError(err) {
 				writeValidationError(w, err)
@@ -512,7 +539,7 @@ func (s *Server) handleTrackingSettings(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusBadGateway, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, settings)
+		writeJSON(w, http.StatusOK, trackingSettingsToDTO(settings, s.app.TrackingDirectory()))
 	default:
 		methodNotAllowed(w)
 	}

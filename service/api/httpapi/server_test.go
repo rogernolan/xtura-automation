@@ -41,6 +41,7 @@ type fakeApp struct {
 	startRecordingErr  error
 	stopRecordingCalls *int
 	trackingSettings   tracking.Settings
+	trackingDir        string
 	updateTrackingErr  error
 	trackingState      tracking.State
 	trackFiles         []tracking.FileInfo
@@ -162,6 +163,10 @@ func (f fakeApp) StopRecording(context.Context) recording.State {
 
 func (f fakeApp) TrackingSettings() tracking.Settings {
 	return f.trackingSettings
+}
+
+func (f fakeApp) TrackingDirectory() string {
+	return f.trackingDir
 }
 
 func (f fakeApp) UpdateTrackingSettings(_ context.Context, settings tracking.Settings) (tracking.Settings, error) {
@@ -305,8 +310,11 @@ func TestRecordingStopIsIdempotent(t *testing.T) {
 }
 
 func TestTrackingSettingsRoutes(t *testing.T) {
-	settings := tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 2 * time.Second}
-	app := fakeApp{broker: events.NewBroker(1), trackingSettings: settings}
+	app := fakeApp{
+		broker:           events.NewBroker(1),
+		trackingSettings: tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 2 * time.Second},
+		trackingDir:      "/var/lib/xtura/tracks",
+	}
 	server := New(app).Handler()
 
 	get := httptest.NewRecorder()
@@ -314,33 +322,50 @@ func TestTrackingSettingsRoutes(t *testing.T) {
 	if get.Code != http.StatusOK {
 		t.Fatalf("get status = %d body=%s", get.Code, get.Body.String())
 	}
-	var got tracking.Settings
+	var got map[string]interface{}
 	if err := json.Unmarshal(get.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode get response: %v", err)
 	}
-	if got != settings {
-		t.Fatalf("get settings = %#v, want %#v", got, settings)
+	if got["enabled"] != true {
+		t.Fatalf("get enabled = %v", got["enabled"])
+	}
+	if got["only_when_engine_on"] != true {
+		t.Fatalf("get only_when_engine_on = %v", got["only_when_engine_on"])
+	}
+	if got["sample_interval_seconds"] != 2.0 {
+		t.Fatalf("get sample_interval_seconds = %v", got["sample_interval_seconds"])
+	}
+	if got["directory"] != "/var/lib/xtura/tracks" {
+		t.Fatalf("get directory = %v", got["directory"])
+	}
+	if _, ok := got["SampleInterval"]; ok {
+		t.Fatalf("get response leaked Go field names: %v", got)
 	}
 
-	body, err := json.Marshal(settings)
-	if err != nil {
-		t.Fatal(err)
-	}
 	put := httptest.NewRecorder()
-	server.ServeHTTP(put, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", bytes.NewReader(body)))
+	server.ServeHTTP(put, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", strings.NewReader(`{"enabled":false,"only_when_engine_on":false,"sample_interval_seconds":30,"directory":"/ignored"}`)))
 	if put.Code != http.StatusOK {
 		t.Fatalf("put status = %d body=%s", put.Code, put.Body.String())
 	}
-	var updated tracking.Settings
+	var updated map[string]interface{}
 	if err := json.Unmarshal(put.Body.Bytes(), &updated); err != nil {
 		t.Fatalf("decode put response: %v", err)
 	}
-	if updated != settings {
-		t.Fatalf("put settings = %#v, want %#v", updated, settings)
+	if updated["enabled"] != false {
+		t.Fatalf("put enabled = %v", updated["enabled"])
+	}
+	if updated["only_when_engine_on"] != false {
+		t.Fatalf("put only_when_engine_on = %v", updated["only_when_engine_on"])
+	}
+	if updated["sample_interval_seconds"] != 30.0 {
+		t.Fatalf("put sample_interval_seconds = %v", updated["sample_interval_seconds"])
+	}
+	if updated["directory"] != "/var/lib/xtura/tracks" {
+		t.Fatalf("put directory = %v, want runtime directory", updated["directory"])
 	}
 
 	malformed := httptest.NewRecorder()
-	server.ServeHTTP(malformed, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", strings.NewReader(`{"Enabled":`)))
+	server.ServeHTTP(malformed, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", strings.NewReader(`{"enabled":`)))
 	if malformed.Code != http.StatusBadRequest {
 		t.Fatalf("malformed status = %d", malformed.Code)
 	}
@@ -352,11 +377,34 @@ func TestTrackingSettingsRoutes(t *testing.T) {
 	}
 }
 
+func TestTrackingSettingsDTOConversion(t *testing.T) {
+	settings := trackingSettingsFromDTO(trackingSettingsDTO{
+		Enabled:               true,
+		OnlyWhenEngineOn:      false,
+		SampleIntervalSeconds: 30,
+	})
+	if !settings.Enabled || settings.OnlyWhenEngineOn || settings.SampleInterval != 30*time.Second {
+		t.Fatalf("from DTO = %#v", settings)
+	}
+	zero := trackingSettingsFromDTO(trackingSettingsDTO{SampleIntervalSeconds: 0})
+	if zero.SampleInterval != 0 {
+		t.Fatalf("zero sample interval = %s, want 0", zero.SampleInterval)
+	}
+	dto := trackingSettingsToDTO(tracking.Settings{
+		Enabled:          true,
+		OnlyWhenEngineOn: true,
+		SampleInterval:   5 * time.Second,
+	}, "/var/lib/xtura/tracks")
+	if dto.Enabled != true || dto.OnlyWhenEngineOn != true || dto.SampleIntervalSeconds != 5.0 || dto.Directory != "/var/lib/xtura/tracks" {
+		t.Fatalf("to DTO = %#v", dto)
+	}
+}
+
 func TestTrackingSettingsUpdateRejectsValidationError(t *testing.T) {
 	app := fakeApp{broker: events.NewBroker(1), updateTrackingErr: errors.New("tracking.enabled requires location.enabled")}
 	server := New(app).Handler()
 	rr := httptest.NewRecorder()
-	server.ServeHTTP(rr, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", bytes.NewBufferString(`{"Enabled":true}`)))
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodPut, "/v1/tracking/settings", bytes.NewBufferString(`{"enabled":true}`)))
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 	}

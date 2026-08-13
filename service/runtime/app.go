@@ -292,6 +292,12 @@ func (a *App) TrackingSettings() tracking.Settings {
 	}
 }
 
+func (a *App) TrackingDirectory() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.cfg.Tracking.Dir
+}
+
 func (a *App) UpdateTrackingSettings(ctx context.Context, settings tracking.Settings) (tracking.Settings, error) {
 	a.mu.RLock()
 	currentConfig := a.rawConfig
