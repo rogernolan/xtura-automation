@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"empirebus-tests/heating"
 	"empirebus-tests/service/adapters/garmin"
 	"empirebus-tests/service/adapters/geotimezone"
 	"empirebus-tests/service/adapters/teltonika"
@@ -24,9 +25,11 @@ import (
 	domainlocation "empirebus-tests/service/domains/location"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/recording"
+	"empirebus-tests/service/tracking"
 )
 
 var recordingDirectory = "/var/lib/xtura/recordings"
+var trackingDirectory = "/var/lib/xtura/tracks"
 
 type HeatingController interface {
 	EnsureOn(context.Context) error
@@ -74,6 +77,7 @@ type App struct {
 	timezoneResolver      TimezoneResolver
 	broker                *events.Broker
 	recording             *recording.Manager
+	tracking              *tracking.Manager
 	sleep                 func(time.Duration)
 	now                   func() time.Time
 
@@ -123,23 +127,6 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 			Payload:   state,
 		})
 	})
-	adapter := garmin.New(garmin.Config{
-		WSURL:             cfg.Garmin.WSURL,
-		Origin:            cfg.Garmin.Origin,
-		HeartbeatInterval: cfg.Garmin.HeartbeatInterval,
-		TraceWindow:       cfg.Garmin.TraceWindow,
-		Logger:            logger,
-		RecordFrame:       recorder.Observe,
-	})
-	adapter.Start(ctx)
-	var lights LightsController
-	if controller, ok := interface{}(adapter).(LightsController); ok {
-		lights = controller
-	}
-	var water WaterController
-	if controller, ok := interface{}(adapter).(WaterController); ok {
-		water = controller
-	}
 	var location LocationProvider
 	var timezoneResolver TimezoneResolver
 	if cfg.Location.Enabled {
@@ -164,6 +151,51 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 			timezoneResolver = geotimezone.New(cfg.Location.Timezone.Endpoint, cfg.Location.Timezone.Timeout)
 		}
 	}
+	var trackingManager *tracking.Manager
+	if location != nil {
+		trackingDir := cfg.Tracking.Dir
+		if trackingDir == "" {
+			trackingDir = trackingDirectory
+		}
+		trackingManager = tracking.New(trackingDir, location.Poll, time.Now, logger)
+		trackingManager.Configure(tracking.Settings{
+			Enabled:          cfg.Tracking.Enabled,
+			OnlyWhenEngineOn: cfg.Tracking.OnlyWhenEngineOn,
+			SampleInterval:   cfg.Tracking.SampleInterval,
+		})
+		trackingManager.SetOnChange(func(state tracking.State) {
+			broker.Publish(events.Event{
+				Type:      "tracking.state_changed",
+				Timestamp: time.Now().UTC(),
+				Payload:   state,
+			})
+		})
+		trackingManager.Start(ctx)
+	}
+	recordFrame := recorder.Observe
+	if trackingManager != nil {
+		recordFrame = func(at time.Time, direction heating.Direction, raw string) {
+			recorder.Observe(at, direction, raw)
+			trackingManager.ObserveFrame(at, direction, raw)
+		}
+	}
+	adapter := garmin.New(garmin.Config{
+		WSURL:             cfg.Garmin.WSURL,
+		Origin:            cfg.Garmin.Origin,
+		HeartbeatInterval: cfg.Garmin.HeartbeatInterval,
+		TraceWindow:       cfg.Garmin.TraceWindow,
+		Logger:            logger,
+		RecordFrame:       recordFrame,
+	})
+	adapter.Start(ctx)
+	var lights LightsController
+	if controller, ok := interface{}(adapter).(LightsController); ok {
+		lights = controller
+	}
+	var water WaterController
+	if controller, ok := interface{}(adapter).(WaterController); ok {
+		water = controller
+	}
 	app := &App{
 		startedAt:             time.Now().UTC(),
 		cfg:                   cfg,
@@ -179,6 +211,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		timezoneResolver:      timezoneResolver,
 		broker:                broker,
 		recording:             recorder,
+		tracking:              trackingManager,
 		now:                   time.Now,
 		schedulerWake:         make(chan struct{}, 1),
 		waterSchedulerWake:    make(chan struct{}, 1),
@@ -247,6 +280,91 @@ func (a *App) LocationState() domainlocation.State {
 	return a.locationState
 }
 
+func (a *App) TrackingSettings() tracking.Settings {
+	if a.tracking == nil {
+		return tracking.Settings{}
+	}
+	state := a.tracking.State()
+	return tracking.Settings{
+		Enabled:          state.Enabled,
+		OnlyWhenEngineOn: state.OnlyWhenEngineOn,
+		SampleInterval:   time.Duration(state.SampleIntervalSeconds * float64(time.Second)),
+	}
+}
+
+func (a *App) UpdateTrackingSettings(ctx context.Context, settings tracking.Settings) (tracking.Settings, error) {
+	a.mu.RLock()
+	currentConfig := a.rawConfig
+	configPath := a.configPath
+	a.mu.RUnlock()
+	if strings.TrimSpace(configPath) == "" {
+		return tracking.Settings{}, fmt.Errorf("config path is not configured")
+	}
+	nextConfig := currentConfig
+	onlyWhenEngineOn := settings.OnlyWhenEngineOn
+	nextConfig.Tracking = config.TrackingConfig{
+		Enabled:          settings.Enabled,
+		OnlyWhenEngineOn: &onlyWhenEngineOn,
+		SampleInterval:   settings.SampleInterval,
+		Dir:              currentConfig.Tracking.Dir,
+	}
+	nextNormalized, err := nextConfig.Normalize()
+	if err != nil {
+		return tracking.Settings{}, err
+	}
+	if err := config.SaveFile(configPath, nextConfig); err != nil {
+		return tracking.Settings{}, err
+	}
+	revision := readConfigRevision(configPath)
+	a.mu.Lock()
+	a.rawConfig = nextConfig
+	a.cfg = nextNormalized
+	a.revision = revision
+	a.mu.Unlock()
+	if a.tracking != nil {
+		a.tracking.Configure(tracking.Settings{
+			Enabled:          settings.Enabled,
+			OnlyWhenEngineOn: settings.OnlyWhenEngineOn,
+			SampleInterval:   settings.SampleInterval,
+		})
+	}
+	out := tracking.Settings{
+		Enabled:          nextNormalized.Tracking.Enabled,
+		OnlyWhenEngineOn: nextNormalized.Tracking.OnlyWhenEngineOn,
+		SampleInterval:   nextNormalized.Tracking.SampleInterval,
+	}
+	a.logger.Printf("tracking settings updated: enabled=%t only_when_engine_on=%t sample_interval=%s", out.Enabled, out.OnlyWhenEngineOn, out.SampleInterval)
+	return out, nil
+}
+
+func (a *App) TrackingState() tracking.State {
+	if a.tracking == nil {
+		return tracking.State{}
+	}
+	return a.tracking.State()
+}
+
+func (a *App) TrackList() ([]tracking.FileInfo, error) {
+	if a.tracking == nil {
+		return nil, nil
+	}
+	return a.tracking.List()
+}
+
+func (a *App) TrackRead(name string) ([]byte, error) {
+	if a.tracking == nil {
+		return nil, fmt.Errorf("tracking manager not available")
+	}
+	return a.tracking.Read(name)
+}
+
+func (a *App) TrackDelete(name string) error {
+	if a.tracking == nil {
+		return fmt.Errorf("tracking manager not available")
+	}
+	return a.tracking.Delete(name)
+}
+
 func (a *App) Health() domainheating.ServiceHealth {
 	garminHealth := a.adapter.Health()
 	status := "ok"
@@ -267,7 +385,10 @@ func (a *App) Health() domainheating.ServiceHealth {
 
 func (a *App) locationLoop(ctx context.Context) {
 	a.pollLocation(ctx)
-	ticker := time.NewTicker(a.cfg.Location.PollInterval)
+	a.mu.RLock()
+	pollInterval := a.cfg.Location.PollInterval
+	a.mu.RUnlock()
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -283,25 +404,33 @@ func (a *App) pollLocation(ctx context.Context) {
 	if a.location == nil {
 		return
 	}
-	pollCtx, cancel := context.WithTimeout(ctx, a.cfg.Location.RUTX50.Timeout)
+	a.mu.RLock()
+	provider := a.cfg.Location.Provider
+	pollTimeout := a.cfg.Location.RUTX50.Timeout
+	timezoneTimeout := a.cfg.Location.Timezone.Timeout
+	timezoneUpdate := a.cfg.Location.TimezoneUpdate
+	movementWindow := a.cfg.Location.Movement.Window
+	minDistanceMeters := a.cfg.Location.Movement.MinDistanceMeters
+	a.mu.RUnlock()
+	pollCtx, cancel := context.WithTimeout(ctx, pollTimeout)
 	defer cancel()
 	fix, err := a.location.Poll(pollCtx)
 	now := time.Now().UTC()
 	if err != nil {
 		a.mu.Lock()
 		a.locationState.Configured = true
-		a.locationState.Provider = a.cfg.Location.Provider
+		a.locationState.Provider = provider
 		a.locationState.LastError = err.Error()
 		a.locationState.LastErrorAt = &now
 		a.locationState.SystemTimezone = currentSystemTimezone()
-		a.locationState.TimezoneUpdateMode = timezoneUpdateMode(a.cfg.Location.TimezoneUpdate)
+		a.locationState.TimezoneUpdateMode = timezoneUpdateMode(timezoneUpdate)
 		a.mu.Unlock()
 		a.logger.Printf("location poll failed: %v", err)
 		return
 	}
 	timezoneName := a.currentAutomationTimezone()
 	if a.timezoneResolver != nil {
-		resolveCtx, resolveCancel := context.WithTimeout(ctx, a.cfg.Location.Timezone.Timeout)
+		resolveCtx, resolveCancel := context.WithTimeout(ctx, timezoneTimeout)
 		resolved, resolveErr := a.timezoneResolver.Timezone(resolveCtx, fix.Latitude, fix.Longitude)
 		resolveCancel()
 		if resolveErr != nil {
@@ -321,22 +450,23 @@ func (a *App) pollLocation(ctx context.Context) {
 		}
 	}
 	a.mu.Lock()
-	a.locationFixes = recentLocationFixes(append(a.locationFixes, fix), fix.UpdatedAt, a.cfg.Location.Movement.Window)
+	a.locationFixes = recentLocationFixes(append(a.locationFixes, fix), fix.UpdatedAt, movementWindow)
 	movementMeters := cumulativeMovementMeters(a.locationFixes)
-	isMoving := movementMeters >= a.cfg.Location.Movement.MinDistanceMeters
+	isMoving := movementMeters >= minDistanceMeters
 	a.locationState = domainlocation.State{
 		Configured:         true,
 		Known:              true,
-		Provider:           a.cfg.Location.Provider,
+		Provider:           provider,
 		Latitude:           fix.Latitude,
 		Longitude:          fix.Longitude,
+		Altitude:           fix.Altitude,
 		IsMoving:           isMoving,
 		MovementMeters:     movementMeters,
 		Timezone:           timezoneName,
 		SystemTimezone:     currentSystemTimezone(),
 		TimezoneUpdatedAt:  timezoneUpdatedAt,
 		LastUpdatedAt:      &fix.UpdatedAt,
-		TimezoneUpdateMode: timezoneUpdateMode(a.cfg.Location.TimezoneUpdate),
+		TimezoneUpdateMode: timezoneUpdateMode(timezoneUpdate),
 	}
 	if err != nil {
 		a.locationState.LastError = err.Error()
@@ -386,14 +516,14 @@ func (a *App) maybeUpdateTimezone(ctx context.Context, timezoneName string, now 
 	if _, err := time.LoadLocation(timezoneName); err != nil {
 		return false, err
 	}
-	cfg := a.cfg.Location.TimezoneUpdate
-	if !cfg.Enabled {
-		return false, nil
-	}
 	a.mu.RLock()
+	cfg := a.cfg.Location.TimezoneUpdate
 	lastSync := a.lastTimezoneSync
 	currentConfigTZ := a.rawConfig.Automation.Timezone
 	a.mu.RUnlock()
+	if !cfg.Enabled {
+		return false, nil
+	}
 	if !lastSync.IsZero() && now.Sub(lastSync) < cfg.Interval && currentConfigTZ == timezoneName {
 		return false, nil
 	}
