@@ -25,7 +25,9 @@ Requirements:
 
 - Format: GeoJSON (RFC 7946), a single Feature with a `LineString` geometry,
   per-point timestamps carried in a `properties.times` array aligned
-  index-for-index with the coordinates.
+  index-for-index with the coordinates. Altitude (when the RUTX50 reports it)
+  is stored as the third coordinate element `[lon, lat, alt]` per RFC 7946,
+  where `alt` is elevation in meters.
 - Track lifecycle:
   - Engine-only mode: one file per engine on -> off session.
   - Continuous mode: one file per UTC day, resumed on service restart so a
@@ -70,8 +72,8 @@ Components:
    - Skip if tracking is disabled.
    - Skip if `onlyWhenEngineOn` and (`!engineKnown` or `!engineOn`).
    - Poll the RUTX50 location provider for a fix.
-   - On a successful fix, append `{lat, lon, at}` to the active track and
-     atomically rewrite the track file.
+   - On a successful fix, append `{lat, lon, altitude, at}` to the active
+     track and atomically rewrite the track file.
    - On poll failure, record `last_error` and continue (do not split the
      track).
 3. Lifecycle transitions:
@@ -100,12 +102,16 @@ A single valid GeoJSON Feature written to the file:
   },
   "geometry": {
     "type": "LineString",
-    "coordinates": [[0.854362, 51.065375]]
+    "coordinates": [[0.854362, 51.065375, 7]]
   }
 }
 ```
 
-- Coordinates are `[lon, lat]` per RFC 7946.
+- Coordinates are `[lon, lat]` per RFC 7946. When the RUTX50 reports an
+  altitude for a sample, the position is `[lon, lat, alt]` with `alt` in
+  meters as the RFC 7946 elevation element; otherwise the position is
+  `[lon, lat]`. Coordinates may therefore mix two- and three-element
+  positions within one track.
 - `properties.times` is aligned index-for-index with `coordinates` and holds
   ISO 8601 UTC timestamps (`YYYY-MM-DDTHH:MM:SSZ`), so consumers can render
   the route and animate progress.
@@ -113,6 +119,20 @@ A single valid GeoJSON Feature written to the file:
   `sample_interval_seconds` are informational.
 - Files are written atomically: write `<name>.tmp`, rename over `<name>`, so a
   crash never leaves a truncated/corrupt track file.
+
+### Altitude Source
+
+- The RUTX50 `GET /api/gps/position/status` response includes an `altitude`
+  field (string, meters as reported by the router's GPS module; the live
+  router returned `"altitude":"7"`). It is the same GPS module the RUTX50
+  uses for its own GPS features.
+- `service/adapters/teltonika/rutx50.go` gains altitude extraction (keys
+  `altitude`, `alt`, `elevation`), and `domainlocation.Fix` gains an optional
+  `Altitude *float64` (nil when the provider did not report one).
+- The tracker stores the optional altitude in each sample; the GeoJSON writer
+  emits the third coordinate element only when altitude is known.
+- `location.State` also gains an optional `altitude` field surfaced by
+  `GET /v1/location/state` when the latest fix has one.
 
 ### File Names
 
@@ -205,6 +225,8 @@ Behavior:
     existing daily file.
   - Unknown engine state blocks sampling in engine-only mode.
   - Sample writes a valid GeoJSON LineString with aligned `times`.
+  - Altitude is stored as the third coordinate element when present and the
+    two-element position is kept when absent.
   - Atomic rewrite leaves a valid file after each sample.
   - List/Read/Delete behavior and path-traversal rejection.
   - Generates a sample track file into a temp directory.
@@ -212,15 +234,18 @@ Behavior:
   - Route/method checks for the new endpoints.
   - Settings GET/PUT round-trip, validation errors, list/download/delete.
 - Config tests for tracking defaults and validation.
-- Committed sample file at `docs/examples/sample-track.geojson` for offline
-  InstaBlog parsing, and the unit test in `manager_test.go` writes a similar
-  sample track into its temp directory to exercise the file writer.
+- `service/adapters/teltonika/rutx50_test.go`: altitude extraction from the
+  GPS position status payload (present and absent cases).
+- Committed sample file at `docs/examples/sample-track.geojson` (with a few
+  `[lon, lat, alt]` positions) for offline InstaBlog parsing, and the unit
+  test in `manager_test.go` writes a similar sample track into its temp
+  directory to exercise the file writer.
 
 ## Docs
 
-- New `docs/gps-tracking.md`: the track file format, the track/settings API,
-  and the lifecycle, written as a consumption guide for the agent writing the
-  InstaBlog integration.
+- New `docs/gps-tracking.md`: the track file format (including altitude
+  semantics), the track/settings API, and the lifecycle, written as a
+  consumption guide for the agent writing the InstaBlog integration.
 - Update `docs/internal-api.md`: new routes, JSON shapes, and the
   `tracking.state_changed` event.
 - Update `docs/garmin-empirbus-signals.md`: note that the GPS tracker also
