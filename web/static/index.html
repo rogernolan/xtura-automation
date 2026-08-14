@@ -123,6 +123,27 @@
         </section>
 
         <section id="settingsPanel" class="tab-panel" hidden>
+          <div id="trackingPanel" class="panel">
+            <div class="panel-heading">
+              <h2>GPS trails</h2>
+              <span id="trackingState" class="state-text">Idle</span>
+            </div>
+            <div class="field switch-field">
+              <label for="trackingEnabled">Generate GPS trails</label>
+              <input id="trackingEnabled" type="checkbox">
+            </div>
+            <div class="field switch-field">
+              <label for="trackingEngineOnly">Only when engine is on</label>
+              <input id="trackingEngineOnly" type="checkbox">
+            </div>
+            <div class="field">
+              <label for="trackingInterval">Sample every N seconds</label>
+              <input id="trackingInterval" type="number" min="1" max="3600" step="1" value="5" inputmode="numeric">
+            </div>
+            <p id="trackingDetail" class="detail-text">No tracking is active.</p>
+            <div id="trackList" class="track-list"></div>
+          </div>
+
           <div id="recordingPanel" class="panel">
             <div class="panel-heading">
               <h2>WebSocket recording</h2>

@@ -41,6 +41,13 @@ location:
     # The deploy script installs a narrow sudoers rule for this command.
     command: ["sudo", "/usr/bin/timedatectl", "set-timezone"]
 
+tracking:
+  enabled: false
+  # Only record fixes while the engine is running (Garmin power state).
+  only_when_engine_on: true
+  sample_interval: 5s
+  dir: /var/lib/xtura/tracks
+
 automation:
   timezone: Europe/London
   heating_programs:

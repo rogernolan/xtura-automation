@@ -5,6 +5,7 @@ import "time"
 type Fix struct {
 	Latitude  float64   `json:"latitude"`
 	Longitude float64   `json:"longitude"`
+	Altitude  *float64  `json:"altitude,omitempty"`
 	Source    string    `json:"source,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -15,6 +16,7 @@ type State struct {
 	Provider           string     `json:"provider,omitempty"`
 	Latitude           float64    `json:"latitude"`
 	Longitude          float64    `json:"longitude"`
+	Altitude           *float64   `json:"altitude,omitempty"`
 	IsMoving           bool       `json:"is_moving"`
 	MovementMeters     float64    `json:"movement_meters,omitempty"`
 	Timezone           string     `json:"timezone,omitempty"`

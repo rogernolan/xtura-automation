@@ -364,6 +364,12 @@ The labels `Engine Control extract` (`125`) and `Engine Contract retract` (`126`
 
 Inference: the engine-running indication is probably an interlock which retracts, or prevents extension of, the habitation step while driving. This is not source-confirmed or capture-confirmed. Confirm it by capturing Garmin traffic while extending/retracting the step and while transitioning the engine-running state.
 
+### GPS tracking feature repo-usage note
+
+The GPS tracker also relies on signal `11` as the engine-running indication, independently of the WebSocket recorder: in engine-only mode it starts a session track file when a received signal-11 frame reports the engine on and finalizes it when the engine is reported off. It decodes the same received-toggle semantics as the rest of the repo — signal id in `data[0..1]` as an unsigned 16-bit little-endian value and the on bit in `data[2] & 0x01`. This is a repo implementation dependency, not new signal evidence; the `11` = `Engine Running Signal Indication` interpretation above remains inference.
+
+Source files: `service/tracking/manager.go` implements the engine-state decoding (`engineSignalState`) and the session lifecycle (`ObserveFrame`); `service/runtime/app.go` wires the manager to the daemon frame stream.
+
 ## Power
 
 ### Command evidence

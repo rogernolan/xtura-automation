@@ -93,6 +93,35 @@ class XturaApi {
     return this.request("/v1/recording/state");
   }
 
+  async trackingSettings() {
+    return this.request("/v1/tracking/settings");
+  }
+
+  async updateTrackingSettings(settings) {
+    return this.request("/v1/tracking/settings", {
+      method: "PUT",
+      body: settings,
+    });
+  }
+
+  async trackingState() {
+    return this.request("/v1/tracking/state");
+  }
+
+  async trackList() {
+    return this.request("/v1/tracks");
+  }
+
+  async trackDownload(name) {
+    return this.request(`/v1/tracks/${encodeURIComponent(name)}`);
+  }
+
+  async trackDelete(name) {
+    return this.request(`/v1/tracks/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+  }
+
   async request(path, options = {}) {
     const init = {
       method: options.method || "GET",
@@ -135,6 +164,9 @@ const state = {
   heatingMode: null,
   heatingState: null,
   recording: null,
+  trackingSettings: null,
+  tracking: null,
+  tracks: null,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -206,6 +238,7 @@ function render() {
   renderSchedule();
   renderBuild();
   renderRecording();
+  renderTracking();
   syncCountdownRefresh();
 }
 
@@ -312,6 +345,189 @@ function recordingRemainingText(recording) {
     return "finishing";
   }
   return `${formatRemainingSeconds(remainingSeconds)} remaining`;
+}
+
+function renderTracking() {
+  const settings = state.trackingSettings;
+  const tracking = state.tracking;
+  const enabled = byId("trackingEnabled");
+  const engineOnly = byId("trackingEngineOnly");
+  const interval = byId("trackingInterval");
+  if (!settings || !tracking) {
+    byId("trackingPanel").setAttribute("aria-busy", "true");
+    byId("trackingState").textContent = "Loading";
+    byId("trackingDetail").textContent = "Waiting for tracking state.";
+    enabled.disabled = true;
+    engineOnly.disabled = true;
+    interval.disabled = true;
+    return;
+  }
+  byId("trackingPanel").setAttribute("aria-busy", String(state.requestInFlight));
+  byId("trackingState").textContent = trackingStateText(tracking);
+  enabled.checked = settings.enabled;
+  engineOnly.checked = settings.only_when_engine_on;
+  if (interval !== document.activeElement) {
+    interval.value = String(settings.sample_interval_seconds || 5);
+  }
+  enabled.disabled = state.requestInFlight;
+  engineOnly.disabled = state.requestInFlight;
+  interval.disabled = state.requestInFlight;
+  byId("trackingDetail").textContent = trackingDetailText(tracking);
+  renderTrackList();
+}
+
+function trackingStateText(tracking) {
+  if (!tracking.enabled) {
+    return "Disabled";
+  }
+  if (tracking.tracking) {
+    return "Tracking";
+  }
+  if (tracking.only_when_engine_on && tracking.engine_known && !tracking.engine_on) {
+    return "Engine off";
+  }
+  return "Enabled";
+}
+
+function trackingDetailText(tracking) {
+  const parts = [];
+  if (!tracking.enabled) {
+    parts.push("GPS tracking is off.");
+  } else if (tracking.tracking) {
+    parts.push(`Tracking now (${tracking.point_count} point${tracking.point_count === 1 ? "" : "s"}).`);
+  } else if (tracking.only_when_engine_on) {
+    if (!tracking.engine_known) {
+      parts.push("Waiting to see whether the engine is on.");
+    } else if (tracking.engine_on) {
+      parts.push("Engine is on; the next sample starts the track.");
+    } else {
+      parts.push("Engine is off; not tracking.");
+    }
+  } else {
+    parts.push("GPS tracking is on; waiting for the next sample.");
+  }
+  if (tracking.current_file) {
+    parts.push(`Writing ${tracking.current_file}.`);
+  }
+  if (tracking.last_error) {
+    parts.push(`Last error: ${tracking.last_error}`);
+  }
+  return parts.join(" ") || "No tracking is active.";
+}
+
+function currentTrackingSettings() {
+  const settings = state.trackingSettings || {};
+  return {
+    enabled: Boolean(settings.enabled),
+    only_when_engine_on: Boolean(settings.only_when_engine_on),
+    sample_interval_seconds: Number(settings.sample_interval_seconds) || 5,
+  };
+}
+
+function renderTrackList() {
+  const container = byId("trackList");
+  container.innerHTML = "";
+  const tracks = state.tracks;
+  if (!Array.isArray(tracks) || tracks.length === 0) {
+    container.appendChild(emptyTrackNote());
+    return;
+  }
+  tracks.forEach((track) => {
+    container.appendChild(trackRow(track));
+  });
+}
+
+function emptyTrackNote() {
+  const note = document.createElement("p");
+  note.className = "detail-text";
+  note.textContent = "No tracks yet.";
+  return note;
+}
+
+function trackRow(track) {
+  const row = document.createElement("div");
+  row.className = "track-row";
+  const name = document.createElement("span");
+  name.className = "track-name";
+  name.textContent = track.name;
+  name.title = track.name;
+  const meta = document.createElement("span");
+  meta.className = "track-meta";
+  meta.textContent = trackMetaText(track);
+  const actions = document.createElement("span");
+  actions.className = "track-actions";
+  const download = document.createElement("a");
+  download.className = "track-action track-download";
+  download.href = `/v1/tracks/${encodeURIComponent(track.name)}`;
+  download.setAttribute("download", "");
+  download.textContent = "Download";
+  const remove = document.createElement("button");
+  remove.className = "track-action track-delete";
+  remove.type = "button";
+  remove.textContent = "Delete";
+  remove.disabled = state.requestInFlight;
+  remove.addEventListener("click", async () => {
+    try {
+      await withRequest(() => api.trackDelete(track.name), `Deleting ${track.name}`);
+      await refreshTracks();
+    } catch (_) {
+      return;
+    }
+  });
+  actions.append(download, remove);
+  row.append(name, meta, actions);
+  return row;
+}
+
+function trackMetaText(track) {
+  const parts = [];
+  if (Number.isFinite(track.point_count) && track.point_count > 0) {
+    parts.push(`${track.point_count} point${track.point_count === 1 ? "" : "s"}`);
+  }
+  if (Number.isFinite(track.bytes) && track.bytes > 0) {
+    parts.push(formatBytes(track.bytes));
+  }
+  return parts.join(" · ");
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function refreshTracks() {
+  try {
+    state.tracks = await api.trackList();
+  } catch (_) {
+    state.tracks = [];
+  }
+  render();
+}
+
+async function applyTrackingSettings(next) {
+  try {
+    const settings = await withRequest(
+      () => api.updateTrackingSettings(next),
+      "Saving tracking settings",
+    );
+    state.trackingSettings = settings;
+    if (state.tracking) {
+      state.tracking = {
+        ...state.tracking,
+        enabled: settings.enabled,
+        only_when_engine_on: settings.only_when_engine_on,
+        sample_interval_seconds: settings.sample_interval_seconds,
+      };
+    }
+    await refreshTracks();
+  } catch (_) {
+    return;
+  }
 }
 
 function renderLights() {
@@ -782,13 +998,16 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule, build, recording] = await Promise.all([
+  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks] = await Promise.all([
     api.getLightsState(),
     api.getWaterState(),
     api.getHeatingMode(),
     api.getHeatingSchedule(),
     api.getBuildInfo(),
     api.recordingState(),
+    api.trackingSettings(),
+    api.trackingState(),
+    api.trackList(),
   ]);
   state.lights = lights;
   state.water = water;
@@ -796,6 +1015,9 @@ async function loadInitialState() {
   state.schedule = schedule;
   state.build = build;
   state.recording = recording;
+  state.trackingSettings = trackingSettings;
+  state.tracking = tracking;
+  state.tracks = tracks;
   setStatus("Loaded");
   render();
 }
@@ -826,6 +1048,10 @@ function connectEvents() {
   });
   events.addEventListener("recording.state_changed", (event) => {
     state.recording = JSON.parse(event.data).payload;
+    render();
+  });
+  events.addEventListener("tracking.state_changed", (event) => {
+    state.tracking = JSON.parse(event.data).payload;
     render();
   });
 }
@@ -896,6 +1122,21 @@ function bindActions() {
   });
   byId("recordingDuration").addEventListener("change", () => {
     byId("recordingDuration").value = String(recordingDuration());
+  });
+  byId("trackingEnabled").addEventListener("change", () => {
+    applyTrackingSettings({ ...currentTrackingSettings(), enabled: byId("trackingEnabled").checked });
+  });
+  byId("trackingEngineOnly").addEventListener("change", () => {
+    applyTrackingSettings({ ...currentTrackingSettings(), only_when_engine_on: byId("trackingEngineOnly").checked });
+  });
+  byId("trackingInterval").addEventListener("change", () => {
+    const input = byId("trackingInterval");
+    const seconds = clampInteger(input.value, 1, 3600);
+    input.value = String(seconds);
+    if (seconds === Number(currentTrackingSettings().sample_interval_seconds)) {
+      return;
+    }
+    applyTrackingSettings({ ...currentTrackingSettings(), sample_interval_seconds: seconds });
   });
   document.querySelectorAll("[data-target]").forEach((button) => {
     button.addEventListener("click", async () => {

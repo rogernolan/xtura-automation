@@ -27,6 +27,12 @@ Derived from current Go code only. Public authentication, authorization, and TLS
 | `/v1/water/grey-valve/schedule` | POST | `handleGreyWaterSchedule` | `ScheduleGreyWaterOpening(ctx,time,duration)` | `water.State` | `400` decode/validation, `502`, `405` | `TestHandleGreyWaterSchedulePost` |
 | `/v1/water/grey-valve/schedule/cancel` | POST | `handleGreyWaterScheduleCancel` | `CancelGreyWaterOpening(ctx)` | `water.State` | `502`, `405` | `TestHandleGreyWaterScheduleCancel` |
 | `/v1/location/state` | GET | `handleLocationState` | `LocationState()` | `location.State` | `405` | `TestHandleLocationStateGet` |
+| `/v1/tracking/settings` | GET | `handleTrackingSettings` | `TrackingSettings()` | `tracking.Settings` | `405` | `TestTrackingSettingsRoutes` |
+| `/v1/tracking/settings` | PUT | `handleTrackingSettings` | `UpdateTrackingSettings(ctx,settings)` | `tracking.Settings` | `400` decode/validation, `502`, `405` | `TestTrackingSettingsRoutes`, `TestTrackingSettingsUpdateRejectsValidationError` |
+| `/v1/tracking/state` | GET | `handleTrackingState` | `TrackingState()` | `tracking.State` | `405` | `TestTrackingStateRoute` |
+| `/v1/tracks` | GET | `handleTracks` | `TrackList()` | `[]tracking.FileInfo` | `500`, `405` | `TestTracksRoutes` |
+| `/v1/tracks/{name}` | GET | `handleTrack` | `TrackRead(name)` | Raw GeoJSON track file | `400` invalid name, `404` missing, `500`, `405` | `TestTracksRoutes`, `TestTrackRouteRejectsTraversalName` |
+| `/v1/tracks/{name}` | DELETE | `handleTrack` | `TrackDelete(name)` | `204` | `400` invalid name, `404` missing, `500`, `405` | `TestTracksRoutes`, `TestTrackDeleteRejectsTraversalName` |
 | `/v1/events` | GET | `handleEvents` | `Broker().Subscribe()` | Server-sent events | `500` if no flusher, `405` | unknown |
 
 Most mutating HTTP handlers use a `30s` request context timeout in `service/api/httpapi/server.go`; grey-water valve commands use `12s` around the five-second hold.
@@ -49,6 +55,9 @@ Most mutating HTTP handlers use a `30s` request context timeout in `service/api/
 | `water.State` | `{"valve_known":bool,"valve_moving":bool,"valve_direction"?:string,"command_in_progress":bool,"last_command_error"?:string,"scheduled_opening"?:ScheduledOpening,"last_schedule_message"?:string,"last_schedule_completed_at"?:time,"last_updated_at"?:time}` | `service/domains/water/types.go` | `valve_direction` is `opening` or `closing` while an open/close control signal is active. No final open/closed valve position is inferred. |
 | `ScheduledOpening` | `{"open_at":time,"local_time":"HH:MM","timezone":string,"duration_minutes":number,"status":"pending|open","opened_at"?:time}` | `service/domains/water/types.go`, `service/config/water_runtime_state.go` | `open_at` is the fixed UTC instant derived from the next occurrence of `local_time` in the current automation timezone. |
 | `location.State` | `{"configured":bool,"known":bool,"provider"?:string,"latitude":number,"longitude":number,"is_moving":bool,"movement_meters"?:number,"timezone"?:string,"system_timezone"?:string,"timezone_updated_at"?:time,"last_updated_at"?:time,"last_error"?:string,"last_error_at"?:time,"timezone_update_mode"?:string}` | `service/domains/location/types.go` | Unconfigured state has `configured:false`. Configured but not yet polled has `known:false`. `is_moving` is inferred from cumulative GPS displacement over the configured movement window. |
+| `tracking.Settings` | `{"enabled":bool,"only_when_engine_on":bool,"sample_interval_seconds":number,"directory":string}` | `service/api/httpapi/server.go` (wire DTO), `service/tracking/manager.go` | Wire shape for `GET`/`PUT /v1/tracking/settings`. `directory` is fixed at construction, read-only, and ignored on PUT. `sample_interval_seconds` is a float number. |
+| `tracking.State` | `{"enabled":bool,"only_when_engine_on":bool,"sample_interval_seconds":number,"engine_known":bool,"engine_on":bool,"tracking":bool,"current_file"?:string,"point_count":number,"last_sample_at"?:time,"last_error"?:string,"last_error_at"?:time}` | `service/tracking/manager.go` | `tracking` is true while a track is active; `current_file` and `point_count` describe the active track. Omitted fields are absent until set. |
+| `tracking.FileInfo` | `{"name":string,"bytes":number,"start_time"?:time,"end_time"?:time,"point_count":number}` | `service/tracking/manager.go` | `start_time`, `end_time`, and `point_count` are parsed from each track file; `start_time`/`end_time` are omitted when the file has no points or does not parse, `point_count` is always present (`0` when nothing parsed). |
 | `Event` | `{"type":string,"timestamp":time,"correlation_id"?:string,"payload"?:any}` | `service/api/events/broker.go` | SSE emits `event: <type>` and `data: <Event JSON>`. |
 
 ## Request Bodies
@@ -65,6 +74,7 @@ Most mutating HTTP handlers use a `30s` request context timeout in `service/api/
 | `POST /v1/water/grey-valve/close` | none | `runtime.App.CloseGreyWaterValve` | Sends a five-second grey-water close button hold. |
 | `POST /v1/water/grey-valve/schedule` | `{"target_time":"03:00","duration_minutes":30}` | `runtime.App.ScheduleGreyWaterOpening`, `config.ParseClockTime`, `config.WaterRuntimeState.Validate` | Stores a one-off grey-water opening in `<config>.water-runtime.yaml`. The target is resolved in the current automation timezone and persisted as UTC so timezone changes do not move it. |
 | `POST /v1/water/grey-valve/schedule/cancel` | none | `runtime.App.CancelGreyWaterOpening` | Clears any pending or open scheduled grey-water event from persisted water runtime state. |
+| `PUT /v1/tracking/settings` | `{"enabled":bool,"only_when_engine_on":bool,"sample_interval_seconds":number}` | `config.Config.Validate` | `sample_interval_seconds` must be between `1` and `3600`; `enabled:true` requires `location.enabled`. Saved to config and applied live. `directory` is ignored if supplied. |
 
 ## Event Types
 
@@ -75,6 +85,7 @@ Most mutating HTTP handlers use a `30s` request context timeout in `service/api/
 | `automation.schedule_updated` | `runtime.App.UpdateHeatingSchedule` | `HeatingScheduleDocument` | After config save/reload succeeds. |
 | `location.state_changed` | `runtime.App.publishStateLoop` | `location.State` | Published when location state changes. |
 | `water.state_changed` | `runtime.App.publishStateLoop`, water schedule updates | `water.State` | Published when water valve state, command status, or persisted grey-water schedule state changes. |
+| `tracking.state_changed` | `runtime.App` tracking manager change callback | `tracking.State` | Published after every sample and lifecycle transition (engine on/off, settings changes, poll errors). |
 | `automation.run_started` | `runtime.App.executeTransition` | map with `program_id`, `next_transition_at`, `action` | Has `correlation_id`. |
 | `automation.run_failed` | `runtime.App.executeTransition` | map with `program_id`, `error` | Has same run correlation id. |
 | `automation.run_succeeded` | `runtime.App.executeTransition` | map with `program_id`, `action` | Has same run correlation id. |

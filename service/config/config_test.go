@@ -219,6 +219,137 @@ func TestValidateRejectsOverlappingProgramDays(t *testing.T) {
 	}
 }
 
+func TestNormalizeTrackingDefaults(t *testing.T) {
+	cfg := trackingBaseConfig()
+	cfg.Tracking = TrackingConfig{}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Tracking.Enabled {
+		t.Fatal("expected tracking to be disabled by default")
+	}
+	if !normalized.Tracking.OnlyWhenEngineOn {
+		t.Fatal("expected only_when_engine_on to default to true")
+	}
+	if normalized.Tracking.SampleInterval != 5*time.Second {
+		t.Fatalf("got sample interval %s", normalized.Tracking.SampleInterval)
+	}
+	if normalized.Tracking.Dir != "/var/lib/xtura/tracks" {
+		t.Fatalf("got dir %q", normalized.Tracking.Dir)
+	}
+}
+
+func TestValidateTrackingSampleIntervalBounds(t *testing.T) {
+	cases := []struct {
+		name  string
+		value time.Duration
+		valid bool
+	}{
+		{name: "unset", value: 0, valid: true},
+		{name: "lower bound", value: 1 * time.Second, valid: true},
+		{name: "upper bound", value: 3600 * time.Second, valid: true},
+		{name: "below lower bound", value: 500 * time.Millisecond, valid: false},
+		{name: "above upper bound", value: 3601 * time.Second, valid: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := trackingBaseConfig()
+			cfg.Tracking.SampleInterval = tc.value
+			err := cfg.Validate()
+			if tc.valid {
+				if err != nil {
+					t.Fatalf("expected valid, got %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), "sample_interval") {
+				t.Fatalf("expected sample_interval validation error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRejectsTrackingEnabledWithoutLocation(t *testing.T) {
+	cfg := trackingBaseConfig()
+	cfg.Location.Enabled = false
+	cfg.Tracking.Enabled = true
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "tracking.enabled requires location.enabled") {
+		t.Fatalf("expected tracking/location validation error, got %v", err)
+	}
+}
+
+func TestTrackingSectionRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(strings.TrimSpace(`
+garmin:
+  ws_url: ws://172.16.11.7:8888/ws
+  heartbeat_interval: 4s
+location:
+  enabled: true
+tracking:
+  enabled: true
+  only_when_engine_on: false
+  sample_interval: 30s
+  dir: /var/lib/xtura/tracks
+automation:
+  timezone: Europe/London
+  heating_programs:
+    - id: weekday
+      days: ["mon"]
+      periods:
+        - start: "00:00"
+          mode: "off"
+api:
+  listen: 0.0.0.0:8080
+`)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile() error = %v", err)
+	}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+	if !normalized.Tracking.Enabled {
+		t.Fatal("expected tracking to be enabled")
+	}
+	if normalized.Tracking.OnlyWhenEngineOn {
+		t.Fatal("expected only_when_engine_on false to round-trip")
+	}
+	if normalized.Tracking.SampleInterval != 30*time.Second {
+		t.Fatalf("got sample interval %s", normalized.Tracking.SampleInterval)
+	}
+	if normalized.Tracking.Dir != "/var/lib/xtura/tracks" {
+		t.Fatalf("got dir %q", normalized.Tracking.Dir)
+	}
+}
+
+func trackingBaseConfig() Config {
+	return Config{
+		Garmin: GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},
+		Location: LocationConfig{
+			Enabled: true,
+		},
+		Tracking: TrackingConfig{
+			OnlyWhenEngineOn: ptrBool(true),
+		},
+		Automation: AutomationConfig{
+			Timezone: "Europe/London",
+			HeatingPrograms: []HeatingProgramConfig{{
+				ID:      "weekday",
+				Days:    []string{"mon"},
+				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
+			}},
+		},
+		API: APIConfig{Listen: ":8080"},
+	}
+}
+
 func TestHeatingScheduleDocumentRoundTrip(t *testing.T) {
 	cfg := Config{
 		Garmin: GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},

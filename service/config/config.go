@@ -15,6 +15,7 @@ import (
 type Config struct {
 	Garmin     GarminConfig     `yaml:"garmin"`
 	Location   LocationConfig   `yaml:"location,omitempty"`
+	Tracking   TrackingConfig   `yaml:"tracking,omitempty"`
 	Automation AutomationConfig `yaml:"automation"`
 	API        APIConfig        `yaml:"api"`
 }
@@ -65,6 +66,13 @@ type MovementConfig struct {
 	MinDistanceMeters float64       `yaml:"min_distance_meters,omitempty"`
 }
 
+type TrackingConfig struct {
+	Enabled          bool          `yaml:"enabled,omitempty"`
+	OnlyWhenEngineOn *bool         `yaml:"only_when_engine_on,omitempty"`
+	SampleInterval   time.Duration `yaml:"sample_interval,omitempty"`
+	Dir              string        `yaml:"dir,omitempty"`
+}
+
 type AutomationConfig struct {
 	Timezone        string                 `yaml:"timezone"`
 	HeatingPrograms []HeatingProgramConfig `yaml:"heating_programs"`
@@ -109,6 +117,7 @@ type HeatingSchedulePeriodDocument struct {
 type NormalizedConfig struct {
 	Garmin     GarminConfig
 	Location   NormalizedLocation
+	Tracking   NormalizedTracking
 	API        APIConfig
 	Automation NormalizedAutomation
 }
@@ -121,6 +130,13 @@ type NormalizedLocation struct {
 	Timezone       TimezoneLookupConfig
 	TimezoneUpdate TimezoneUpdateConfig
 	Movement       MovementConfig
+}
+
+type NormalizedTracking struct {
+	Enabled          bool
+	OnlyWhenEngineOn bool
+	SampleInterval   time.Duration
+	Dir              string
 }
 
 type NormalizedAutomation struct {
@@ -223,6 +239,12 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.API.Listen) == "" {
 		problems = append(problems, "api.listen is required")
 	}
+	if c.Tracking.SampleInterval != 0 && (c.Tracking.SampleInterval < 1*time.Second || c.Tracking.SampleInterval > 3600*time.Second) {
+		problems = append(problems, "tracking.sample_interval must be between 1s and 3600s")
+	}
+	if c.Tracking.Enabled && !c.Location.Enabled {
+		problems = append(problems, "tracking.enabled requires location.enabled")
+	}
 	if len(c.Automation.HeatingPrograms) == 0 {
 		problems = append(problems, "automation.heating_programs must contain at least one program")
 	}
@@ -276,6 +298,7 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 	out := NormalizedConfig{
 		Garmin:   c.Garmin,
 		Location: normalizeLocation(c.Location),
+		Tracking: normalizeTracking(c.Tracking),
 		API:      c.API,
 		Automation: NormalizedAutomation{
 			Location:        loc,
@@ -352,6 +375,26 @@ func normalizeLocation(in LocationConfig) NormalizedLocation {
 	}
 	if out.Movement.MinDistanceMeters == 0 {
 		out.Movement.MinDistanceMeters = 250
+	}
+	return out
+}
+
+func normalizeTracking(in TrackingConfig) NormalizedTracking {
+	out := NormalizedTracking{
+		Enabled:        in.Enabled,
+		SampleInterval: in.SampleInterval,
+		Dir:            strings.TrimSpace(in.Dir),
+	}
+	if in.OnlyWhenEngineOn == nil {
+		out.OnlyWhenEngineOn = true
+	} else {
+		out.OnlyWhenEngineOn = *in.OnlyWhenEngineOn
+	}
+	if out.SampleInterval == 0 {
+		out.SampleInterval = 5 * time.Second
+	}
+	if out.Dir == "" {
+		out.Dir = "/var/lib/xtura/tracks"
 	}
 	return out
 }
