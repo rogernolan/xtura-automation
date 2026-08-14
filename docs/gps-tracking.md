@@ -137,9 +137,9 @@ applies them live:
 
 - Success returns the applied settings with the runtime `directory`.
 - `400` with `{"error":"validation_failed","details":[{"message":"..."}]}` when
-  validation fails: `sample_interval_seconds` must be between `1` and `3600`, and
-  `enabled: true` requires `location.enabled` (the tracker needs the RUTX50
-  provider).
+  validation fails: a non-zero `sample_interval_seconds` must be between `1` and
+  `3600` (a value of `0` is accepted and defaults to `5`), and `enabled: true`
+  requires `location.enabled` (the tracker needs the RUTX50 provider).
 - `400` on malformed JSON.
 
 ### State
@@ -173,8 +173,9 @@ applies them live:
   [{"name":"track-2026-08-13.geojson","bytes":3124,"start_time":"2026-08-13T07:02:00Z","end_time":"2026-08-13T18:41:15Z","point_count":420}]
   ```
 
-  `start_time`, `end_time`, and `point_count` are parsed from each file and omitted
-  when the file has no points or does not parse.
+  `start_time` and `end_time` are parsed from each file and omitted when the file
+  has no points or does not parse; `point_count` is always present (`0` when
+  nothing parsed).
 
 - `GET /v1/tracks/{name}` downloads a track file. The response is the raw GeoJSON
   file with `Content-Type: application/geo+json` and a
