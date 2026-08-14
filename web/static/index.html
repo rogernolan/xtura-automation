@@ -129,12 +129,12 @@
               <span id="trackingState" class="state-text">Idle</span>
             </div>
             <div class="field switch-field">
-              <label for="trackingEnabled">Generate GPS trails</label>
-              <input id="trackingEnabled" type="checkbox">
-            </div>
-            <div class="field switch-field">
-              <label for="trackingEngineOnly">Only when engine is on</label>
+              <label for="trackingEngineOnly">When engine is on</label>
               <input id="trackingEngineOnly" type="checkbox">
+            </div>
+            <div id="trackingManualControls" class="recording-fields" hidden>
+              <button id="trackingStartButton" class="primary-action" type="button">Start recording</button>
+              <button id="trackingStopButton" type="button">Stop recording</button>
             </div>
             <div class="field">
               <label for="trackingInterval">Sample every N seconds</label>

@@ -2,12 +2,14 @@
 
 The service can sample the GPS location provider (the Teltonika RUTX50 router) into
 GeoJSON track files. This is the consumption guide for writing an integration that
-downloads a day's drive and renders or writes about it (for example the InstaBlog
-agent). It describes the on-disk format and the HTTP API only; a consumer should not
-need to read the Go code.
+downloads a session's drive and renders or writes about it (for example the
+InstaBlog agent). It describes the on-disk format and the HTTP API only; a consumer
+should not need to read the Go code.
 
-The feature is off by default. It is controlled from the Settings tab ("GPS trails"
-panel) or directly through the settings API below.
+The feature samples the GPS provider into GeoJSON track files whenever a
+session is active. It is controlled from the Settings tab ("GPS trails" panel) or
+directly through the settings API below. There is no master on/off switch:
+sessions are started by the engine signal or by the manual Start recording button.
 
 ## Track file format
 
@@ -22,13 +24,13 @@ Each track file is a single valid GeoJSON (RFC 7946) `Feature`:
 - `properties.name`, `start_time`, `end_time`, `point_count`, and
   `sample_interval_seconds` are informational.
 
-Example (a small continuous-mode file):
+Example (a session file):
 
 ```json
 {
   "type": "Feature",
   "properties": {
-    "name": "track-2026-08-13.geojson",
+    "name": "track-20260813T094000Z.geojson",
     "start_time": "2026-08-13T09:40:05Z",
     "end_time": "2026-08-13T09:40:20Z",
     "point_count": 4,
@@ -67,7 +69,7 @@ by the shorter two-element form, never by a `null` third element.
 (`YYYY-MM-DDTHH:MM:SSZ`). Consumers should pair the two arrays by index. Do not
 assume a fixed time delta between entries: samples are normally taken every
 `sample_interval_seconds`, but a failed location poll or a service restart can
-leave gaps, and a resumed daily file contains points from earlier in the day.
+leave gaps.
 
 `start_time` and `end_time` mirror `times[0]` and `times[len-1]`; `point_count`
 equals the number of positions; `sample_interval_seconds` is the configured
@@ -80,37 +82,34 @@ Files are written atomically: the manager writes `<name>.tmp` and renames it ove
 `.tmp` file does not match the track name pattern and is ignored by the API.
 
 A track is only written once it has at least two positions: RFC 7946 requires a
-`LineString` geometry to contain two or more positions, so a session or daily file
-with a single fix produces no file. A session that ends after one fix therefore
+`LineString` geometry to contain two or more positions, so a session with a
+single fix produces no file. A session that ends after one fix therefore
 leaves nothing on disk.
 
 ## Lifecycle
 
-### Engine gating
-
-The tracker observes the same Garmin WebSocket frame stream as the WebSocket
-recorder and uses signal `11` (`Engine Running Signal Indication`) as the
-engine-running indication. It decodes received frames with the repo-wide toggle
-semantics: signal id in `data[0..1]` as an unsigned 16-bit little-endian value and
-the on bit in `data[2] & 0x01`. Engine state is only trusted once the first
-signal-11 frame has been observed, so nothing is sampled while engine state is
-unknown in engine-only mode.
-
 ### Modes
 
-- **Engine-only** (`only_when_engine_on: true`, the default):
+- **Engine-gated** (`when_engine_on: true`, the default):
   - Nothing is sampled while engine state is unknown or the engine is off.
   - A received engine-on frame starts a new session; sampling appends to it.
   - A received engine-off frame finalizes the session. The last sampled point
     stands; no forced final sample is taken.
   - An engine-on → engine-off session with no successful samples produces no file.
-  - File names: `track-20260813T094000Z.geojson` (UTC session start).
-- **Continuous** (`only_when_engine_on: false`):
-  - Samples regardless of engine state.
-  - One file per UTC day: `track-2026-08-13.geojson`. The first sample after a UTC
-    midnight rotates to the new day's file.
-  - A restart mid-day resumes the existing daily file by reading it back and
-    continuing to append, so a calendar day stays one file.
+  - A service restart with the engine already running starts a fresh session on the
+    next engine-on frame (or on the first sample if the engine state is already
+    known and on).
+- **Manual** (`when_engine_on: false`):
+  - Nothing is sampled until **Start recording** is pressed (`POST
+    /v1/tracking/start`).
+  - **Stop recording** (`POST /v1/tracking/stop`) finalizes the session.
+  - Engine frames do not start or stop a session in this mode.
+  - Sessions are runtime-only: a service restart stops manual recording (press
+    Start again to resume).
+- File names are the same in both modes: `track-20260813T094000Z.geojson` (UTC
+  session start).
+- Switching `when_engine_on` in the settings finalizes whatever session is active,
+  so a session never leaks across a mode change.
 
 A failed location poll (router unreachable, timeout) does not split or abandon the
 track: the runtime state reports the error and sampling continues on the next tick.
@@ -129,7 +128,7 @@ the API.
 `GET /v1/tracking/settings` returns the current settings:
 
 ```json
-{"enabled":false,"only_when_engine_on":true,"sample_interval_seconds":5,"directory":"/var/lib/xtura/tracks"}
+{"when_engine_on":true,"sample_interval_seconds":5,"directory":"/var/lib/xtura/tracks"}
 ```
 
 `PUT /v1/tracking/settings` accepts the same shape (the `directory` field is
@@ -137,15 +136,24 @@ read-only and ignored if supplied), saves the settings to the service config, an
 applies them live:
 
 ```json
-{"enabled":true,"only_when_engine_on":true,"sample_interval_seconds":5}
+{"when_engine_on":true,"sample_interval_seconds":5}
 ```
 
 - Success returns the applied settings with the runtime `directory`.
 - `400` with `{"error":"validation_failed","details":[{"message":"..."}]}` when
   validation fails: a non-zero `sample_interval_seconds` must be between `1` and
-  `3600` (a value of `0` is accepted and defaults to `5`), and `enabled: true`
-  requires `location.enabled` (the tracker needs the RUTX50 provider).
+  `3600` (a value of `0` is accepted and defaults to `5`), and a `tracking`
+  section requires `location.enabled` (the tracker needs the RUTX50 provider).
 - `400` on malformed JSON.
+
+### Session control
+
+- `POST /v1/tracking/start` begins a manual session and returns the current
+  tracking state. If a session is already active it is left untouched (idempotent).
+- `POST /v1/tracking/stop` finalizes the active session and returns the state.
+- `409` with `{"error":"start/stop tracking is only available in manual mode"}`
+  when `when_engine_on` is `true` — in engine mode the engine signal controls
+  sessions.
 
 ### State
 
@@ -153,8 +161,7 @@ applies them live:
 
 ```json
 {
-  "enabled": true,
-  "only_when_engine_on": true,
+  "when_engine_on": true,
   "sample_interval_seconds": 5,
   "engine_known": true,
   "engine_on": true,
@@ -166,8 +173,8 @@ applies them live:
 ```
 
 - `engine_known` / `engine_on`: the Garmin engine indication (signal 11).
-- `tracking`: true while a track is active.
-- `current_file` and `point_count` describe the active track.
+- `tracking`: true while a session is active.
+- `current_file` and `point_count` describe the active session.
 - `last_sample_at`, `last_error`, and `last_error_at` are omitted until set.
 
 ### Track files
@@ -175,7 +182,7 @@ applies them live:
 - `GET /v1/tracks` lists the track files, sorted by name:
 
   ```json
-  [{"name":"track-2026-08-13.geojson","bytes":3124,"start_time":"2026-08-13T07:02:00Z","end_time":"2026-08-13T18:41:15Z","point_count":420}]
+  [{"name":"track-20260813T094000Z.geojson","bytes":3124,"start_time":"2026-08-13T09:40:05Z","end_time":"2026-08-13T09:40:20Z","point_count":4}]
   ```
 
   `start_time` and `end_time` are parsed from each file and omitted when the file
@@ -202,7 +209,7 @@ settings changes. The event payload is the same shape as `GET /v1/tracking/state
 
 ```
 event: tracking.state_changed
-data: {"type":"tracking.state_changed","timestamp":"2026-08-13T09:40:05Z","payload":{"enabled":true,...}}
+data: {"type":"tracking.state_changed","timestamp":"2026-08-13T09:40:05Z","payload":{"when_engine_on":true,...}}
 ```
 
 ## Parsing checklist for a consumer
@@ -215,5 +222,5 @@ data: {"type":"tracking.state_changed","timestamp":"2026-08-13T09:40:05Z","paylo
    per-point timing.
 4. Use `properties.name` for display and `properties.point_count` for a quick sanity
    check.
-5. To fetch a specific day: `GET /v1/tracks` to find `track-<UTC date>.geojson`,
+5. To fetch a session: `GET /v1/tracks` to find `track-<UTC session start>.geojson`,
    then `GET /v1/tracks/<name>` to download it.

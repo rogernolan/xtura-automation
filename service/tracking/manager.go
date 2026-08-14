@@ -1,5 +1,5 @@
-// Package tracking samples a location provider into per-session or per-day
-// GeoJSON track files, optionally gated on the Garmin engine signal.
+// Package tracking samples a location provider into per-session GeoJSON track
+// files, optionally gated on the Garmin engine signal.
 package tracking
 
 import (
@@ -21,15 +21,13 @@ import (
 
 // Settings controls tracking behaviour. Directory is fixed at construction.
 type Settings struct {
-	Enabled          bool
-	OnlyWhenEngineOn bool
-	SampleInterval   time.Duration
+	WhenEngineOn   bool
+	SampleInterval time.Duration
 }
 
 // State is the runtime tracking state.
 type State struct {
-	Enabled               bool       `json:"enabled"`
-	OnlyWhenEngineOn      bool       `json:"only_when_engine_on"`
+	WhenEngineOn          bool       `json:"when_engine_on"`
 	SampleIntervalSeconds float64    `json:"sample_interval_seconds"`
 	EngineKnown           bool       `json:"engine_known"`
 	EngineOn              bool       `json:"engine_on"`
@@ -50,16 +48,18 @@ type FileInfo struct {
 	PointCount int        `json:"point_count"`
 }
 
+// ErrEngineMode reports a manual start/stop call made while tracking is gated
+// on the engine. The UI hides manual controls in that mode.
+var ErrEngineMode = errors.New("start/stop tracking is only available in manual mode")
+
 const engineSignalID = 11
 
-// activeTrack is the in-memory representation of the file being written. The
-// daily variant stores the UTC day it belongs to so continuous mode can detect
-// day rotation.
+// activeTrack is the in-memory representation of the session file being
+// written.
 type activeTrack struct {
 	name   string
 	times  []time.Time
 	points [][]float64
-	day    time.Time
 }
 
 type Manager struct {
@@ -106,19 +106,40 @@ func (m *Manager) SetOnChange(onChange func(State)) {
 	m.mu.Unlock()
 }
 
-// Configure applies settings live. Disabling finalizes the active track. A
+// Configure applies settings live. Switching between engine-gated and manual
+// mode finalizes the active track so a session cannot leak across modes. A
 // wake signal prompts Start to recreate its ticker so a sample-interval change
 // takes effect immediately.
 func (m *Manager) Configure(settings Settings) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !settings.Enabled {
-		m.finalizeLocked()
-	} else if settings.OnlyWhenEngineOn && !m.settings.OnlyWhenEngineOn {
+	if settings.WhenEngineOn != m.settings.WhenEngineOn {
 		m.finalizeLocked()
 	}
 	m.settings = settings
 	m.signalWakeLocked()
+	m.notifyLocked(m.snapshotLocked())
+}
+
+// StartRecording begins a new session in manual mode. If a session is already
+// active it is left untouched. In engine mode it is a no-op; the HTTP layer
+// rejects the call via ErrEngineMode.
+func (m *Manager) StartRecording(at time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.track == nil {
+		m.beginSessionLocked(at)
+	}
+	m.notifyLocked(m.snapshotLocked())
+}
+
+// StopRecording finalizes the active session.
+func (m *Manager) StopRecording() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.track != nil {
+		m.finalizeLocked()
+	}
 	m.notifyLocked(m.snapshotLocked())
 }
 
@@ -148,7 +169,7 @@ func (m *Manager) ObserveFrame(at time.Time, direction heating.Direction, raw st
 	}
 	m.engineKnown = known
 	m.engineOn = on
-	if m.settings.Enabled && m.settings.OnlyWhenEngineOn {
+	if m.settings.WhenEngineOn {
 		if on {
 			m.beginSessionLocked(at.UTC())
 		} else {
@@ -197,14 +218,15 @@ func nonZeroInterval(interval time.Duration) time.Duration {
 }
 
 // Sample polls the location provider once and appends a point to the active
-// track, rotating or resuming a daily file in continuous mode.
+// session track. In engine mode it is skipped until the engine is known and
+// on; in manual mode it is skipped unless a session is active.
 func (m *Manager) Sample(ctx context.Context) {
 	m.mu.Lock()
-	if !m.settings.Enabled {
+	if m.settings.WhenEngineOn && (!m.engineKnown || !m.engineOn) {
 		m.mu.Unlock()
 		return
 	}
-	if m.settings.OnlyWhenEngineOn && (!m.engineKnown || !m.engineOn) {
+	if !m.settings.WhenEngineOn && m.track == nil {
 		m.mu.Unlock()
 		return
 	}
@@ -214,7 +236,10 @@ func (m *Manager) Sample(ctx context.Context) {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.settings.Enabled || (m.settings.OnlyWhenEngineOn && (!m.engineKnown || !m.engineOn)) {
+	if m.settings.WhenEngineOn && (!m.engineKnown || !m.engineOn) {
+		return
+	}
+	if !m.settings.WhenEngineOn && m.track == nil {
 		return
 	}
 	at := m.now().UTC()
@@ -319,13 +344,8 @@ func (m *Manager) Delete(name string) error {
 }
 
 func (m *Manager) appendSampleLocked(fix domainlocation.Fix, at time.Time) {
-	if m.settings.OnlyWhenEngineOn {
-		if m.track == nil {
-			m.beginSessionLocked(at)
-		}
-	} else if m.track == nil || !sameUTCDay(m.track.day, at) {
-		m.finalizeLocked()
-		m.beginDailyLocked(at)
+	if m.settings.WhenEngineOn && m.track == nil {
+		m.beginSessionLocked(at)
 	}
 	if m.track == nil {
 		return
@@ -352,23 +372,6 @@ func (m *Manager) beginSessionLocked(at time.Time) {
 	m.track = &activeTrack{
 		name: fmt.Sprintf("track-%s.geojson", at.UTC().Format("20060102T150405Z")),
 	}
-}
-
-func (m *Manager) beginDailyLocked(at time.Time) {
-	day := at.UTC()
-	name := fmt.Sprintf("track-%s.geojson", day.Format("2006-01-02"))
-	track := &activeTrack{name: name, day: day}
-	if data, err := os.ReadFile(filepath.Join(m.dir, name)); err == nil {
-		if times, points, ok := parseTrackFile(data); ok {
-			track.times = times
-			track.points = points
-		} else {
-			m.recordErrorLocked(at, fmt.Errorf("resume track %s: invalid track file", name))
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		m.recordErrorLocked(at, fmt.Errorf("resume track %s: %w", name, err))
-	}
-	m.track = track
 }
 
 func (m *Manager) finalizeLocked() {
@@ -413,8 +416,7 @@ func (m *Manager) writeTrackLocked() error {
 
 func (m *Manager) snapshotLocked() State {
 	state := State{
-		Enabled:               m.settings.Enabled,
-		OnlyWhenEngineOn:      m.settings.OnlyWhenEngineOn,
+		WhenEngineOn:          m.settings.WhenEngineOn,
 		SampleIntervalSeconds: m.settings.SampleInterval.Seconds(),
 		EngineKnown:           m.engineKnown,
 		EngineOn:              m.engineOn,
@@ -522,12 +524,6 @@ func engineSignalState(raw string) (known, on bool, ok bool) {
 		return false, false, false
 	}
 	return true, frame.Data[2]&1 != 0, true
-}
-
-func sameUTCDay(a, b time.Time) bool {
-	a = a.UTC()
-	b = b.UTC()
-	return a.Year() == b.Year() && a.YearDay() == b.YearDay()
 }
 
 func validTrackName(name string) bool {

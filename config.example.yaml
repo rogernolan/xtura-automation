@@ -42,9 +42,9 @@ location:
     command: ["sudo", "/usr/bin/timedatectl", "set-timezone"]
 
 tracking:
-  enabled: false
-  # Only record fixes while the engine is running (Garmin power state).
-  only_when_engine_on: true
+  # Record fixes only while the engine is running (Garmin power state). Set to
+  # false to expose manual start/stop in the web UI.
+  when_engine_on: true
   sample_interval: 5s
   dir: /var/lib/xtura/tracks
 

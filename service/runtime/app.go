@@ -160,9 +160,8 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		}
 		trackingManager = tracking.New(trackingDir, location.Poll, time.Now, logger)
 		trackingManager.Configure(tracking.Settings{
-			Enabled:          cfg.Tracking.Enabled,
-			OnlyWhenEngineOn: cfg.Tracking.OnlyWhenEngineOn,
-			SampleInterval:   cfg.Tracking.SampleInterval,
+			WhenEngineOn:   cfg.Tracking.WhenEngineOn,
+			SampleInterval: cfg.Tracking.SampleInterval,
 		})
 		trackingManager.SetOnChange(func(state tracking.State) {
 			broker.Publish(events.Event{
@@ -287,9 +286,8 @@ func (a *App) TrackingSettings() tracking.Settings {
 	}
 	state := a.tracking.State()
 	return tracking.Settings{
-		Enabled:          state.Enabled,
-		OnlyWhenEngineOn: state.OnlyWhenEngineOn,
-		SampleInterval:   time.Duration(state.SampleIntervalSeconds * float64(time.Second)),
+		WhenEngineOn:   state.WhenEngineOn,
+		SampleInterval: time.Duration(state.SampleIntervalSeconds * float64(time.Second)),
 	}
 }
 
@@ -310,12 +308,11 @@ func (a *App) UpdateTrackingSettings(ctx context.Context, settings tracking.Sett
 		return tracking.Settings{}, fmt.Errorf("config path is not configured")
 	}
 	nextConfig := currentConfig
-	onlyWhenEngineOn := settings.OnlyWhenEngineOn
+	whenEngineOn := settings.WhenEngineOn
 	nextConfig.Tracking = config.TrackingConfig{
-		Enabled:          settings.Enabled,
-		OnlyWhenEngineOn: &onlyWhenEngineOn,
-		SampleInterval:   settings.SampleInterval,
-		Dir:              currentConfig.Tracking.Dir,
+		WhenEngineOn:   &whenEngineOn,
+		SampleInterval: settings.SampleInterval,
+		Dir:            currentConfig.Tracking.Dir,
 	}
 	nextNormalized, err := nextConfig.Normalize()
 	if err != nil {
@@ -332,17 +329,15 @@ func (a *App) UpdateTrackingSettings(ctx context.Context, settings tracking.Sett
 	a.mu.Unlock()
 	if a.tracking != nil {
 		a.tracking.Configure(tracking.Settings{
-			Enabled:          nextNormalized.Tracking.Enabled,
-			OnlyWhenEngineOn: nextNormalized.Tracking.OnlyWhenEngineOn,
-			SampleInterval:   nextNormalized.Tracking.SampleInterval,
+			WhenEngineOn:   nextNormalized.Tracking.WhenEngineOn,
+			SampleInterval: nextNormalized.Tracking.SampleInterval,
 		})
 	}
 	out := tracking.Settings{
-		Enabled:          nextNormalized.Tracking.Enabled,
-		OnlyWhenEngineOn: nextNormalized.Tracking.OnlyWhenEngineOn,
-		SampleInterval:   nextNormalized.Tracking.SampleInterval,
+		WhenEngineOn:   nextNormalized.Tracking.WhenEngineOn,
+		SampleInterval: nextNormalized.Tracking.SampleInterval,
 	}
-	a.logger.Printf("tracking settings updated: enabled=%t only_when_engine_on=%t sample_interval=%s", out.Enabled, out.OnlyWhenEngineOn, out.SampleInterval)
+	a.logger.Printf("tracking settings updated: when_engine_on=%t sample_interval=%s", out.WhenEngineOn, out.SampleInterval)
 	return out, nil
 }
 
@@ -351,6 +346,32 @@ func (a *App) TrackingState() tracking.State {
 		return tracking.State{}
 	}
 	return a.tracking.State()
+}
+
+// StartTracking begins a manual tracking session. It is rejected in engine
+// mode, where the engine signal controls sessions.
+func (a *App) StartTracking(ctx context.Context) (tracking.State, error) {
+	if a.tracking == nil {
+		return tracking.State{}, fmt.Errorf("tracking is not configured")
+	}
+	if a.tracking.State().WhenEngineOn {
+		return tracking.State{}, tracking.ErrEngineMode
+	}
+	a.tracking.StartRecording(time.Now())
+	return a.tracking.State(), nil
+}
+
+// StopTracking finalizes a manual tracking session. It is rejected in engine
+// mode.
+func (a *App) StopTracking(ctx context.Context) (tracking.State, error) {
+	if a.tracking == nil {
+		return tracking.State{}, fmt.Errorf("tracking is not configured")
+	}
+	if a.tracking.State().WhenEngineOn {
+		return tracking.State{}, tracking.ErrEngineMode
+	}
+	a.tracking.StopRecording()
+	return a.tracking.State(), nil
 }
 
 func (a *App) TrackList() ([]tracking.FileInfo, error) {

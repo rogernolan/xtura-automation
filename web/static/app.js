@@ -108,6 +108,14 @@ class XturaApi {
     return this.request("/v1/tracking/state");
   }
 
+  async startTracking() {
+    return this.request("/v1/tracking/start", { method: "POST" });
+  }
+
+  async stopTracking() {
+    return this.request("/v1/tracking/stop", { method: "POST" });
+  }
+
   async trackList() {
     return this.request("/v1/tracks");
   }
@@ -350,52 +358,49 @@ function recordingRemainingText(recording) {
 function renderTracking() {
   const settings = state.trackingSettings;
   const tracking = state.tracking;
-  const enabled = byId("trackingEnabled");
   const engineOnly = byId("trackingEngineOnly");
+  const manualControls = byId("trackingManualControls");
+  const startButton = byId("trackingStartButton");
+  const stopButton = byId("trackingStopButton");
   const interval = byId("trackingInterval");
   if (!settings || !tracking) {
     byId("trackingPanel").setAttribute("aria-busy", "true");
     byId("trackingState").textContent = "Loading";
     byId("trackingDetail").textContent = "Waiting for tracking state.";
-    enabled.disabled = true;
     engineOnly.disabled = true;
     interval.disabled = true;
     return;
   }
   byId("trackingPanel").setAttribute("aria-busy", String(state.requestInFlight));
   byId("trackingState").textContent = trackingStateText(tracking);
-  enabled.checked = settings.enabled;
-  engineOnly.checked = settings.only_when_engine_on;
+  engineOnly.checked = settings.when_engine_on;
   if (interval !== document.activeElement) {
     interval.value = String(settings.sample_interval_seconds || 5);
   }
-  enabled.disabled = state.requestInFlight;
   engineOnly.disabled = state.requestInFlight;
   interval.disabled = state.requestInFlight;
+  manualControls.hidden = settings.when_engine_on;
+  startButton.disabled = state.requestInFlight || (tracking.tracking === true);
+  stopButton.disabled = state.requestInFlight || (tracking.tracking !== true);
   byId("trackingDetail").textContent = trackingDetailText(tracking);
   renderTrackList();
 }
 
 function trackingStateText(tracking) {
-  if (!tracking.enabled) {
-    return "Disabled";
-  }
   if (tracking.tracking) {
     return "Tracking";
   }
-  if (tracking.only_when_engine_on && tracking.engine_known && !tracking.engine_on) {
+  if (tracking.when_engine_on && tracking.engine_known && !tracking.engine_on) {
     return "Engine off";
   }
-  return "Enabled";
+  return "Idle";
 }
 
 function trackingDetailText(tracking) {
   const parts = [];
-  if (!tracking.enabled) {
-    parts.push("GPS tracking is off.");
-  } else if (tracking.tracking) {
+  if (tracking.tracking) {
     parts.push(`Tracking now (${tracking.point_count} point${tracking.point_count === 1 ? "" : "s"}).`);
-  } else if (tracking.only_when_engine_on) {
+  } else if (tracking.when_engine_on) {
     if (!tracking.engine_known) {
       parts.push("Waiting to see whether the engine is on.");
     } else if (tracking.engine_on) {
@@ -404,7 +409,7 @@ function trackingDetailText(tracking) {
       parts.push("Engine is off; not tracking.");
     }
   } else {
-    parts.push("GPS tracking is on; waiting for the next sample.");
+    parts.push("Press Start recording to begin a track.");
   }
   if (tracking.current_file) {
     parts.push(`Writing ${tracking.current_file}.`);
@@ -418,8 +423,7 @@ function trackingDetailText(tracking) {
 function currentTrackingSettings() {
   const settings = state.trackingSettings || {};
   return {
-    enabled: Boolean(settings.enabled),
-    only_when_engine_on: Boolean(settings.only_when_engine_on),
+    when_engine_on: Boolean(settings.when_engine_on),
     sample_interval_seconds: Number(settings.sample_interval_seconds) || 5,
   };
 }
@@ -519,8 +523,7 @@ async function applyTrackingSettings(next) {
     if (state.tracking) {
       state.tracking = {
         ...state.tracking,
-        enabled: settings.enabled,
-        only_when_engine_on: settings.only_when_engine_on,
+        when_engine_on: settings.when_engine_on,
         sample_interval_seconds: settings.sample_interval_seconds,
       };
     }
@@ -1123,11 +1126,24 @@ function bindActions() {
   byId("recordingDuration").addEventListener("change", () => {
     byId("recordingDuration").value = String(recordingDuration());
   });
-  byId("trackingEnabled").addEventListener("change", () => {
-    applyTrackingSettings({ ...currentTrackingSettings(), enabled: byId("trackingEnabled").checked });
-  });
   byId("trackingEngineOnly").addEventListener("change", () => {
-    applyTrackingSettings({ ...currentTrackingSettings(), only_when_engine_on: byId("trackingEngineOnly").checked });
+    applyTrackingSettings({ ...currentTrackingSettings(), when_engine_on: byId("trackingEngineOnly").checked });
+  });
+  byId("trackingStartButton").addEventListener("click", async () => {
+    try {
+      state.tracking = await withRequest(() => api.startTracking(), "Starting tracking");
+      render();
+    } catch (_) {
+      return;
+    }
+  });
+  byId("trackingStopButton").addEventListener("click", async () => {
+    try {
+      state.tracking = await withRequest(() => api.stopTracking(), "Stopping tracking");
+      render();
+    } catch (_) {
+      return;
+    }
   });
   byId("trackingInterval").addEventListener("change", () => {
     const input = byId("trackingInterval");

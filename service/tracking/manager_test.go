@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -157,10 +158,10 @@ func TestEngineOnlySessionLifecycle(t *testing.T) {
 	poll.add(fix(51.065375, 0.854362, nil, time.Time{}), nil)
 	poll.add(fix(51.0655, 0.8544, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
 
 	state := manager.State()
-	if !state.Enabled || !state.OnlyWhenEngineOn || state.EngineKnown || state.Tracking {
+	if !state.WhenEngineOn || state.EngineKnown || state.Tracking {
 		t.Fatalf("initial state = %+v", state)
 	}
 	manager.Sample(context.Background())
@@ -176,6 +177,12 @@ func TestEngineOnlySessionLifecycle(t *testing.T) {
 	wantName := "track-" + onAt.Format("20060102T150405Z") + ".geojson"
 	if state.CurrentFile != wantName {
 		t.Fatalf("current file = %q, want %q", state.CurrentFile, wantName)
+	}
+
+	manager.StartRecording(onAt.Add(3 * time.Second))
+	state = manager.State()
+	if !state.Tracking || state.CurrentFile != wantName {
+		t.Fatalf("StartRecording must not disturb an engine-gated session, got %+v", state)
 	}
 
 	clock.set(onAt.Add(5 * time.Second))
@@ -203,49 +210,44 @@ func TestEngineOnlySessionLifecycle(t *testing.T) {
 	}
 }
 
-func TestContinuousDayRotationAndResume(t *testing.T) {
+func TestManualSessionWritesSessionFileAndIgnoresFrames(t *testing.T) {
 	dir := t.TempDir()
-	day1 := time.Date(2026, 8, 13, 10, 0, 0, 0, time.UTC)
-	clock := newFakeClock(day1)
+	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
+	clock := newFakeClock(start)
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
+	poll.add(fix(51.0, 0.86, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
-	manager.Sample(context.Background())
-	clock.set(day1.Add(time.Minute))
-	manager.Sample(context.Background())
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 5 * time.Second})
 
-	day1Name := "track-2026-08-13.geojson"
-	if got := manager.State().PointCount; got != 2 {
-		t.Fatalf("point count = %d, want 2", got)
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
+	manager.Sample(context.Background())
+	if state := manager.State(); state.Tracking {
+		t.Fatalf("engine frames must not start a manual session, got %+v", state)
 	}
-	if _, err := os.Stat(filepath.Join(dir, day1Name)); err != nil {
-		t.Fatalf("day 1 track missing: %v", err)
+	if got := poll.callCount(); got != 0 {
+		t.Fatalf("polled %d times before a manual session is active", got)
 	}
 
-	day2 := time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC)
-	clock.set(day2)
+	manager.StartRecording(start)
 	manager.Sample(context.Background())
-	day2Name := "track-2026-08-14.geojson"
-	if got := manager.State().PointCount; got != 1 {
-		t.Fatalf("point count after rotation = %d, want 1", got)
-	}
-	if manager.State().CurrentFile != day2Name {
-		t.Fatalf("current file = %q, want %q", manager.State().CurrentFile, day2Name)
-	}
-	clock.set(day2.Add(time.Minute))
+	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
+	state := manager.State()
+	if !state.Tracking || state.PointCount != 2 {
+		t.Fatalf("expected active 2-point session, got %+v", state)
+	}
+	if !strings.HasPrefix(state.CurrentFile, "track-20260813T") {
+		t.Fatalf("expected session file name, got %q", state.CurrentFile)
+	}
 
-	clock2 := newFakeClock(day2.Add(2 * time.Hour))
-	manager2 := tracking.New(dir, poll.poll, clock2.now, discardLogger())
-	manager2.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
-	manager2.Sample(context.Background())
-	if got := manager2.State().PointCount; got != 3 {
-		t.Fatalf("resumed point count = %d, want 3", got)
+	manager.StopRecording()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
-	track := parseFeature(t, readFile(t, filepath.Join(dir, day2Name)))
-	if len(track.Times) != 3 || !track.Times[0].Equal(day2) || !track.Times[1].Equal(day2.Add(time.Minute)) || !track.Times[2].Equal(day2.Add(2*time.Hour)) {
-		t.Fatalf("resumed times = %v", track.Times)
+	if len(entries) != 1 || entries[0].Name() != state.CurrentFile {
+		t.Fatalf("expected exactly one session file %s, got %v", state.CurrentFile, entries)
 	}
 }
 
@@ -256,7 +258,7 @@ func TestUnknownEngineStateBlocksSamplingInEngineOnlyMode(t *testing.T) {
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
 
 	for i := 0; i < 3; i++ {
 		manager.Sample(context.Background())
@@ -288,7 +290,7 @@ func TestSampleWritesValidGeoJSONWithAlignedTimes(t *testing.T) {
 	poll.add(fix(51.0655, 0.8544, nil, time.Time{}), nil)
 	poll.add(fix(51.0656, 0.85445, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
 	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
 	for i := 1; i <= 3; i++ {
 		clock.set(start.Add(time.Duration(i) * 5 * time.Second))
@@ -342,12 +344,13 @@ func TestAltitudeStoredAsThirdCoordinateElementWhenPresent(t *testing.T) {
 	poll.add(fix(51.065375, 0.854362, alt(7), time.Time{}), nil)
 	poll.add(fix(51.0655, 0.8544, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
 	manager.Sample(context.Background())
 	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
 
-	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-2026-08-13.geojson")))
+	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-"+start.Format("20060102T150405Z")+".geojson")))
 	if len(track.Coords) != 2 {
 		t.Fatalf("coords = %v", track.Coords)
 	}
@@ -366,8 +369,9 @@ func TestAtomicRewriteLeavesValidFileAfterEachSample(t *testing.T) {
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
-	path := filepath.Join(dir, "track-2026-08-13.geojson")
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
+	path := filepath.Join(dir, "track-"+start.Format("20060102T150405Z")+".geojson")
 	for i := 0; i < 5; i++ {
 		clock.set(start.Add(time.Duration(i) * 5 * time.Second))
 		manager.Sample(context.Background())
@@ -401,11 +405,12 @@ func TestListReadDeleteAndPathTraversalRejection(t *testing.T) {
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
 	manager.Sample(context.Background())
 	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
-	name := "track-2026-08-13.geojson"
+	name := "track-" + start.Format("20060102T150405Z") + ".geojson"
 	expected := readFile(t, filepath.Join(dir, name))
 
 	for _, bad := range []string{"../track-x.geojson", "/etc/passwd", "track-x.txt", "other.geojson", "track-", "", "track-a.geojson/x"} {
@@ -464,13 +469,15 @@ func TestSampleGeneratesTrackFileInTempDirectory(t *testing.T) {
 	poll.add(fix(51.0655, 0.8544, nil, time.Time{}), nil)
 	poll.add(fix(51.0656, 0.85445, alt(6), time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
 	for i := 1; i <= 3; i++ {
 		clock.set(start.Add(time.Duration(i) * 5 * time.Second))
 		manager.Sample(context.Background())
 	}
 
-	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-2026-08-13.geojson")))
+	sessionStart := start
+	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-"+sessionStart.Format("20060102T150405Z")+".geojson")))
 	if len(track.Times) != 3 || len(track.Coords) != 3 {
 		t.Fatalf("track has %d points", len(track.Times))
 	}
@@ -489,7 +496,7 @@ func TestPollFailureRecordsLastErrorAndContinues(t *testing.T) {
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	poll.add(domainlocation.Fix{}, errors.New("router unreachable again"))
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
 	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
 
 	manager.Sample(context.Background())
@@ -527,28 +534,32 @@ func TestPollFailureRecordsLastErrorAndContinues(t *testing.T) {
 	}
 }
 
-func TestConfigureDisableFinalizesActiveTrack(t *testing.T) {
+func TestStopRecordingFinalizesActiveTrack(t *testing.T) {
 	dir := t.TempDir()
 	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
 	clock := newFakeClock(start)
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 5 * time.Second})
+
+	manager.StartRecording(start)
 	manager.Sample(context.Background())
-	if state := manager.State(); !state.Tracking || state.PointCount != 1 {
-		t.Fatalf("state before disable = %+v", state)
+	clock.set(start.Add(5 * time.Second))
+	manager.Sample(context.Background())
+	if state := manager.State(); !state.Tracking || state.PointCount != 2 {
+		t.Fatalf("state before stop = %+v", state)
 	}
 	before := poll.callCount()
 
-	manager.Configure(tracking.Settings{Enabled: false, SampleInterval: 5 * time.Second})
+	manager.StopRecording()
 	state := manager.State()
 	if state.Tracking || state.CurrentFile != "" || state.PointCount != 0 {
-		t.Fatalf("state after disable = %+v", state)
+		t.Fatalf("state after stop = %+v", state)
 	}
 	manager.Sample(context.Background())
 	if got := poll.callCount(); got != before {
-		t.Fatal("sampled while disabled")
+		t.Fatal("sampled while no session is active")
 	}
 }
 
@@ -559,7 +570,7 @@ func TestSingleFixTrackIsNotWritten(t *testing.T) {
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
 	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
 
 	manager.Sample(context.Background())
@@ -586,11 +597,12 @@ func TestDeleteActiveTrackFinalizesAndDoesNotResurrect(t *testing.T) {
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
 	manager.Sample(context.Background())
 	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
-	name := "track-2026-08-13.geojson"
+	name := "track-" + start.Format("20060102T150405Z") + ".geojson"
 	if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 		t.Fatalf("track missing before delete: %v", err)
 	}
@@ -609,49 +621,53 @@ func TestDeleteActiveTrackFinalizesAndDoesNotResurrect(t *testing.T) {
 	manager.Sample(context.Background())
 	clock.set(start.Add(15 * time.Second))
 	manager.Sample(context.Background())
-	track := parseFeature(t, readFile(t, filepath.Join(dir, name)))
+	sessionName := "track-" + start.Add(10*time.Second).Format("20060102T150405Z") + ".geojson"
+	track := parseFeature(t, readFile(t, filepath.Join(dir, sessionName)))
 	if len(track.Coords) != 2 {
-		t.Fatalf("track after delete has %d coords, want 2", len(track.Coords))
+		t.Fatalf("new session after delete has %d coords, want 2", len(track.Coords))
 	}
 	if !track.Times[0].Equal(start.Add(10 * time.Second)) {
 		t.Fatalf("deleted points resurrected: first time = %v", track.Times[0])
 	}
 }
 
-func TestConfigureEngineOnlyModeSwitchFinalizesDailyTrack(t *testing.T) {
+func TestConfigureModeSwitchFinalizesActiveTrack(t *testing.T) {
 	dir := t.TempDir()
 	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
 	clock := newFakeClock(start)
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 5 * time.Second})
-	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 5 * time.Second})
+
+	manager.StartRecording(start)
 	manager.Sample(context.Background())
 	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
-	if state := manager.State(); !state.Tracking || state.CurrentFile != "track-2026-08-13.geojson" {
-		t.Fatalf("state before mode switch = %+v", state)
+	if state := manager.State(); !state.Tracking {
+		t.Fatalf("expected active manual session, got %+v", state)
 	}
+	manualName := manager.State().CurrentFile
 
-	manager.Configure(tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 5 * time.Second})
-	state := manager.State()
-	if state.Tracking || state.CurrentFile != "" || state.PointCount != 0 {
-		t.Fatalf("state after engine-only switch = %+v", state)
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	if state := manager.State(); state.Tracking {
+		t.Fatalf("expected manual session finalized on engine switch, got %+v", state)
+	}
+	if _, err := os.Stat(filepath.Join(dir, manualName)); err != nil {
+		t.Fatalf("manual session file missing after mode switch: %v", err)
 	}
 
 	clock.set(start.Add(10 * time.Second))
-	manager.Sample(context.Background())
+	manager.ObserveFrame(clock.now(), heating.DirectionReceive, engineFrame(11, 1))
 	clock.set(start.Add(15 * time.Second))
 	manager.Sample(context.Background())
-	sessionName := "track-" + start.Add(10*time.Second).Format("20060102T150405Z") + ".geojson"
-	state = manager.State()
-	if !state.Tracking || state.CurrentFile != sessionName {
-		t.Fatalf("state after engine-only samples = %+v, want session %q", state, sessionName)
+	if state := manager.State(); !state.Tracking {
+		t.Fatalf("expected engine-gated session to auto-start, got %+v", state)
 	}
-	track := parseFeature(t, readFile(t, filepath.Join(dir, sessionName)))
-	if len(track.Coords) != 2 {
-		t.Fatalf("session track has %d coords, want 2", len(track.Coords))
+
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 5 * time.Second})
+	if state := manager.State(); state.Tracking {
+		t.Fatalf("expected engine-gated session finalized on manual switch, got %+v", state)
 	}
 }
 
@@ -662,7 +678,7 @@ func TestOnChangeNotifiedOnTransitionsAndSamples(t *testing.T) {
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, OnlyWhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
 	rec := &stateRecorder{}
 	manager.SetOnChange(rec.onChange)
 
@@ -694,7 +710,8 @@ func TestStartSamplesOnIntervalAndFinalizesOnCancel(t *testing.T) {
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 10 * time.Millisecond})
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 10 * time.Millisecond})
+	manager.StartRecording(start)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	manager.Start(ctx)
@@ -730,7 +747,8 @@ func TestConfigureChangesSampleIntervalLive(t *testing.T) {
 	poll := newFakePoll()
 	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 30 * time.Second})
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 30 * time.Second})
+	manager.StartRecording(start)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -744,7 +762,7 @@ func TestConfigureChangesSampleIntervalLive(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	manager.Configure(tracking.Settings{Enabled: true, SampleInterval: 10 * time.Millisecond})
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 10 * time.Millisecond})
 
 	deadline = time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -761,8 +779,7 @@ func TestConfigureChangesSampleIntervalLive(t *testing.T) {
 func TestStateAndFileInfoJSONShape(t *testing.T) {
 	now := time.Date(2026, 8, 13, 9, 40, 5, 0, time.UTC)
 	state := tracking.State{
-		Enabled:               true,
-		OnlyWhenEngineOn:      true,
+		WhenEngineOn:          true,
 		SampleIntervalSeconds: 5,
 		EngineKnown:           true,
 		EngineOn:              true,
@@ -781,7 +798,7 @@ func TestStateAndFileInfoJSONShape(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"enabled", "only_when_engine_on", "sample_interval_seconds", "engine_known", "engine_on", "tracking", "current_file", "point_count", "last_sample_at", "last_error", "last_error_at"} {
+	for _, key := range []string{"when_engine_on", "sample_interval_seconds", "engine_known", "engine_on", "tracking", "current_file", "point_count", "last_sample_at", "last_error", "last_error_at"} {
 		if _, ok := raw[key]; !ok {
 			t.Fatalf("state JSON missing key %q: %s", key, data)
 		}
