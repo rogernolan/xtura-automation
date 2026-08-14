@@ -79,6 +79,11 @@ Files are written atomically: the manager writes `<name>.tmp` and renames it ove
 `<name>`, so a crash never leaves a truncated or corrupt track file. A leftover
 `.tmp` file does not match the track name pattern and is ignored by the API.
 
+A track is only written once it has at least two positions: RFC 7946 requires a
+`LineString` geometry to contain two or more positions, so a session or daily file
+with a single fix produces no file. A session that ends after one fix therefore
+leaves nothing on disk.
+
 ## Lifecycle
 
 ### Engine gating
