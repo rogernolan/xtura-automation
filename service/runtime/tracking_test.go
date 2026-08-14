@@ -34,11 +34,14 @@ func TestAppTrackingWiring(t *testing.T) {
 		t.Fatalf("location altitude = %v, want 120.5", got)
 	}
 	settings := app.TrackingSettings()
-	if !settings.Enabled || settings.OnlyWhenEngineOn || settings.SampleInterval != time.Second {
+	if settings.WhenEngineOn || settings.SampleInterval != time.Second {
 		t.Fatalf("tracking settings = %#v", settings)
 	}
 	if got := app.TrackingDirectory(); got != trackDir {
 		t.Fatalf("tracking directory = %q, want %q", got, trackDir)
+	}
+	if _, err := app.StartTracking(context.Background()); err != nil {
+		t.Fatalf("start tracking: %v", err)
 	}
 	waitForTrackingStateEvent(t, events)
 	waitForCondition(t, "second tracking sample", func() bool {
@@ -69,14 +72,13 @@ func TestUpdateTrackingSettings(t *testing.T) {
 	app := newTrackingTestApp(t, server.URL, configPath, t.TempDir())
 
 	updated, err := app.UpdateTrackingSettings(context.Background(), tracking.Settings{
-		Enabled:          true,
-		OnlyWhenEngineOn: false,
-		SampleInterval:   2 * time.Second,
+		WhenEngineOn:   false,
+		SampleInterval: 2 * time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.SampleInterval != 2*time.Second || !updated.Enabled || updated.OnlyWhenEngineOn {
+	if updated.SampleInterval != 2*time.Second || updated.WhenEngineOn {
 		t.Fatalf("updated settings = %#v", updated)
 	}
 	if got := app.TrackingSettings(); got.SampleInterval != 2*time.Second {
@@ -93,7 +95,7 @@ func TestUpdateTrackingSettings(t *testing.T) {
 		t.Fatalf("config does not contain sample_interval: 2s:\n%s", persisted)
 	}
 	if _, err := app.UpdateTrackingSettings(context.Background(), tracking.Settings{
-		Enabled:        true,
+		WhenEngineOn:   false,
 		SampleInterval: 2 * time.Hour,
 	}); err == nil {
 		t.Fatal("expected validation error for out-of-range sample interval")
@@ -106,7 +108,7 @@ func TestUpdateTrackingSettings(t *testing.T) {
 		t.Fatalf("config changed after rejected update:\n%s", persistedAfter)
 	}
 
-	zeroed, err := app.UpdateTrackingSettings(context.Background(), tracking.Settings{Enabled: true})
+	zeroed, err := app.UpdateTrackingSettings(context.Background(), tracking.Settings{WhenEngineOn: false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +132,6 @@ func TestConcurrentConfigWritersSerialize(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, _ = app.UpdateTrackingSettings(context.Background(), tracking.Settings{
-				Enabled:        true,
 				SampleInterval: interval,
 			})
 		}()
@@ -183,11 +184,17 @@ func TestTrackingMethodsWithoutLocation(t *testing.T) {
 	if err := app.TrackDelete("track-2026-01-01.geojson"); err == nil {
 		t.Fatal("expected TrackDelete error without tracking manager")
 	}
+	if _, err := app.StartTracking(context.Background()); err == nil {
+		t.Fatal("expected StartTracking error without tracking manager")
+	}
+	if _, err := app.StopTracking(context.Background()); err == nil {
+		t.Fatal("expected StopTracking error without tracking manager")
+	}
 }
 
 func newTrackingTestApp(t *testing.T, serverURL, configPath, trackDir string) *App {
 	t.Helper()
-	onlyWhenEngineOn := false
+	whenEngineOn := false
 	cfg := config.Config{
 		Garmin: config.GarminConfig{
 			WSURL:             "ws://127.0.0.1:1/ws",
@@ -204,16 +211,15 @@ func newTrackingTestApp(t *testing.T, serverURL, configPath, trackDir string) *A
 			Timezone: config.TimezoneLookupConfig{Provider: "none"},
 		},
 		Tracking: config.TrackingConfig{
-			Enabled:          true,
-			OnlyWhenEngineOn: &onlyWhenEngineOn,
-			SampleInterval:   time.Second,
-			Dir:              trackDir,
+			WhenEngineOn:   &whenEngineOn,
+			SampleInterval: time.Second,
+			Dir:            trackDir,
 		},
 		Automation: config.AutomationConfig{
 			Timezone: "UTC",
 			HeatingPrograms: []config.HeatingProgramConfig{{
 				ID:      "test",
-				Enabled: &onlyWhenEngineOn,
+				Enabled: &whenEngineOn,
 				Days:    []string{"monday"},
 				Periods: []config.HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
@@ -263,7 +269,7 @@ func waitForTrackingStateEvent(t *testing.T, stream <-chan events.Event) {
 				continue
 			}
 			state, ok := event.Payload.(tracking.State)
-			if ok && state.Enabled {
+			if ok && state.Tracking {
 				return
 			}
 		case <-timeout:
