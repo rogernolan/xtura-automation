@@ -57,6 +57,8 @@ type Application interface {
 	TrackingDirectory() string
 	UpdateTrackingSettings(context.Context, tracking.Settings) (tracking.Settings, error)
 	TrackingState() tracking.State
+	StartTracking(context.Context) (tracking.State, error)
+	StopTracking(context.Context) (tracking.State, error)
 	TrackList() ([]tracking.FileInfo, error)
 	TrackRead(string) ([]byte, error)
 	TrackDelete(string) error
@@ -95,6 +97,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/recording/stop", s.handleRecordingStop)
 	mux.HandleFunc("/v1/tracking/settings", s.handleTrackingSettings)
 	mux.HandleFunc("/v1/tracking/state", s.handleTrackingState)
+	mux.HandleFunc("/v1/tracking/start", s.handleTrackingStart)
+	mux.HandleFunc("/v1/tracking/stop", s.handleTrackingStop)
 	mux.HandleFunc("/v1/tracks", s.handleTracks)
 	mux.HandleFunc("/v1/tracks/{name}", s.handleTrack)
 	mux.HandleFunc("/v1/events", s.handleEvents)
@@ -495,24 +499,21 @@ func (s *Server) handleRecordingStop(w http.ResponseWriter, r *http.Request) {
 // trackingSettingsDTO is the wire shape for GET/PUT /v1/tracking/settings.
 // Directory is fixed at construction and ignored on PUT.
 type trackingSettingsDTO struct {
-	Enabled               bool    `json:"enabled"`
-	OnlyWhenEngineOn      bool    `json:"only_when_engine_on"`
+	WhenEngineOn          bool    `json:"when_engine_on"`
 	SampleIntervalSeconds float64 `json:"sample_interval_seconds"`
 	Directory             string  `json:"directory"`
 }
 
 func trackingSettingsFromDTO(body trackingSettingsDTO) tracking.Settings {
 	return tracking.Settings{
-		Enabled:          body.Enabled,
-		OnlyWhenEngineOn: body.OnlyWhenEngineOn,
-		SampleInterval:   time.Duration(body.SampleIntervalSeconds * float64(time.Second)),
+		WhenEngineOn:   body.WhenEngineOn,
+		SampleInterval: time.Duration(body.SampleIntervalSeconds * float64(time.Second)),
 	}
 }
 
 func trackingSettingsToDTO(settings tracking.Settings, directory string) trackingSettingsDTO {
 	return trackingSettingsDTO{
-		Enabled:               settings.Enabled,
-		OnlyWhenEngineOn:      settings.OnlyWhenEngineOn,
+		WhenEngineOn:          settings.WhenEngineOn,
 		SampleIntervalSeconds: settings.SampleInterval.Seconds(),
 		Directory:             directory,
 	}
@@ -551,6 +552,46 @@ func (s *Server) handleTrackingState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.app.TrackingState())
+}
+
+func (s *Server) handleTrackingStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	state, err := s.app.StartTracking(ctx)
+	if err != nil {
+		switch {
+		case errors.Is(err, tracking.ErrEngineMode):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		default:
+			writeError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleTrackingStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	state, err := s.app.StopTracking(ctx)
+	if err != nil {
+		switch {
+		case errors.Is(err, tracking.ErrEngineMode):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		default:
+			writeError(w, http.StatusInternalServerError, err)
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
 }
 
 func (s *Server) handleTracks(w http.ResponseWriter, r *http.Request) {
@@ -673,6 +714,7 @@ func isValidationError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "automation.") ||
 		strings.Contains(msg, "tracking.") ||
+		strings.Contains(msg, "tracking requires") ||
 		strings.Contains(msg, "target_celsius") ||
 		strings.Contains(msg, "duration") ||
 		strings.Contains(msg, "HH:MM") ||
