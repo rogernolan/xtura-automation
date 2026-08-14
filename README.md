@@ -97,6 +97,12 @@ Current HTTP endpoints:
 - `GET /v1/recording/state`
 - `POST /v1/recording/start`
 - `POST /v1/recording/stop`
+- `GET /v1/tracking/settings`
+- `PUT /v1/tracking/settings`
+- `GET /v1/tracking/state`
+- `GET /v1/tracks`
+- `GET /v1/tracks/{name}`
+- `DELETE /v1/tracks/{name}`
 - `GET /v1/events`
 
 ### WebSocket recording
@@ -115,6 +121,15 @@ Recordings are written to `/var/lib/xtura/recordings/` as unique UTC filenames s
 
 A duration of `0` records until stopped or the service restarts. Armed and active recordings are not restored after restart; service shutdown cancels them and appends a `service_shutdown` lifecycle record to an active trace where possible.
 
+### GPS trails
+
+The Settings tab also controls GPS trail recording. When enabled, the service samples the location provider (the RUTX50 router GPS position endpoint) and writes the points as GeoJSON (RFC 7946) track files to `/var/lib/xtura/tracks/`. Two modes are available:
+
+- **Only when engine is on** (the default): a track file per engine on → off session, using signal `11` from the Garmin frame stream as the engine-running indication. Nothing is recorded until the first engine frame is seen.
+- **Continuous**: a track file per UTC day (`track-2026-08-13.geojson`), resumed on restart so a calendar day stays one file.
+
+Sample every N seconds is configurable from `1` to `3600` (default `5`). The switches and interval apply immediately on change; live state and errors stream over the `tracking.state_changed` event on `GET /v1/events`. Tracks are listed, downloaded, and deleted through the `/v1/tracks` API. See [gps-tracking.md](docs/gps-tracking.md) for the track file format and API, which is written for consumers such as the InstaBlog agent.
+
 The location service defaults to the Teltonika RUTX50 GPS position endpoint at `http://192.168.51.1/api/gps/position/status` when `location.enabled` is true. It exposes the latest longitude, latitude, and timezone at `GET /v1/location/state`; see [location-service.md](docs/location-service.md) for the RUTX50 endpoint config, timezone lookup, and Pi timezone update setup.
 
 Current design notes live in:
@@ -124,6 +139,7 @@ Current design notes live in:
 - [heating-schedule-api.md](docs/heating-schedule-api.md)
 - [garmin-empirbus-signals.md](docs/garmin-empirbus-signals.md) — source-backed Garmin WDU WebSocket protocol, signal catalogue, and capture evidence
 - [location-service.md](docs/location-service.md)
+- [gps-tracking.md](docs/gps-tracking.md) — GPS trail track file format, lifecycle, and API for consumers
 
 ## Deployment
 
