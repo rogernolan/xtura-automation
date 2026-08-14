@@ -226,11 +226,8 @@ func TestNormalizeTrackingDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if normalized.Tracking.Enabled {
-		t.Fatal("expected tracking to be disabled by default")
-	}
-	if !normalized.Tracking.OnlyWhenEngineOn {
-		t.Fatal("expected only_when_engine_on to default to true")
+	if !normalized.Tracking.WhenEngineOn {
+		t.Fatal("expected when_engine_on to default to true")
 	}
 	if normalized.Tracking.SampleInterval != 5*time.Second {
 		t.Fatalf("got sample interval %s", normalized.Tracking.SampleInterval)
@@ -270,12 +267,11 @@ func TestValidateTrackingSampleIntervalBounds(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsTrackingEnabledWithoutLocation(t *testing.T) {
+func TestValidateRejectsTrackingWithoutLocation(t *testing.T) {
 	cfg := trackingBaseConfig()
 	cfg.Location.Enabled = false
-	cfg.Tracking.Enabled = true
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "tracking.enabled requires location.enabled") {
-		t.Fatalf("expected tracking/location validation error, got %v", err)
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "tracking requires location.enabled") {
+		t.Fatalf("expected tracking requires location.enabled error, got %v", err)
 	}
 }
 
@@ -289,8 +285,7 @@ garmin:
 location:
   enabled: true
 tracking:
-  enabled: true
-  only_when_engine_on: false
+  when_engine_on: false
   sample_interval: 30s
   dir: /var/lib/xtura/tracks
 automation:
@@ -315,11 +310,8 @@ api:
 	if err != nil {
 		t.Fatalf("Normalize() error = %v", err)
 	}
-	if !normalized.Tracking.Enabled {
-		t.Fatal("expected tracking to be enabled")
-	}
-	if normalized.Tracking.OnlyWhenEngineOn {
-		t.Fatal("expected only_when_engine_on false to round-trip")
+	if normalized.Tracking.WhenEngineOn {
+		t.Fatal("expected when_engine_on false to round-trip")
 	}
 	if normalized.Tracking.SampleInterval != 30*time.Second {
 		t.Fatalf("got sample interval %s", normalized.Tracking.SampleInterval)
@@ -336,7 +328,7 @@ func trackingBaseConfig() Config {
 			Enabled: true,
 		},
 		Tracking: TrackingConfig{
-			OnlyWhenEngineOn: ptrBool(true),
+			WhenEngineOn: ptrBool(true),
 		},
 		Automation: AutomationConfig{
 			Timezone: "Europe/London",

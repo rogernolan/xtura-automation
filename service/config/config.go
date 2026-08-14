@@ -67,10 +67,9 @@ type MovementConfig struct {
 }
 
 type TrackingConfig struct {
-	Enabled          bool          `yaml:"enabled,omitempty"`
-	OnlyWhenEngineOn *bool         `yaml:"only_when_engine_on,omitempty"`
-	SampleInterval   time.Duration `yaml:"sample_interval,omitempty"`
-	Dir              string        `yaml:"dir,omitempty"`
+	WhenEngineOn   *bool         `yaml:"when_engine_on,omitempty"`
+	SampleInterval time.Duration `yaml:"sample_interval,omitempty"`
+	Dir            string        `yaml:"dir,omitempty"`
 }
 
 type AutomationConfig struct {
@@ -133,10 +132,9 @@ type NormalizedLocation struct {
 }
 
 type NormalizedTracking struct {
-	Enabled          bool
-	OnlyWhenEngineOn bool
-	SampleInterval   time.Duration
-	Dir              string
+	WhenEngineOn   bool
+	SampleInterval time.Duration
+	Dir            string
 }
 
 type NormalizedAutomation struct {
@@ -242,8 +240,8 @@ func (c Config) Validate() error {
 	if c.Tracking.SampleInterval != 0 && (c.Tracking.SampleInterval < 1*time.Second || c.Tracking.SampleInterval > 3600*time.Second) {
 		problems = append(problems, "tracking.sample_interval must be between 1s and 3600s")
 	}
-	if c.Tracking.Enabled && !c.Location.Enabled {
-		problems = append(problems, "tracking.enabled requires location.enabled")
+	if (c.Tracking.WhenEngineOn != nil || c.Tracking.SampleInterval != 0 || c.Tracking.Dir != "") && !c.Location.Enabled {
+		problems = append(problems, "tracking requires location.enabled")
 	}
 	if len(c.Automation.HeatingPrograms) == 0 {
 		problems = append(problems, "automation.heating_programs must contain at least one program")
@@ -381,14 +379,13 @@ func normalizeLocation(in LocationConfig) NormalizedLocation {
 
 func normalizeTracking(in TrackingConfig) NormalizedTracking {
 	out := NormalizedTracking{
-		Enabled:        in.Enabled,
 		SampleInterval: in.SampleInterval,
 		Dir:            strings.TrimSpace(in.Dir),
 	}
-	if in.OnlyWhenEngineOn == nil {
-		out.OnlyWhenEngineOn = true
+	if in.WhenEngineOn == nil {
+		out.WhenEngineOn = true
 	} else {
-		out.OnlyWhenEngineOn = *in.OnlyWhenEngineOn
+		out.WhenEngineOn = *in.WhenEngineOn
 	}
 	if out.SampleInterval == 0 {
 		out.SampleInterval = 5 * time.Second
