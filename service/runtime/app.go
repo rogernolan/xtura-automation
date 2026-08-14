@@ -82,6 +82,7 @@ type App struct {
 	now                   func() time.Time
 
 	mu                 sync.RWMutex
+	configMu           sync.Mutex
 	lightsState        domainlights.State
 	waterState         domainwater.State
 	locationState      domainlocation.State
@@ -299,6 +300,8 @@ func (a *App) TrackingDirectory() string {
 }
 
 func (a *App) UpdateTrackingSettings(ctx context.Context, settings tracking.Settings) (tracking.Settings, error) {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
 	a.mu.RLock()
 	currentConfig := a.rawConfig
 	configPath := a.configPath
@@ -329,9 +332,9 @@ func (a *App) UpdateTrackingSettings(ctx context.Context, settings tracking.Sett
 	a.mu.Unlock()
 	if a.tracking != nil {
 		a.tracking.Configure(tracking.Settings{
-			Enabled:          settings.Enabled,
-			OnlyWhenEngineOn: settings.OnlyWhenEngineOn,
-			SampleInterval:   settings.SampleInterval,
+			Enabled:          nextNormalized.Tracking.Enabled,
+			OnlyWhenEngineOn: nextNormalized.Tracking.OnlyWhenEngineOn,
+			SampleInterval:   nextNormalized.Tracking.SampleInterval,
 		})
 	}
 	out := tracking.Settings{
@@ -554,6 +557,8 @@ func (a *App) maybeUpdateTimezone(ctx context.Context, timezoneName string, now 
 }
 
 func (a *App) updateConfigTimezone(timezoneName string) error {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
 	a.mu.RLock()
 	nextConfig := a.rawConfig
 	configPath := a.configPath
@@ -682,6 +687,8 @@ func (a *App) HeatingSchedule() config.HeatingScheduleDocument {
 }
 
 func (a *App) UpdateHeatingSchedule(ctx context.Context, doc config.HeatingScheduleDocument) (config.HeatingScheduleDocument, error) {
+	a.configMu.Lock()
+	defer a.configMu.Unlock()
 	a.mu.RLock()
 	currentRevision := a.revision
 	currentConfig := a.rawConfig

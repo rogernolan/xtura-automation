@@ -114,6 +114,8 @@ func (m *Manager) Configure(settings Settings) {
 	defer m.mu.Unlock()
 	if !settings.Enabled {
 		m.finalizeLocked()
+	} else if settings.OnlyWhenEngineOn && !m.settings.OnlyWhenEngineOn {
+		m.finalizeLocked()
 	}
 	m.settings = settings
 	m.signalWakeLocked()
@@ -293,13 +295,25 @@ func (m *Manager) Read(name string) ([]byte, error) {
 }
 
 // Delete removes a track file. Names that do not match the track pattern are
-// rejected.
+// rejected. Deleting the active track finalizes it so a later sample cannot
+// resurrect the removed file.
 func (m *Manager) Delete(name string) error {
 	if !validTrackName(name) {
 		return fmt.Errorf("invalid track name %q", name)
 	}
+	m.mu.Lock()
+	isActive := m.track != nil && m.track.name == name
+	m.mu.Unlock()
 	if err := os.Remove(filepath.Join(m.dir, name)); err != nil {
 		return fmt.Errorf("delete track %s: %w", name, err)
+	}
+	if isActive {
+		m.mu.Lock()
+		if m.track != nil && m.track.name == name {
+			m.finalizeLocked()
+		}
+		m.notifyLocked(m.snapshotLocked())
+		m.mu.Unlock()
 	}
 	return nil
 }
@@ -368,8 +382,14 @@ func (m *Manager) recordErrorLocked(at time.Time, err error) {
 	m.logger.Printf("tracking: %v", err)
 }
 
+// writeTrackLocked atomically writes the active track. A track with fewer than
+// two positions is not written: RFC 7946 requires a LineString to have at
+// least two positions, so the file only appears once a second fix arrives.
 func (m *Manager) writeTrackLocked() error {
 	if m.track == nil {
+		return nil
+	}
+	if len(m.track.points) < 2 {
 		return nil
 	}
 	if err := os.MkdirAll(m.dir, 0o755); err != nil {
