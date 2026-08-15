@@ -43,6 +43,7 @@ func registerStaticRoutes(mux *http.ServeMux) {
 		}
 		version := buildinfo.Current().GitSHA
 		body := strings.ReplaceAll(string(index), `href="/static/styles.css"`, `href="/static/styles.css?v=`+version+`"`)
+		body = strings.ReplaceAll(body, `src="/static/navigation.js"`, `src="/static/navigation.js?v=`+version+`"`)
 		body = strings.ReplaceAll(body, `src="/static/app.js"`, `src="/static/app.js?v=`+version+`"`)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")

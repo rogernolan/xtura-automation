@@ -880,9 +880,17 @@ func TestHandlerServesWebIndex(t *testing.T) {
 			t.Fatalf("index body did not contain versioned asset %q: %s", want, rr.Body.String())
 		}
 	}
-	for _, want := range []string{`id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>`, `id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>`, `id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>`, `id="toolsTab" class="tab" type="button" aria-controls="toolsPanel">Tools</button>`} {
+	for _, want := range []string{
+		`id="overviewNav" class="primary-nav-item" type="button" data-screen="overview" aria-controls="overviewPanel">Overview</button>`,
+		`id="controlsNav" class="primary-nav-item" type="button" data-screen="controls" aria-controls="controlsPanel">Controls</button>`,
+		`id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>`,
+		`id="moreNav" class="primary-nav-item" type="button" data-screen="more" aria-controls="morePanel">More</button>`,
+		`id="controlsHeatingPanel" class="section-panel"`, `id="controlsWaterPanel" class="section-panel" hidden`,
+		`id="controlsLightingPanel" class="section-panel" hidden`, `id="moreSystemPanel" class="section-panel"`,
+		`id="moreToolsPanel" class="section-panel" hidden`, `src="/static/navigation.js?v=dev"`,
+	} {
 		if !strings.Contains(rr.Body.String(), want) {
-			t.Fatalf("index body did not contain compact tab %q: %s", want, rr.Body.String())
+			t.Fatalf("missing %q", want)
 		}
 	}
 	if body := rr.Body.String(); !strings.Contains(body, `id="piStatusPanel" class="panel"`) {
@@ -919,7 +927,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus"} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}

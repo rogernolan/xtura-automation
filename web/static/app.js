@@ -1,3 +1,4 @@
+/* global XturaNavigation */
 class XturaApi {
   async getLightsState() {
     return this.request("/v1/lights/state");
@@ -169,7 +170,8 @@ const fallbackVisibleSlots = [
 ];
 const api = new XturaApi();
 const state = {
-  activeTab: "lighting",
+  route: { screen: "overview", section: null },
+  sections: { controls: "heating", more: "system" },
   build: null,
   lights: null,
   water: null,
@@ -232,16 +234,30 @@ function setConnection(message, tone = "normal") {
   element.dataset.tone = tone;
 }
 
-function setActiveTab(tab) {
-  state.activeTab = tab;
-  byId("lightingTab").classList.toggle("is-active", tab === "lighting");
-  byId("waterTab").classList.toggle("is-active", tab === "water");
-  byId("heatingTab").classList.toggle("is-active", tab === "heating");
-  byId("toolsTab").classList.toggle("is-active", tab === "tools");
-  byId("lightingPanel").hidden = tab !== "lighting";
-  byId("waterPanel").hidden = tab !== "water";
-  byId("heatingPanel").hidden = tab !== "heating";
-  byId("toolsPanel").hidden = tab !== "tools";
+function applyRoute(route) {
+  state.route = route;
+  if (route.section) {
+    state.sections[route.screen] = route.section;
+  }
+  ["overview", "controls", "location", "more"].forEach((screen) => {
+    byId(`${screen}Nav`).classList.toggle("is-active", route.screen === screen);
+    byId(`${screen}Panel`).hidden = route.screen !== screen;
+  });
+  document.querySelectorAll(".section-switch-item").forEach((button) => {
+    button.classList.toggle(
+      "is-active",
+      button.dataset.sectionGroup === route.screen && button.dataset.section === route.section,
+    );
+  });
+  document.querySelectorAll(".section-panel").forEach((panel) => {
+    panel.hidden = !(panel.dataset.sectionGroup === route.screen && panel.dataset.section === route.section);
+  });
+}
+
+function navigate(screen, section = null) {
+  const hash = XturaNavigation.toHash({ screen, section });
+  if (window.location.hash === hash) applyRoute(XturaNavigation.parse(hash));
+  else window.location.hash = hash;
 }
 
 function render() {
@@ -1208,10 +1224,12 @@ function connectEvents() {
 }
 
 function bindActions() {
-  byId("lightingTab").addEventListener("click", () => setActiveTab("lighting"));
-  byId("waterTab").addEventListener("click", () => setActiveTab("water"));
-  byId("heatingTab").addEventListener("click", () => setActiveTab("heating"));
-  byId("toolsTab").addEventListener("click", () => setActiveTab("tools"));
+  document.querySelectorAll("[data-screen]").forEach((button) => {
+    button.addEventListener("click", () => navigate(button.dataset.screen, state.sections[button.dataset.screen] || null));
+  });
+  document.querySelectorAll("[data-section-group]").forEach((button) => {
+    button.addEventListener("click", () => navigate(button.dataset.sectionGroup, button.dataset.section));
+  });
   byId("flashLights").addEventListener("click", async () => {
     try {
       const count = flashCount();
@@ -1411,7 +1429,8 @@ async function adjustTarget(delta) {
 
 async function boot() {
   bindActions();
-  setActiveTab("lighting");
+  window.addEventListener("hashchange", () => applyRoute(XturaNavigation.parse(window.location.hash)));
+  applyRoute(XturaNavigation.parse(window.location.hash));
   render();
   try {
     await loadInitialState();
