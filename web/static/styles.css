@@ -54,7 +54,8 @@ button:disabled {
   min-height: 100vh;
   display: flex;
   justify-content: center;
-  padding: 18px 12px 88px;
+  padding: 18px 12px 96px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
 .control-surface {
@@ -126,7 +127,26 @@ h1 {
 .section-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: rgba(24, 31, 40, .34); }
 .section-switch-item, .primary-nav-item { min-height: 44px; border: 1px solid rgba(255, 255, 255, .38); border-radius: 9px; background: rgba(255, 255, 255, .78); color: var(--text); font-weight: 800; }
 .section-switch-item.is-active, .primary-nav-item.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.primary-nav { position: sticky; bottom: 10px; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 6px; border: 1px solid rgba(255, 255, 255, .42); border-radius: 14px; background: rgba(231, 226, 216, .88); box-shadow: var(--shadow); backdrop-filter: blur(12px); }
+.primary-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 8px 12px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(35, 42, 52, 0.16);
+  background: rgba(231, 226, 216, 0.97);
+  box-shadow: 0 -8px 24px rgba(28, 32, 38, 0.14);
+}
+
+.primary-nav-inner {
+  max-width: 430px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
 
 .panel {
   display: grid;
@@ -552,7 +572,8 @@ h2 {
 @media (min-width: 760px) {
   .app-shell {
     align-items: center;
-    padding-block: 34px;
+    padding-top: 34px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
 }
 

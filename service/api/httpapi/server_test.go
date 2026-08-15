@@ -885,6 +885,7 @@ func TestHandlerServesWebIndex(t *testing.T) {
 		`id="controlsNav" class="primary-nav-item" type="button" data-screen="controls" aria-controls="controlsPanel">Controls</button>`,
 		`id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>`,
 		`id="moreNav" class="primary-nav-item" type="button" data-screen="more" aria-controls="morePanel">More</button>`,
+		`class="primary-nav-inner"`,
 		`id="controlsHeatingPanel" class="section-panel"`, `id="controlsWaterPanel" class="section-panel" hidden`,
 		`id="controlsLightingPanel" class="section-panel" hidden`, `id="moreSystemPanel" class="section-panel"`,
 		`id="moreToolsPanel" class="section-panel" hidden`, `src="/static/navigation.js?v=dev"`,
@@ -945,6 +946,23 @@ func TestHandlerServesPortraitMobileBackgroundStyle(t *testing.T) {
 	}
 	body := rr.Body.String()
 	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.avif?v=1")`, `url("/static/xtura-background.avif?v=1")`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("stylesheet did not contain %q: %s", want, body)
+		}
+	}
+}
+
+func TestHandlerServesFixedBottomNavStyle(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	req := httptest.NewRequest(http.MethodGet, "/static/styles.css", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{"position: fixed", "bottom: 0", "env(safe-area-inset-bottom, 0px)", ".primary-nav-inner", "max-width: 430px"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("stylesheet did not contain %q: %s", want, body)
 		}
