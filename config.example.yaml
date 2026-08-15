@@ -48,6 +48,10 @@ tracking:
   sample_interval: 5s
   dir: /var/lib/xtura/tracks
 
+host:
+  # How often the Pi status pane samples host metrics. Zero uses the 5s default.
+  sample_interval: 5s
+
 automation:
   timezone: Europe/London
   heating_programs:

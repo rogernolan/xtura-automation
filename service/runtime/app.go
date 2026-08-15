@@ -24,6 +24,7 @@ import (
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	domainwater "empirebus-tests/service/domains/water"
+	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/tracking"
 )
@@ -77,6 +78,7 @@ type App struct {
 	timezoneResolver      TimezoneResolver
 	broker                *events.Broker
 	recording             *recording.Manager
+	host                  *host.Manager
 	tracking              *tracking.Manager
 	sleep                 func(time.Duration)
 	now                   func() time.Time
@@ -128,6 +130,15 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 			Payload:   state,
 		})
 	})
+	hostManager := host.New(cfg.Host.SampleInterval, nil, time.Now, logger)
+	hostManager.SetOnChange(func(metrics host.Metrics) {
+		broker.Publish(events.Event{
+			Type:      "pi.state_changed",
+			Timestamp: time.Now().UTC(),
+			Payload:   metrics,
+		})
+	})
+	hostManager.Start(ctx)
 	var location LocationProvider
 	var timezoneResolver TimezoneResolver
 	if cfg.Location.Enabled {
@@ -211,6 +222,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		timezoneResolver:      timezoneResolver,
 		broker:                broker,
 		recording:             recorder,
+		host:                  hostManager,
 		tracking:              trackingManager,
 		now:                   time.Now,
 		schedulerWake:         make(chan struct{}, 1),
@@ -244,6 +256,13 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 
 func (a *App) Broker() *events.Broker {
 	return a.broker
+}
+
+func (a *App) HostStatus() host.Metrics {
+	if a.host == nil {
+		return host.Metrics{}
+	}
+	return a.host.State()
 }
 
 func (a *App) RecordingState() recording.State {

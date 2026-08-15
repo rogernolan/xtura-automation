@@ -22,7 +22,7 @@
           <button id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>
           <button id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>
           <button id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>
-          <button id="settingsTab" class="tab" type="button" aria-controls="settingsPanel">Settings</button>
+          <button id="toolsTab" class="tab" type="button" aria-controls="toolsPanel">Tools</button>
         </nav>
 
         <section id="lightingPanel" class="tab-panel">
@@ -122,7 +122,7 @@
           </div>
         </section>
 
-        <section id="settingsPanel" class="tab-panel" hidden>
+        <section id="toolsPanel" class="tab-panel" hidden>
           <div id="trackingPanel" class="panel">
             <div class="panel-heading">
               <h2>GPS trails</h2>
@@ -142,6 +142,15 @@
             </div>
             <p id="trackingDetail" class="detail-text">No tracking is active.</p>
             <div id="trackList" class="track-list"></div>
+          </div>
+
+          <div id="piStatusPanel" class="panel">
+            <div class="panel-heading">
+              <h2>Pi status</h2>
+              <span id="piPowerState" class="state-text">Loading</span>
+            </div>
+            <div id="piStats" class="pi-stats"></div>
+            <p id="piDetail" class="detail-text">Waiting for Pi status.</p>
           </div>
 
           <div id="recordingPanel" class="panel">

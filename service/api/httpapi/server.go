@@ -18,6 +18,7 @@ import (
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	domainwater "empirebus-tests/service/domains/water"
+	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 	"empirebus-tests/service/tracking"
@@ -50,6 +51,7 @@ type Application interface {
 	ScheduleGreyWaterOpening(context.Context, string, time.Duration) (domainwater.State, error)
 	CancelGreyWaterOpening(context.Context) (domainwater.State, error)
 	LocationState() domainlocation.State
+	HostStatus() host.Metrics
 	RecordingState() recording.State
 	StartRecording(context.Context, recording.StartRequest) (recording.State, error)
 	StopRecording(context.Context) recording.State
@@ -92,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/water/grey-valve/schedule", s.handleGreyWaterSchedule)
 	mux.HandleFunc("/v1/water/grey-valve/schedule/cancel", s.handleGreyWaterScheduleCancel)
 	mux.HandleFunc("/v1/location/state", s.handleLocationState)
+	mux.HandleFunc("/v1/pi/state", s.handlePiStatus)
 	mux.HandleFunc("/v1/recording/state", s.handleRecordingState)
 	mux.HandleFunc("/v1/recording/start", s.handleRecordingStart)
 	mux.HandleFunc("/v1/recording/stop", s.handleRecordingStop)
@@ -438,6 +441,14 @@ func (s *Server) handleLocationState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.app.LocationState())
+}
+
+func (s *Server) handlePiStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.HostStatus())
 }
 
 func (s *Server) handleRecordingState(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,7 @@ import (
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	domainwater "empirebus-tests/service/domains/water"
+	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 	"empirebus-tests/service/tracking"
@@ -46,6 +47,7 @@ type fakeApp struct {
 	trackingState      tracking.State
 	startTrackingErr   error
 	stopTrackingErr    error
+	piStatus           host.Metrics
 	trackFiles         []tracking.FileInfo
 	trackListErr       error
 	trackReadData      []byte
@@ -210,6 +212,10 @@ func (f fakeApp) TrackDelete(name string) error {
 
 func (f fakeApp) Broker() *events.Broker {
 	return f.broker
+}
+
+func (f fakeApp) HostStatus() host.Metrics {
+	return f.piStatus
 }
 
 func TestHandlerRoutesHealth(t *testing.T) {
@@ -874,10 +880,13 @@ func TestHandlerServesWebIndex(t *testing.T) {
 			t.Fatalf("index body did not contain versioned asset %q: %s", want, rr.Body.String())
 		}
 	}
-	for _, want := range []string{`id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>`, `id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>`, `id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>`, `id="settingsTab" class="tab" type="button" aria-controls="settingsPanel">Settings</button>`} {
+	for _, want := range []string{`id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>`, `id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>`, `id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>`, `id="toolsTab" class="tab" type="button" aria-controls="toolsPanel">Tools</button>`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("index body did not contain compact tab %q: %s", want, rr.Body.String())
 		}
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `id="piStatusPanel" class="panel"`) {
+		t.Fatalf("index body did not contain Pi status panel: %s", body)
 	}
 }
 
@@ -910,7 +919,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild"} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}
@@ -962,5 +971,60 @@ func TestHandleEventsFlushesInitialConnectionComment(t *testing.T) {
 		default:
 			time.Sleep(10 * time.Millisecond)
 		}
+	}
+}
+
+func TestHandlerServesPiStatus(t *testing.T) {
+	sampledAt := time.Date(2026, 8, 14, 9, 40, 0, 0, time.UTC)
+	temperatureC := 52.3
+	server := New(fakeApp{
+		broker: events.NewBroker(1),
+		piStatus: host.Metrics{
+			SampledAt: sampledAt,
+			Snapshot: host.Snapshot{
+				Model:         "Raspberry Pi Zero 2 W",
+				Cores:         4,
+				Load:          [3]float64{0.5, 0.3, 0.2},
+				Memory:        host.Memory{TotalBytes: 1000, AvailableBytes: 400, UsedPercent: 60},
+				Disk:          []host.DiskUsage{{Mount: "/", TotalBytes: 5000, UsedPercent: 50}},
+				TemperatureC:  &temperatureC,
+				UptimeSeconds: 100,
+				Power:         host.PowerStatus{Status: "ok"},
+			},
+		},
+	}).Handler()
+
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/pi/state", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	var got host.Metrics
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Model != "Raspberry Pi Zero 2 W" || got.Cores != 4 || got.Load != [3]float64{0.5, 0.3, 0.2} {
+		t.Fatalf("metrics = %#v", got)
+	}
+	if got.Memory.TotalBytes != 1000 || got.Memory.AvailableBytes != 400 || got.Memory.UsedPercent != 60 {
+		t.Fatalf("memory = %#v", got.Memory)
+	}
+	if len(got.Disk) != 1 || got.Disk[0].Mount != "/" || got.Disk[0].UsedPercent != 50 {
+		t.Fatalf("disk = %#v", got.Disk)
+	}
+	if got.TemperatureC == nil || *got.TemperatureC != 52.3 {
+		t.Fatalf("temperature = %v", got.TemperatureC)
+	}
+	if got.UptimeSeconds != 100 {
+		t.Fatalf("uptime = %d", got.UptimeSeconds)
+	}
+	if got.Power.Status != "ok" {
+		t.Fatalf("power = %#v", got.Power)
+	}
+
+	badMethod := httptest.NewRecorder()
+	server.ServeHTTP(badMethod, httptest.NewRequest(http.MethodPost, "/v1/pi/state", nil))
+	if badMethod.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("post status = %d", badMethod.Code)
 	}
 }
