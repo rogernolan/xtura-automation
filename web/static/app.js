@@ -248,12 +248,10 @@ function applyRoute(route) {
     byId(`${screen}Nav`).classList.toggle("is-active", route.screen === screen);
     byId(`${screen}Panel`).hidden = route.screen !== screen;
   });
-  document.querySelectorAll(".section-switch-item").forEach((button) => {
-    button.classList.toggle(
-      "is-active",
-      button.dataset.sectionGroup === route.screen && button.dataset.section === route.section,
-    );
-  });
+  if (route.section) {
+    const selector = byId(`${route.screen}Section`);
+    if (selector) selector.value = route.section;
+  }
   document.querySelectorAll(".section-panel").forEach((panel) => {
     panel.hidden = !(panel.dataset.sectionGroup === route.screen && panel.dataset.section === route.section);
   });
@@ -1232,8 +1230,8 @@ function bindActions() {
   document.querySelectorAll("[data-screen]").forEach((button) => {
     button.addEventListener("click", () => navigate(button.dataset.screen, state.sections[button.dataset.screen] || null));
   });
-  document.querySelectorAll("[data-section-group]").forEach((button) => {
-    button.addEventListener("click", () => navigate(button.dataset.sectionGroup, button.dataset.section));
+  document.querySelectorAll("[data-section-group]").forEach((select) => {
+    select.addEventListener("change", () => navigate(select.dataset.sectionGroup, select.value));
   });
   byId("flashLights").addEventListener("click", async () => {
     try {

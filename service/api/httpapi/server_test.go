@@ -887,6 +887,10 @@ func TestHandlerServesWebIndex(t *testing.T) {
 		`id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>`,
 		`id="moreNav" class="primary-nav-item" type="button" data-screen="more" aria-controls="morePanel">More</button>`,
 		`class="primary-nav-inner"`,
+		`id="controlsSection"`, `<option value="heating">Heating</option>`,
+		`<option value="water">Water</option>`, `<option value="lighting">Lighting</option>`,
+		`id="moreSection"`, `<option value="system">System</option>`, `<option value="tools">Tools</option>`,
+		`>Mode<`,
 		`id="controlsHeatingPanel" class="section-panel"`, `id="controlsWaterPanel" class="section-panel" hidden`,
 		`id="controlsLightingPanel" class="section-panel" hidden`, `id="moreSystemPanel" class="section-panel"`,
 		`id="moreToolsPanel" class="section-panel" hidden`, `src="/static/navigation.js?v=dev"`,
@@ -894,6 +898,9 @@ func TestHandlerServesWebIndex(t *testing.T) {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("missing %q", want)
 		}
+	}
+	if body := rr.Body.String(); strings.Contains(body, `class="section-switch"`) {
+		t.Fatalf("index body must not contain section-switch tabs: %s", body)
 	}
 	if body := rr.Body.String(); strings.Contains(body, `class="eyebrow"`) {
 		t.Fatalf("index body must not contain the brand eyebrow: %s", body)
@@ -932,7 +939,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange", "screenTitles", "document.title"} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange", "screenTitles", "document.title", `select.addEventListener("change"`, `.value = route.section`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}
