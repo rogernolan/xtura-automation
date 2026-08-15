@@ -16,11 +16,12 @@
         </header>
 
         <section id="overviewPanel" class="primary-panel">
-          <div class="panel">
-            <div class="panel-heading">
-              <h2>Overview</h2>
-            </div>
-            <p class="detail-text">Vehicle status dashboard is coming next.</p>
+          <div class="overview-grid">
+            <div id="aldePanel" class="panel overview-hero"><div class="panel-heading"><h2>Alde</h2><span id="aldeState" class="state-text">Loading</span></div><strong id="aldeTemperature" class="overview-value">--</strong><p id="aldeDetail" class="detail-text">Waiting for temperature.</p></div>
+            <div class="panel"><div class="panel-heading"><h2>Power</h2><span id="batteryState" class="state-text">Loading</span></div><strong id="batterySoc" class="overview-value">--</strong><p id="batteryDetail" class="detail-text">Waiting for battery.</p></div>
+            <div class="panel"><div class="panel-heading"><h2>Fresh water</h2><span class="state-text">Status</span></div><strong id="freshWater" class="overview-value">--</strong><p class="detail-text">Garmin percentage</p></div>
+            <div class="panel"><div class="panel-heading"><h2>Grey water</h2><span class="state-text">Status</span></div><strong id="greyWater" class="overview-value">--</strong><p class="detail-text">Garmin percentage</p></div>
+            <div class="panel"><div class="panel-heading"><h2>Gas</h2><span class="state-text">Unavailable</span></div><strong class="overview-value">--</strong><p class="detail-text">Mopeka not configured</p></div>
           </div>
         </section>
 
@@ -161,6 +162,7 @@
             <select id="moreSection" data-section-group="more" aria-label="More section">
               <option value="system">System</option>
               <option value="tools">Tools</option>
+              <option value="settings">Settings</option>
             </select>
           </div>
 
@@ -200,6 +202,20 @@
               <button id="recordingButton" class="primary-action" type="button">Start recording</button>
               <p class="detail-text">0 records until you press Stop or the service restarts.</p>
               <p id="recordingDetail" class="detail-text">No recording is active.</p>
+            </div>
+          </section>
+
+          <section id="moreSettingsPanel" class="section-panel" hidden data-section-group="more" data-section="settings">
+            <div class="panel"><div class="panel-heading"><h2>Overview settings</h2><span id="overviewSettingsState" class="state-text">Loading</span></div>
+              <form id="overviewSettingsForm" class="settings-form">
+                <label>Cold threshold <input id="comfortCold" type="number" step="0.1"></label>
+                <label>Comfort threshold <input id="comfortComfort" type="number" step="0.1"></label>
+                <label>Warm threshold <input id="comfortWarm" type="number" step="0.1"></label>
+                <label>Hot threshold <input id="comfortHot" type="number" step="0.1"></label>
+                <label>Usable battery (Ah) <input id="batteryCapacity" type="number" min="0.1" step="0.1"></label>
+                <label>Gas tank (litres) <input id="gasCapacity" type="number" min="0" step="0.1"></label>
+                <button class="primary-action" type="submit">Save settings</button>
+              </form>
             </div>
           </section>
         </section>

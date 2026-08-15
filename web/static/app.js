@@ -1,5 +1,8 @@
 /* global XturaNavigation */
 class XturaApi {
+  async getOverview() { return this.request("/v1/overview"); }
+  async getOverviewSettings() { return this.request("/v1/overview/settings"); }
+  async updateOverviewSettings(settings) { return this.request("/v1/overview/settings", { method: "PUT", body: settings }); }
   async getLightsState() {
     return this.request("/v1/lights/state");
   }
@@ -182,6 +185,8 @@ const state = {
   tracking: null,
   tracks: null,
   piStatus: null,
+  overview: null,
+  overviewSettings: null,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -264,6 +269,8 @@ function navigate(screen, section = null) {
 }
 
 function render() {
+  renderOverview();
+  renderOverviewSettings();
   renderLights();
   renderWater();
   renderHeating();
@@ -273,6 +280,30 @@ function render() {
   renderTracking();
   renderPiStatus();
   syncCountdownRefresh();
+}
+
+function overviewPercent(value) { return value === null || value === undefined ? "Unavailable" : `${Number(value).toFixed(0)}%`; }
+function renderOverview() {
+  const doc = state.overview;
+  if (!doc) return;
+  const temperature = byId("aldeTemperature");
+  if (temperature) temperature.textContent = doc.alde_temperature_c === undefined ? "Unavailable" : `${Number(doc.alde_temperature_c).toFixed(1)}C`;
+  if (byId("aldeState")) byId("aldeState").textContent = doc.alde_temperature_c === undefined ? "Unavailable" : "Available";
+  if (byId("aldeDetail")) byId("aldeDetail").textContent = doc.alde_temperature_c === undefined ? "No Alde reading received." : "Main temperature source";
+  if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
+  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : "Unavailable") : "Unavailable";
+  if (byId("batteryDetail")) byId("batteryDetail").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Estimated full in ${Number(doc.battery.eta_hours).toFixed(1)}h` : doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a).toFixed(1)}A · No ETA` : "Battery reading unavailable.";
+  if (byId("freshWater")) byId("freshWater").textContent = overviewPercent(doc.fresh_water_percent);
+  if (byId("greyWater")) byId("greyWater").textContent = overviewPercent(doc.grey_water_percent);
+}
+
+function renderOverviewSettings() {
+  const settings = state.overviewSettings;
+  if (!settings) return;
+  const values = settings.comfort_thresholds || [];
+  ["comfortCold", "comfortComfort", "comfortWarm", "comfortHot"].forEach((id, index) => { if (byId(id)) byId(id).value = values[index] ?? ""; });
+  if (byId("batteryCapacity")) byId("batteryCapacity").value = settings.usable_battery_capacity_ah ?? "";
+  if (byId("gasCapacity")) byId("gasCapacity").value = settings.gas_tank_capacity_litres ?? "";
 }
 
 function renderBuild() {
@@ -1162,7 +1193,7 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus] = await Promise.all([
+  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus, overview, overviewSettings] = await Promise.all([
     api.getLightsState(),
     api.getWaterState(),
     api.getHeatingMode(),
@@ -1173,6 +1204,8 @@ async function loadInitialState() {
     api.trackingState(),
     api.trackList(),
     api.getPiStatus(),
+    api.getOverview(),
+    api.getOverviewSettings(),
   ]);
   state.lights = lights;
   state.water = water;
@@ -1184,6 +1217,8 @@ async function loadInitialState() {
   state.tracking = tracking;
   state.tracks = tracks;
   state.piStatus = piStatus;
+  state.overview = overview;
+  state.overviewSettings = overviewSettings;
   setStatus("Loaded");
   render();
 }
@@ -1222,6 +1257,10 @@ function connectEvents() {
   });
   events.addEventListener("pi.state_changed", (event) => {
     state.piStatus = JSON.parse(event.data).payload;
+    render();
+  });
+  events.addEventListener("overview.state_changed", (event) => {
+    state.overview = JSON.parse(event.data).payload;
     render();
   });
 }
@@ -1384,6 +1423,19 @@ function bindActions() {
     } catch (error) {
       setStatus(error.message, "error");
     }
+  });
+  const settingsForm = byId("overviewSettingsForm");
+  if (settingsForm) settingsForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const ids = ["comfortCold", "comfortComfort", "comfortWarm", "comfortHot"];
+    try {
+      state.overviewSettings = await withRequest(() => api.updateOverviewSettings({
+        comfort_thresholds: ids.map((id) => Number(byId(id).value)),
+        usable_battery_capacity_ah: Number(byId("batteryCapacity").value),
+        gas_tank_capacity_litres: Number(byId("gasCapacity").value),
+      }), "Saving overview settings");
+      renderOverviewSettings();
+    } catch (_) { return; }
   });
 }
 

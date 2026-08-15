@@ -7,6 +7,7 @@ test("parses defaults and nested routes", () => {
   assert.deepEqual(navigation.parse("#/controls"), { screen: "controls", section: "heating" });
   assert.deepEqual(navigation.parse("#/controls/water"), { screen: "controls", section: "water" });
   assert.deepEqual(navigation.parse("#/more/tools"), { screen: "more", section: "tools" });
+  assert.deepEqual(navigation.parse("#/more/settings"), { screen: "more", section: "settings" });
 });
 
 test("falls back for unavailable routes", () => {
@@ -17,4 +18,5 @@ test("falls back for unavailable routes", () => {
 test("writes canonical hashes", () => {
   assert.equal(navigation.toHash({ screen: "location", section: null }), "#/location");
   assert.equal(navigation.toHash({ screen: "controls", section: "lighting" }), "#/controls/lighting");
+  assert.equal(navigation.toHash({ screen: "more", section: "settings" }), "#/more/settings");
 });

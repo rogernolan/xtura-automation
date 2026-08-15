@@ -1,6 +1,6 @@
 /* eslint-env browser, node, es2020 */
 const defaults = Object.freeze({ controls: "heating", more: "system" });
-const sections = Object.freeze({ controls: new Set(["heating", "water", "lighting"]), more: new Set(["system", "tools"]) });
+const sections = Object.freeze({ controls: new Set(["heating", "water", "lighting"]), more: new Set(["system", "tools", "settings"]) });
 const screens = new Set(["overview", "controls", "location", "more"]);
 const fallback = () => ({ screen: "overview", section: null });
 
