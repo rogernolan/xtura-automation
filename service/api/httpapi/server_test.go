@@ -959,7 +959,7 @@ func TestHandlerServesPortraitMobileBackgroundStyle(t *testing.T) {
 		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.avif?v=1")`, `url("/static/xtura-background.avif?v=1")`} {
+	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.avif?v=1")`, `url("/static/xtura-background.avif?v=1")`, "body::before", "z-index: -1"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("stylesheet did not contain %q: %s", want, body)
 		}

@@ -29,10 +29,17 @@ body {
 body {
   margin: 0;
   background-color: var(--background);
+  color: var(--text);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background-image: linear-gradient(rgba(231, 226, 216, 0.4), rgba(231, 226, 216, 0.72)), url("/static/xtura-background.avif?v=1");
   background-position: center;
   background-size: cover;
-  color: var(--text);
 }
 
 button,
@@ -562,7 +569,7 @@ h2 {
 }
 
 @media (max-width: 759px) and (orientation: portrait) {
-  body {
+  body::before {
     background-image: linear-gradient(rgba(231, 226, 216, 0.4), rgba(231, 226, 216, 0.72)), url("/static/xtura-background-mobile.avif?v=1");
   }
 }
