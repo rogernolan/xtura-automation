@@ -40,7 +40,7 @@ class ElementStub {
   setAttribute() {}
 }
 
-function loadApp({ groupedElements, hash = "#/controls/water" }) {
+function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/controls/water" }) {
   const ids = [
     "statusMessage", "connectionStatus", "pageTitle", "overviewNav", "controlsNav", "locationNav", "moreNav",
     "overviewPanel", "controlsPanel", "locationPanel", "morePanel", "flashLights", "flashCount",
@@ -57,6 +57,7 @@ function loadApp({ groupedElements, hash = "#/controls/water" }) {
     querySelectorAll(selector) {
       if (selector === "[data-screen]") return [];
       if (selector === "[data-target]") return [];
+      if (selector === "select[data-section-group]") return selectElements;
       if (selector === "[data-section-group]") return groupedElements;
       if (selector === ".section-panel") return [];
       return [];
@@ -101,12 +102,33 @@ test("changing a control inside the water panel does not reset the section hash"
   const childControl = new ElementStub("greyScheduleDuration", { value: "45" });
   childControl.parentNode = waterPanel;
 
-  const { bindActions, window } = loadApp({ groupedElements: [controlsSelect, waterPanel] });
+  const { bindActions, window } = loadApp({
+    groupedElements: [controlsSelect, waterPanel],
+    selectElements: [controlsSelect],
+  });
   bindActions();
 
   childControl.dispatchEvent({ type: "change", bubbles: true });
 
   assert.equal(window.location.hash, "#/controls/water");
+});
+
+test("changing the controls dropdown navigates to the selected section", () => {
+  const controlsSelect = new ElementStub("controlsSection", {
+    dataset: { sectionGroup: "controls" },
+    value: "heating",
+  });
+
+  const { bindActions, window } = loadApp({
+    groupedElements: [controlsSelect],
+    hash: "#/controls/heating",
+  });
+  bindActions();
+
+  controlsSelect.value = "lighting";
+  controlsSelect.dispatchEvent({ type: "change", bubbles: true });
+
+  assert.equal(window.location.hash, "#/controls/lighting");
 });
 
 test("changing a control inside the tools panel does not reset the section hash", () => {
@@ -122,11 +144,30 @@ test("changing a control inside the tools panel does not reset the section hash"
 
   const { bindActions, window } = loadApp({
     groupedElements: [moreSelect, toolsPanel],
+    selectElements: [moreSelect],
     hash: "#/more/tools",
   });
   bindActions();
 
   childControl.dispatchEvent({ type: "change", bubbles: true });
+
+  assert.equal(window.location.hash, "#/more/tools");
+});
+
+test("changing the more dropdown navigates to the selected section", () => {
+  const moreSelect = new ElementStub("moreSection", {
+    dataset: { sectionGroup: "more" },
+    value: "system",
+  });
+
+  const { bindActions, window } = loadApp({
+    groupedElements: [moreSelect],
+    hash: "#/more/system",
+  });
+  bindActions();
+
+  moreSelect.value = "tools";
+  moreSelect.dispatchEvent({ type: "change", bubbles: true });
 
   assert.equal(window.location.hash, "#/more/tools");
 });
