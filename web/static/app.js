@@ -187,6 +187,7 @@ const state = {
   piStatus: null,
   overview: null,
   overviewSettings: null,
+  overviewSettingsDirty: false,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -286,12 +287,13 @@ function overviewPercent(value) { return value === null || value === undefined ?
 function renderOverview() {
   const doc = state.overview;
   if (!doc) return;
+  const stale = doc.status === "stale";
   const temperature = byId("aldeTemperature");
   if (temperature) temperature.textContent = doc.alde_temperature_c === undefined ? "Unavailable" : `${Number(doc.alde_temperature_c).toFixed(1)}C`;
-  if (byId("aldeState")) byId("aldeState").textContent = doc.alde_temperature_c === undefined ? "Unavailable" : "Available";
-  if (byId("aldeDetail")) byId("aldeDetail").textContent = doc.alde_temperature_c === undefined ? "No Alde reading received." : "Main temperature source";
+  if (byId("aldeState")) byId("aldeState").textContent = stale ? "Stale" : doc.alde_temperature_c === undefined ? "Unavailable" : "Available";
+  if (byId("aldeDetail")) byId("aldeDetail").textContent = stale ? "Garmin reading is stale." : doc.alde_temperature_c === undefined ? "No Alde reading received." : "Main temperature source";
   if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
-  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : "Unavailable") : "Unavailable";
+  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : doc.battery.status === "stale" ? "Stale" : "Unavailable") : "Unavailable";
   if (byId("batteryDetail")) byId("batteryDetail").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Estimated full in ${Number(doc.battery.eta_hours).toFixed(1)}h` : doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a).toFixed(1)}A · No ETA` : "Battery reading unavailable.";
   if (byId("freshWater")) byId("freshWater").textContent = overviewPercent(doc.fresh_water_percent);
   if (byId("greyWater")) byId("greyWater").textContent = overviewPercent(doc.grey_water_percent);
@@ -299,7 +301,7 @@ function renderOverview() {
 
 function renderOverviewSettings() {
   const settings = state.overviewSettings;
-  if (!settings) return;
+  if (!settings || state.overviewSettingsDirty) return;
   const values = settings.comfort_thresholds || [];
   ["comfortCold", "comfortComfort", "comfortWarm", "comfortHot"].forEach((id, index) => { if (byId(id)) byId(id).value = values[index] ?? ""; });
   if (byId("batteryCapacity")) byId("batteryCapacity").value = settings.usable_battery_capacity_ah ?? "";
@@ -1434,9 +1436,11 @@ function bindActions() {
         usable_battery_capacity_ah: Number(byId("batteryCapacity").value),
         gas_tank_capacity_litres: Number(byId("gasCapacity").value),
       }), "Saving overview settings");
+      state.overviewSettingsDirty = false;
       renderOverviewSettings();
     } catch (_) { return; }
   });
+  if (settingsForm) settingsForm.addEventListener("input", () => { state.overviewSettingsDirty = true; });
 }
 
 function flashCount() {

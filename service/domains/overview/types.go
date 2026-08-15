@@ -27,6 +27,7 @@ type Battery struct {
 }
 
 type Document struct {
+	Status            string     `json:"status"`
 	AldeTemperatureC  *float64   `json:"alde_temperature_c,omitempty"`
 	Battery           Battery    `json:"battery"`
 	FreshWaterPercent *float64   `json:"fresh_water_percent,omitempty"`

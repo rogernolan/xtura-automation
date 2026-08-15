@@ -4,23 +4,42 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/config"
 	"empirebus-tests/service/domains/overview"
 )
 
+const overviewStaleAfter = 30 * time.Second
+
 func (a *App) Overview() overview.Document {
 	telemetry := overview.Telemetry{}
 	if a.overviewTelemetry != nil {
 		telemetry = a.overviewTelemetry()
 	}
-	return a.overviewDocument(telemetry)
+	doc := a.overviewDocument(telemetry)
+	if a.adapter != nil && !a.adapter.Health().Connected && doc.Status == "available" {
+		expireOverviewDocument(&doc)
+	}
+	return doc
 }
 
 func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
-	settings := config.NormalizeOverview(a.rawConfig.Overview)
+	settings := config.NormalizeOverview(a.overviewConfig())
+	now := time.Now().UTC()
+	if a.now != nil {
+		now = a.now().UTC()
+	}
+	status := "unavailable"
+	if telemetry.UpdatedAt != nil {
+		status = "available"
+		if now.Sub(*telemetry.UpdatedAt) > overviewStaleAfter {
+			status = "stale"
+		}
+	}
 	doc := overview.Document{
+		Status:            status,
 		AldeTemperatureC:  telemetry.AldeTemperatureC,
 		FreshWaterPercent: telemetry.FreshWaterPercent,
 		GreyWaterPercent:  telemetry.GreyWaterPercent,
@@ -41,11 +60,30 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 			doc.Battery.Status = "not_charging"
 		}
 	}
+	if status == "stale" {
+		expireOverviewDocument(&doc)
+	}
 	return doc
 }
 
+func expireOverviewDocument(doc *overview.Document) {
+	doc.Status = "stale"
+	doc.AldeTemperatureC = nil
+	doc.FreshWaterPercent = nil
+	doc.GreyWaterPercent = nil
+	doc.Battery = overview.Battery{Status: "stale"}
+}
+
+func (a *App) overviewConfig() config.OverviewConfig {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	settings := a.rawConfig.Overview
+	settings.Comfort = append([]float64(nil), settings.Comfort...)
+	return settings
+}
+
 func (a *App) OverviewSettings() overview.Settings {
-	settings := config.NormalizeOverview(a.rawConfig.Overview)
+	settings := config.NormalizeOverview(a.overviewConfig())
 	return overview.Settings{Comfort: append([]float64(nil), settings.Comfort...), UsableBatteryCapacityAh: settings.UsableBatteryCapacityAh, GasTankCapacityLitres: settings.GasTankCapacityLitres}
 }
 
