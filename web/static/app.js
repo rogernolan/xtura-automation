@@ -234,11 +234,16 @@ function setConnection(message, tone = "normal") {
   element.dataset.tone = tone;
 }
 
+const screenTitles = { overview: "Overview", controls: "Controls", location: "Location", more: "More" };
+
 function applyRoute(route) {
   state.route = route;
   if (route.section) {
     state.sections[route.screen] = route.section;
   }
+  const title = screenTitles[route.screen] || "Xtura";
+  byId("pageTitle").textContent = title;
+  document.title = title;
   ["overview", "controls", "location", "more"].forEach((screen) => {
     byId(`${screen}Nav`).classList.toggle("is-active", route.screen === screen);
     byId(`${screen}Panel`).hidden = route.screen !== screen;

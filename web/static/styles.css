@@ -73,13 +73,6 @@ button:disabled {
   padding: 4px 4px 0;
 }
 
-.eyebrow {
-  margin: 0 0 3px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 h1 {
   margin: 0;
   font-size: 28px;

@@ -881,6 +881,7 @@ func TestHandlerServesWebIndex(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
+		`id="pageTitle">Overview<`,
 		`id="overviewNav" class="primary-nav-item" type="button" data-screen="overview" aria-controls="overviewPanel">Overview</button>`,
 		`id="controlsNav" class="primary-nav-item" type="button" data-screen="controls" aria-controls="controlsPanel">Controls</button>`,
 		`id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>`,
@@ -893,6 +894,9 @@ func TestHandlerServesWebIndex(t *testing.T) {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("missing %q", want)
 		}
+	}
+	if body := rr.Body.String(); strings.Contains(body, `class="eyebrow"`) {
+		t.Fatalf("index body must not contain the brand eyebrow: %s", body)
 	}
 	if body := rr.Body.String(); !strings.Contains(body, `id="piStatusPanel" class="panel"`) {
 		t.Fatalf("index body did not contain Pi status panel: %s", body)
@@ -928,7 +932,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange"} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange", "screenTitles", "document.title"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}
