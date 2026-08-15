@@ -20,10 +20,6 @@ func TestAppSamplesAndPublishesPiStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	waitForCondition(t, "pi status sample", func() bool {
-		return !app.HostStatus().SampledAt.IsZero()
-	})
-
 	stream, unsubscribe := app.Broker().Subscribe()
 	t.Cleanup(unsubscribe)
 	timeout := time.After(5 * time.Second)
@@ -35,6 +31,9 @@ func TestAppSamplesAndPublishesPiStatus(t *testing.T) {
 			}
 			metrics, ok := event.Payload.(host.Metrics)
 			if ok && !metrics.SampledAt.IsZero() {
+				if app.HostStatus().SampledAt.IsZero() {
+					t.Fatal("HostStatus().SampledAt is zero after receiving pi.state_changed")
+				}
 				return
 			}
 		case <-timeout:

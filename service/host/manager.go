@@ -95,11 +95,16 @@ func (m *Manager) Sample() {
 func (m *Manager) State() Metrics {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	lastErrorAt := m.lastErrorAt
+	if lastErrorAt != nil {
+		atCopy := *lastErrorAt
+		lastErrorAt = &atCopy
+	}
 	return Metrics{
 		SampledAt:   m.lastSampledAt,
 		Snapshot:    m.lastSnapshot,
 		LastError:   m.lastError,
-		LastErrorAt: m.lastErrorAt,
+		LastErrorAt: lastErrorAt,
 	}
 }
 

@@ -103,6 +103,8 @@ func runVcgencmdThrottled() (string, bool) {
 }
 
 // readRpiHwmonUndervoltage reads the rpi_hwmon undervoltage alarm files.
+// known is only true when at least one alarm file was successfully read; a
+// glob match with no readable file is not evidence of a clean power supply.
 func readRpiHwmonUndervoltage() (undervoltage bool, known bool) {
 	matches, err := filepath.Glob("/sys/devices/platform/soc/*/rpi_hwmon/hwmon/hwmon*/in*_lcrit_alarm")
 	if err != nil {
@@ -113,6 +115,9 @@ func readRpiHwmonUndervoltage() (undervoltage bool, known bool) {
 		if value == "1" {
 			return true, true
 		}
+		if value == "0" {
+			known = true
+		}
 	}
-	return false, len(matches) > 0
+	return false, known
 }

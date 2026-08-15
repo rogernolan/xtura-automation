@@ -86,7 +86,7 @@ func TestParseCpuinfoUnavailable(t *testing.T) {
 func TestDecodeThrottled(t *testing.T) {
 	current, latched, ok := decodeThrottled("0x10000")
 	if !ok {
-		t.Fatal("decodeThrottled reported not ok for 0x50000")
+		t.Fatal("decodeThrottled reported not ok for 0x10000")
 	}
 	if current.underVoltage || current.frequencyCapped || current.throttled || current.softTempLimit {
 		t.Fatalf("unexpected current flags: %#v", current)
