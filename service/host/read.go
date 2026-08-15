@@ -69,8 +69,9 @@ func readDiskUsage() []DiskUsage {
 	return entries
 }
 
-// readPowerStatus prefers vcgencmd get_throttled, falls back to the rpi_hwmon
-// sysfs undervoltage alarms, and reports unavailable when neither works.
+// readPowerStatus prefers vcgencmd get_throttled, falls back to the
+// raspberrypi-hwmon sysfs undervoltage alarm, and reports unavailable when
+// neither works.
 func readPowerStatus() PowerStatus {
 	if raw, ok := runVcgencmdThrottled(); ok {
 		if current, latched, ok := decodeThrottled(raw); ok {
@@ -102,21 +103,34 @@ func runVcgencmdThrottled() (string, bool) {
 	return strings.TrimPrefix(raw, "throttled="), true
 }
 
-// readRpiHwmonUndervoltage reads the rpi_hwmon undervoltage alarm files.
-// known is only true when at least one alarm file was successfully read; a
-// glob match with no readable file is not evidence of a clean power supply.
+// readRpiHwmonUndervoltage reads the raspberrypi-hwmon undervoltage alarm
+// (in*_lcrit_alarm). The device is discovered through /sys/class/hwmon by its
+// "rpi_volt" name attribute rather than a hardcoded platform path, so it works
+// regardless of where the platform device hangs in the sysfs tree. known is
+// only true when at least one alarm file was successfully read; a device with
+// no readable alarm file is not evidence of a clean power supply.
 func readRpiHwmonUndervoltage() (undervoltage bool, known bool) {
-	matches, err := filepath.Glob("/sys/devices/platform/soc/*/rpi_hwmon/hwmon/hwmon*/in*_lcrit_alarm")
+	names, err := filepath.Glob("/sys/class/hwmon/hwmon*/name")
 	if err != nil {
 		return false, false
 	}
-	for _, path := range matches {
-		value := strings.TrimSpace(readFileBestEffort(path))
-		if value == "1" {
-			return true, true
+	for _, nameFile := range names {
+		if strings.TrimSpace(readFileBestEffort(nameFile)) != "rpi_volt" {
+			continue
 		}
-		if value == "0" {
-			known = true
+		dir := filepath.Dir(nameFile)
+		alarms, err := filepath.Glob(filepath.Join(dir, "in*_lcrit_alarm"))
+		if err != nil {
+			continue
+		}
+		for _, path := range alarms {
+			value := strings.TrimSpace(readFileBestEffort(path))
+			if value == "1" {
+				return true, true
+			}
+			if value == "0" {
+				known = true
+			}
 		}
 	}
 	return false, known
