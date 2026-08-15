@@ -171,6 +171,7 @@ const fallbackVisibleSlots = [
 const api = new XturaApi();
 const state = {
   route: { screen: "overview", section: null },
+  sections: { controls: "heating", more: "system" },
   build: null,
   lights: null,
   water: null,
@@ -235,6 +236,9 @@ function setConnection(message, tone = "normal") {
 
 function applyRoute(route) {
   state.route = route;
+  if (route.section) {
+    state.sections[route.screen] = route.section;
+  }
   ["overview", "controls", "location", "more"].forEach((screen) => {
     byId(`${screen}Nav`).classList.toggle("is-active", route.screen === screen);
     byId(`${screen}Panel`).hidden = route.screen !== screen;
@@ -1221,7 +1225,7 @@ function connectEvents() {
 
 function bindActions() {
   document.querySelectorAll("[data-screen]").forEach((button) => {
-    button.addEventListener("click", () => navigate(button.dataset.screen));
+    button.addEventListener("click", () => navigate(button.dataset.screen, state.sections[button.dataset.screen] || null));
   });
   document.querySelectorAll("[data-section-group]").forEach((button) => {
     button.addEventListener("click", () => navigate(button.dataset.sectionGroup, button.dataset.section));

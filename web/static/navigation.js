@@ -18,6 +18,6 @@ function toHash(route) {
   return parsed.section ? `#/${parsed.screen}/${parsed.section}` : `#/${parsed.screen}`;
 }
 
-const api = { parse, toHash };
-globalThis.XturaNavigation = api;
-if (typeof module !== "undefined") module.exports = api;
+const navigationApi = { parse, toHash };
+globalThis.XturaNavigation = navigationApi;
+if (typeof module !== "undefined") module.exports = navigationApi;
