@@ -71,6 +71,10 @@ class XturaApi {
     return this.request("/v1/build");
   }
 
+  async getPiStatus() {
+    return this.request("/v1/pi/state");
+  }
+
   async saveHeatingSchedule(document) {
     return this.request("/v1/automation/heating-schedule", {
       method: "PUT",
@@ -175,6 +179,7 @@ const state = {
   trackingSettings: null,
   tracking: null,
   tracks: null,
+  piStatus: null,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -232,11 +237,11 @@ function setActiveTab(tab) {
   byId("lightingTab").classList.toggle("is-active", tab === "lighting");
   byId("waterTab").classList.toggle("is-active", tab === "water");
   byId("heatingTab").classList.toggle("is-active", tab === "heating");
-  byId("settingsTab").classList.toggle("is-active", tab === "settings");
+  byId("toolsTab").classList.toggle("is-active", tab === "tools");
   byId("lightingPanel").hidden = tab !== "lighting";
   byId("waterPanel").hidden = tab !== "water";
   byId("heatingPanel").hidden = tab !== "heating";
-  byId("settingsPanel").hidden = tab !== "settings";
+  byId("toolsPanel").hidden = tab !== "tools";
 }
 
 function render() {
@@ -247,6 +252,7 @@ function render() {
   renderBuild();
   renderRecording();
   renderTracking();
+  renderPiStatus();
   syncCountdownRefresh();
 }
 
@@ -531,6 +537,142 @@ async function applyTrackingSettings(next) {
   } catch (_) {
     return;
   }
+}
+
+function renderPiStatus() {
+  const status = state.piStatus;
+  const panel = byId("piStatusPanel");
+  if (!status) {
+    panel.setAttribute("aria-busy", "true");
+    byId("piPowerState").textContent = "Loading";
+    byId("piDetail").textContent = "Waiting for Pi status.";
+    byId("piStats").innerHTML = "";
+    return;
+  }
+  panel.setAttribute("aria-busy", "false");
+  byId("piPowerState").textContent = piPowerStateText(status);
+  byId("piDetail").textContent = status.last_error
+    ? `Last error: ${status.last_error}`
+    : "Host metrics update every few seconds.";
+  renderPiStats(status);
+}
+
+function piPowerStateText(status) {
+  if (!status.power) {
+    return "Unknown";
+  }
+  if (status.power.status === "ok") {
+    return "OK";
+  }
+  if (status.power.status === "warning") {
+    return "Warning";
+  }
+  return "Unavailable";
+}
+
+function renderPiStats(status) {
+  const container = byId("piStats");
+  container.innerHTML = "";
+  if (!status.sampled_at) {
+    container.appendChild(piStatRow("Status", "No sample yet"));
+    return;
+  }
+  if (status.model || status.cores > 0) {
+    container.appendChild(piStatRow("CPU", status.cores > 0 ? `${status.model} · ${status.cores} cores` : status.model));
+  }
+  container.appendChild(piStatRow("Load", formatLoad(status.load)));
+  container.appendChild(piStatRow("Memory", formatMemory(status.memory)));
+  (status.disk || []).forEach((disk) => {
+    container.appendChild(piStatRow(`Disk ${disk.mount}`, formatPercent(disk.used_percent)));
+  });
+  container.appendChild(piStatRow("Temperature", status.temperature_c === undefined ? "Unavailable" : `${Number(status.temperature_c).toFixed(1)}C`));
+  container.appendChild(piStatRow("Uptime", formatUptime(status.uptime_seconds)));
+  container.appendChild(piStatRow("Power", formatPower(status.power)));
+}
+
+function piStatRow(label, value) {
+  const row = document.createElement("div");
+  row.className = "pi-stat-row";
+  const key = document.createElement("span");
+  key.className = "pi-stat-label";
+  key.textContent = label;
+  const val = document.createElement("span");
+  val.className = "pi-stat-value";
+  val.textContent = value;
+  row.append(key, val);
+  return row;
+}
+
+function formatLoad(load) {
+  if (!Array.isArray(load) || load.length === 0) {
+    return "Unavailable";
+  }
+  return load.map((value) => Number(value).toFixed(2)).join(" / ");
+}
+
+function formatMemory(memory) {
+  if (!memory || !memory.total_bytes) {
+    return "Unavailable";
+  }
+  return `${Math.round(Number(memory.used_percent))}% used · ${formatBytes(memory.available_bytes)} free`;
+}
+
+function formatPercent(value) {
+  if (!Number.isFinite(Number(value))) {
+    return "Unavailable";
+  }
+  return `${Math.round(Number(value))}%`;
+}
+
+function formatUptime(seconds) {
+  const total = Math.floor(Number(seconds) || 0);
+  if (total <= 0) {
+    return "Unavailable";
+  }
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+const powerIssueLabels = {
+  under_voltage: "under-voltage",
+  frequency_capped: "frequency capped",
+  throttled: "throttled",
+  soft_temp_limit: "soft temp limit",
+};
+
+function formatPower(power) {
+  if (!power || power.status === "unavailable") {
+    return "Unavailable";
+  }
+  if (power.status === "ok") {
+    return "OK";
+  }
+  const parts = [];
+  if (power.under_voltage) {
+    parts.push("under-voltage now");
+  }
+  if (power.frequency_capped) {
+    parts.push("frequency capped now");
+  }
+  if (power.throttled) {
+    parts.push("throttled now");
+  }
+  if (power.soft_temp_limit) {
+    parts.push("soft temp limit now");
+  }
+  (power.occurred_since_boot || []).forEach((token) => {
+    const label = powerIssueLabels[token] || token;
+    parts.push(`${label} since boot`);
+  });
+  return parts.length > 0 ? parts.join("; ") : "Warning";
 }
 
 function renderLights() {
@@ -1001,7 +1143,7 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks] = await Promise.all([
+  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus] = await Promise.all([
     api.getLightsState(),
     api.getWaterState(),
     api.getHeatingMode(),
@@ -1011,6 +1153,7 @@ async function loadInitialState() {
     api.trackingSettings(),
     api.trackingState(),
     api.trackList(),
+    api.getPiStatus(),
   ]);
   state.lights = lights;
   state.water = water;
@@ -1021,6 +1164,7 @@ async function loadInitialState() {
   state.trackingSettings = trackingSettings;
   state.tracking = tracking;
   state.tracks = tracks;
+  state.piStatus = piStatus;
   setStatus("Loaded");
   render();
 }
@@ -1057,13 +1201,17 @@ function connectEvents() {
     state.tracking = JSON.parse(event.data).payload;
     render();
   });
+  events.addEventListener("pi.state_changed", (event) => {
+    state.piStatus = JSON.parse(event.data).payload;
+    render();
+  });
 }
 
 function bindActions() {
   byId("lightingTab").addEventListener("click", () => setActiveTab("lighting"));
   byId("waterTab").addEventListener("click", () => setActiveTab("water"));
   byId("heatingTab").addEventListener("click", () => setActiveTab("heating"));
-  byId("settingsTab").addEventListener("click", () => setActiveTab("settings"));
+  byId("toolsTab").addEventListener("click", () => setActiveTab("tools"));
   byId("flashLights").addEventListener("click", async () => {
     try {
       const count = flashCount();

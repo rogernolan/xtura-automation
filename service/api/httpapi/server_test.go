@@ -880,10 +880,13 @@ func TestHandlerServesWebIndex(t *testing.T) {
 			t.Fatalf("index body did not contain versioned asset %q: %s", want, rr.Body.String())
 		}
 	}
-	for _, want := range []string{`id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>`, `id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>`, `id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>`, `id="settingsTab" class="tab" type="button" aria-controls="settingsPanel">Settings</button>`} {
+	for _, want := range []string{`id="lightingTab" class="tab is-active" type="button" aria-controls="lightingPanel">Light</button>`, `id="waterTab" class="tab" type="button" aria-controls="waterPanel">Water</button>`, `id="heatingTab" class="tab" type="button" aria-controls="heatingPanel">Heat</button>`, `id="toolsTab" class="tab" type="button" aria-controls="toolsPanel">Tools</button>`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("index body did not contain compact tab %q: %s", want, rr.Body.String())
 		}
+	}
+	if body := rr.Body.String(); !strings.Contains(body, `id="piStatusPanel" class="panel"`) {
+		t.Fatalf("index body did not contain Pi status panel: %s", body)
 	}
 }
 
@@ -916,7 +919,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild"} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}

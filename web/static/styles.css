@@ -520,6 +520,34 @@ h2 {
   color: var(--danger);
 }
 
+.pi-stats {
+  display: grid;
+  gap: 6px;
+}
+
+.pi-stat-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.pi-stat-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pi-stat-value {
+  font-size: 13px;
+  font-weight: 850;
+  text-align: right;
+}
+
 @media (min-width: 760px) {
   .app-shell {
     align-items: center;
