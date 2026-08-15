@@ -14,6 +14,7 @@ import (
 
 type Config struct {
 	Garmin     GarminConfig     `yaml:"garmin"`
+	Host       HostConfig       `yaml:"host,omitempty"`
 	Location   LocationConfig   `yaml:"location,omitempty"`
 	Tracking   TrackingConfig   `yaml:"tracking,omitempty"`
 	Automation AutomationConfig `yaml:"automation"`
@@ -25,6 +26,11 @@ type GarminConfig struct {
 	Origin            string        `yaml:"origin,omitempty"`
 	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
 	TraceWindow       time.Duration `yaml:"trace_window,omitempty"`
+}
+
+// HostConfig controls the Pi status host metric sampler.
+type HostConfig struct {
+	SampleInterval time.Duration `yaml:"sample_interval,omitempty"`
 }
 
 type LocationConfig struct {
@@ -115,10 +121,16 @@ type HeatingSchedulePeriodDocument struct {
 
 type NormalizedConfig struct {
 	Garmin     GarminConfig
+	Host       NormalizedHost
 	Location   NormalizedLocation
 	Tracking   NormalizedTracking
 	API        APIConfig
 	Automation NormalizedAutomation
+}
+
+// NormalizedHost is the resolved host metric sampler config.
+type NormalizedHost struct {
+	SampleInterval time.Duration
 }
 
 type NormalizedLocation struct {
@@ -191,6 +203,9 @@ func (c Config) Validate() error {
 	}
 	if c.Garmin.HeartbeatInterval <= 0 {
 		problems = append(problems, "garmin.heartbeat_interval must be greater than zero")
+	}
+	if c.Host.SampleInterval < 0 {
+		problems = append(problems, "host.sample_interval must not be negative")
 	}
 	if c.Location.Enabled {
 		provider := strings.TrimSpace(c.Location.Provider)
@@ -295,6 +310,7 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 	}
 	out := NormalizedConfig{
 		Garmin:   c.Garmin,
+		Host:     normalizeHost(c.Host),
 		Location: normalizeLocation(c.Location),
 		Tracking: normalizeTracking(c.Tracking),
 		API:      c.API,
@@ -373,6 +389,14 @@ func normalizeLocation(in LocationConfig) NormalizedLocation {
 	}
 	if out.Movement.MinDistanceMeters == 0 {
 		out.Movement.MinDistanceMeters = 250
+	}
+	return out
+}
+
+func normalizeHost(in HostConfig) NormalizedHost {
+	out := NormalizedHost{SampleInterval: in.SampleInterval}
+	if out.SampleInterval <= 0 {
+		out.SampleInterval = 5 * time.Second
 	}
 	return out
 }

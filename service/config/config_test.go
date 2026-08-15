@@ -375,3 +375,67 @@ func TestHeatingScheduleDocumentRoundTrip(t *testing.T) {
 func ptrBool(v bool) *bool {
 	return &v
 }
+
+func TestNormalizeHostSampleIntervalDefault(t *testing.T) {
+	cfg := Config{
+		Garmin: GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},
+		Automation: AutomationConfig{
+			Timezone: "Europe/London",
+			HeatingPrograms: []HeatingProgramConfig{{
+				ID:      "test",
+				Days:    []string{"mon"},
+				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
+			}},
+		},
+		API: APIConfig{Listen: ":8080"},
+	}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Host.SampleInterval; got != 5*time.Second {
+		t.Fatalf("host sample interval = %s, want 5s", got)
+	}
+}
+
+func TestNormalizeHostSampleIntervalFromConfig(t *testing.T) {
+	cfg := Config{
+		Garmin: GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},
+		Host:   HostConfig{SampleInterval: 2 * time.Second},
+		Automation: AutomationConfig{
+			Timezone: "Europe/London",
+			HeatingPrograms: []HeatingProgramConfig{{
+				ID:      "test",
+				Days:    []string{"mon"},
+				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
+			}},
+		},
+		API: APIConfig{Listen: ":8080"},
+	}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := normalized.Host.SampleInterval; got != 2*time.Second {
+		t.Fatalf("host sample interval = %s, want 2s", got)
+	}
+}
+
+func TestValidateRejectsNegativeHostSampleInterval(t *testing.T) {
+	cfg := Config{
+		Garmin: GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},
+		Host:   HostConfig{SampleInterval: -1 * time.Second},
+		Automation: AutomationConfig{
+			Timezone: "Europe/London",
+			HeatingPrograms: []HeatingProgramConfig{{
+				ID:      "test",
+				Days:    []string{"mon"},
+				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
+			}},
+		},
+		API: APIConfig{Listen: ":8080"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected validation error for negative host.sample_interval")
+	}
+}
