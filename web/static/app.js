@@ -1230,7 +1230,7 @@ function bindActions() {
   document.querySelectorAll("[data-screen]").forEach((button) => {
     button.addEventListener("click", () => navigate(button.dataset.screen, state.sections[button.dataset.screen] || null));
   });
-  document.querySelectorAll("[data-section-group]").forEach((select) => {
+  document.querySelectorAll("select[data-section-group]").forEach((select) => {
     select.addEventListener("change", () => navigate(select.dataset.sectionGroup, select.value));
   });
   byId("flashLights").addEventListener("click", async () => {
