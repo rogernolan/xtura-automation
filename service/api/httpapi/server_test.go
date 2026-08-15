@@ -18,6 +18,7 @@ import (
 	domainheating "empirebus-tests/service/domains/heating"
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
+	"empirebus-tests/service/domains/overview"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
@@ -55,6 +56,9 @@ type fakeApp struct {
 	trackReadNames     *[]string
 	trackDeleteErr     error
 	trackDeleteNames   *[]string
+	overview           overview.Document
+	overviewSettings   overview.Settings
+	updateOverviewErr  error
 }
 
 func (f fakeApp) Health() runtime.ServiceHealthView {
@@ -169,6 +173,12 @@ func (f fakeApp) TrackingSettings() tracking.Settings {
 	return f.trackingSettings
 }
 
+func (f fakeApp) Overview() overview.Document         { return f.overview }
+func (f fakeApp) OverviewSettings() overview.Settings { return f.overviewSettings }
+func (f fakeApp) UpdateOverviewSettings(_ context.Context, settings overview.Settings) (overview.Settings, error) {
+	return settings, f.updateOverviewErr
+}
+
 func (f fakeApp) TrackingDirectory() string {
 	return f.trackingDir
 }
@@ -242,6 +252,29 @@ func TestHandlerRoutesBuild(t *testing.T) {
 	}
 	if view.GitSHA != "dev" {
 		t.Fatalf("got git_sha %q", view.GitSHA)
+	}
+}
+
+func TestHandlerRoutesOverviewAndSettings(t *testing.T) {
+	settings := overview.Settings{Comfort: []float64{10, 18, 24, 30}, UsableBatteryCapacityAh: 100}
+	server := New(fakeApp{broker: events.NewBroker(1), overviewSettings: settings})
+	for _, path := range []string{"/v1/overview", "/v1/overview/settings"} {
+		rr := httptest.NewRecorder()
+		server.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s: got %d", path, rr.Code)
+		}
+	}
+	body, _ := json.Marshal(settings)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPut, "/v1/overview/settings", bytes.NewReader(body)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT settings: got %d body=%s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/overview", nil))
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST overview: got %d", rr.Code)
 	}
 }
 

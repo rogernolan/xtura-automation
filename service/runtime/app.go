@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	domainheating "empirebus-tests/service/domains/heating"
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
+	"empirebus-tests/service/domains/overview"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
@@ -60,6 +62,10 @@ type TimezoneResolver interface {
 	Timezone(context.Context, float64, float64) (string, error)
 }
 
+type OverviewTelemetryProvider interface {
+	OverviewTelemetry() overview.Telemetry
+}
+
 type App struct {
 	startedAt             time.Time
 	cfg                   config.NormalizedConfig
@@ -80,6 +86,7 @@ type App struct {
 	recording             *recording.Manager
 	host                  *host.Manager
 	tracking              *tracking.Manager
+	overviewTelemetry     func() overview.Telemetry
 	sleep                 func(time.Duration)
 	now                   func() time.Time
 
@@ -207,6 +214,10 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	if controller, ok := interface{}(adapter).(WaterController); ok {
 		water = controller
 	}
+	overviewTelemetry := func() overview.Telemetry { return overview.Telemetry{} }
+	if provider, ok := interface{}(adapter).(OverviewTelemetryProvider); ok {
+		overviewTelemetry = provider.OverviewTelemetry
+	}
 	app := &App{
 		startedAt:             time.Now().UTC(),
 		cfg:                   cfg,
@@ -224,6 +235,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		recording:             recorder,
 		host:                  hostManager,
 		tracking:              trackingManager,
+		overviewTelemetry:     overviewTelemetry,
 		now:                   time.Now,
 		schedulerWake:         make(chan struct{}, 1),
 		waterSchedulerWake:    make(chan struct{}, 1),
@@ -775,12 +787,18 @@ func (a *App) publishStateLoop(ctx context.Context) {
 	var last domainheating.State
 	var lastLocation domainlocation.State
 	var lastWater domainwater.State
+	var lastOverview overview.Document
 	lastConnected := false
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			currentOverview := a.Overview()
+			if !reflect.DeepEqual(currentOverview, lastOverview) {
+				lastOverview = currentOverview
+				a.broker.Publish(events.Event{Type: "overview.state_changed", Timestamp: time.Now().UTC(), Payload: currentOverview})
+			}
 			current := a.adapter.CurrentState()
 			if current != last {
 				last = current

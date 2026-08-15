@@ -48,6 +48,12 @@ tracking:
   sample_interval: 5s
   dir: /var/lib/xtura/tracks
 
+overview:
+  usable_battery_capacity_ah: 100
+  # Optional Mopeka capacity; Garmin gas telemetry is not inferred.
+  gas_tank_capacity_litres: 0
+  comfort_thresholds: [10, 18, 24, 30]
+
 host:
   # How often the Pi status pane samples host metrics. Zero uses the 5s default.
   sample_interval: 5s

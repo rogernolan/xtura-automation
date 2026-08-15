@@ -17,8 +17,15 @@ type Config struct {
 	Host       HostConfig       `yaml:"host,omitempty"`
 	Location   LocationConfig   `yaml:"location,omitempty"`
 	Tracking   TrackingConfig   `yaml:"tracking,omitempty"`
+	Overview   OverviewConfig   `yaml:"overview,omitempty"`
 	Automation AutomationConfig `yaml:"automation"`
 	API        APIConfig        `yaml:"api"`
+}
+
+type OverviewConfig struct {
+	UsableBatteryCapacityAh float64   `yaml:"usable_battery_capacity_ah,omitempty"`
+	GasTankCapacityLitres   float64   `yaml:"gas_tank_capacity_litres,omitempty"`
+	Comfort                 []float64 `yaml:"comfort_thresholds,omitempty"`
 }
 
 type GarminConfig struct {
@@ -124,6 +131,7 @@ type NormalizedConfig struct {
 	Host       NormalizedHost
 	Location   NormalizedLocation
 	Tracking   NormalizedTracking
+	Overview   OverviewConfig
 	API        APIConfig
 	Automation NormalizedAutomation
 }
@@ -255,6 +263,25 @@ func (c Config) Validate() error {
 	if c.Tracking.SampleInterval != 0 && (c.Tracking.SampleInterval < 1*time.Second || c.Tracking.SampleInterval > 3600*time.Second) {
 		problems = append(problems, "tracking.sample_interval must be between 1s and 3600s")
 	}
+	overviewConfigured := c.Overview.UsableBatteryCapacityAh != 0 || c.Overview.GasTankCapacityLitres != 0 || len(c.Overview.Comfort) > 0
+	if overviewConfigured && c.Overview.UsableBatteryCapacityAh <= 0 {
+		problems = append(problems, "overview.usable_battery_capacity_ah must be greater than zero")
+	}
+	if c.Overview.GasTankCapacityLitres < 0 {
+		problems = append(problems, "overview.gas_tank_capacity_litres must be greater than zero")
+	}
+	if len(c.Overview.Comfort) > 0 {
+		if len(c.Overview.Comfort) != 4 {
+			problems = append(problems, "overview.comfort_thresholds must contain four ordered values")
+		} else {
+			for i := 1; i < len(c.Overview.Comfort); i++ {
+				if c.Overview.Comfort[i] <= c.Overview.Comfort[i-1] {
+					problems = append(problems, "overview.comfort_thresholds must be ordered")
+					break
+				}
+			}
+		}
+	}
 	if (c.Tracking.WhenEngineOn != nil || c.Tracking.SampleInterval != 0 || c.Tracking.Dir != "") && !c.Location.Enabled {
 		problems = append(problems, "tracking requires location.enabled")
 	}
@@ -313,6 +340,7 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		Host:     normalizeHost(c.Host),
 		Location: normalizeLocation(c.Location),
 		Tracking: normalizeTracking(c.Tracking),
+		Overview: normalizeOverview(c.Overview),
 		API:      c.API,
 		Automation: NormalizedAutomation{
 			Location:        loc,
@@ -328,6 +356,23 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 	}
 	return out, nil
 }
+
+func normalizeOverview(in OverviewConfig) OverviewConfig {
+	out := in
+	if out.UsableBatteryCapacityAh == 0 {
+		out.UsableBatteryCapacityAh = 100
+	}
+	if out.GasTankCapacityLitres == 0 {
+		out.GasTankCapacityLitres = 0
+	}
+	if len(out.Comfort) == 0 {
+		out.Comfort = []float64{10, 18, 24, 30}
+	}
+	out.Comfort = append([]float64(nil), out.Comfort...)
+	return out
+}
+
+func NormalizeOverview(in OverviewConfig) OverviewConfig { return normalizeOverview(in) }
 
 func normalizeLocation(in LocationConfig) NormalizedLocation {
 	out := NormalizedLocation{
