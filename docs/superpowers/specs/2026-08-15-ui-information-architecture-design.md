@@ -27,6 +27,8 @@ They are grouping destinations rather than separate catch-all screens. The
 selected section is retained while navigating away and back. Controls defaults
 to Heating; More defaults to System.
 
+Looks and feel/branding remains the same but with increased contrast of transparent controls over the background image.
+
 ### Screen ownership
 
 #### Overview
