@@ -48,6 +48,7 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     "recordingDuration", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval",
     "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
     "scheduleForm",
+    "overviewSettingsForm", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
   const document = {
@@ -87,9 +88,18 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { bindActions };`, context, { filename: "app.js" });
-  return { bindActions: context.module.exports.bindActions, window };
+  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, state };`, context, { filename: "app.js" });
+  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, state: context.module.exports.state, window, elements };
 }
+
+test("rerendering overview does not overwrite dirty settings fields", () => {
+  const { renderOverviewSettings, state, elements } = loadApp({ groupedElements: [] });
+  state.overviewSettings = { comfort_thresholds: [10, 18, 24, 30], usable_battery_capacity_ah: 100, gas_tank_capacity_litres: 0 };
+  state.overviewSettingsDirty = true;
+  elements.comfortCold.value = "12";
+  renderOverviewSettings();
+  assert.equal(elements.comfortCold.value, "12");
+});
 
 test("changing a control inside the water panel does not reset the section hash", () => {
   const waterPanel = new ElementStub("controlsWaterPanel", {

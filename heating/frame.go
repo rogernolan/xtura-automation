@@ -14,19 +14,23 @@ const (
 )
 
 const (
-	SignalHeatingPower      = 101
-	SignalHeatingBusy       = 102
-	SignalHeatingError      = 103
-	SignalHeatingTargetTemp = 105
-	SignalHeatingActualTemp = 106
-	SignalHeatingTempUp     = 107
-	SignalHeatingTempDown   = 108
-	SignalHeatingGas        = 110
-	SignalHeatingGasText    = 111
-	SignalHeatingElec1      = 113
-	SignalHeatingElec2      = 114
-	SignalHeatingElec3      = 115
-	SignalHeatingPump       = 119
+	SignalFreshWaterPercent           = 12
+	SignalGreyWaterPercent            = 13
+	SignalHeatingPower                = 101
+	SignalHeatingBusy                 = 102
+	SignalHeatingError                = 103
+	SignalHeatingTargetTemp           = 105
+	SignalHeatingActualTemp           = 106
+	SignalHeatingTempUp               = 107
+	SignalHeatingTempDown             = 108
+	SignalHeatingGas                  = 110
+	SignalHeatingGasText              = 111
+	SignalHeatingElec1                = 113
+	SignalHeatingElec2                = 114
+	SignalHeatingElec3                = 115
+	SignalHeatingPump                 = 119
+	SignalBatteryCurrentA             = 212
+	SignalBatteryStateOfChargePercent = 213
 )
 
 type WireFrame struct {

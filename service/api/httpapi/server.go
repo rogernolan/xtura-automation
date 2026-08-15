@@ -17,6 +17,7 @@ import (
 	"empirebus-tests/service/config"
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
+	"empirebus-tests/service/domains/overview"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
@@ -57,6 +58,9 @@ type Application interface {
 	StopRecording(context.Context) recording.State
 	TrackingSettings() tracking.Settings
 	TrackingDirectory() string
+	Overview() overview.Document
+	OverviewSettings() overview.Settings
+	UpdateOverviewSettings(context.Context, overview.Settings) (overview.Settings, error)
 	UpdateTrackingSettings(context.Context, tracking.Settings) (tracking.Settings, error)
 	TrackingState() tracking.State
 	StartTracking(context.Context) (tracking.State, error)
@@ -75,6 +79,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/health", s.handleHealth)
 	mux.HandleFunc("/v1/build", s.handleBuild)
+	mux.HandleFunc("/v1/overview", s.handleOverview)
+	mux.HandleFunc("/v1/overview/settings", s.handleOverviewSettings)
 	mux.HandleFunc("/v1/heating/state", s.handleHeatingState)
 	mux.HandleFunc("/v1/heating/power", s.handleHeatingPower)
 	mux.HandleFunc("/v1/heating/target-temperature", s.handleHeatingTargetTemperature)
@@ -107,6 +113,39 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/events", s.handleEvents)
 	registerStaticRoutes(mux)
 	return mux
+}
+
+func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.Overview())
+}
+
+func (s *Server) handleOverviewSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.app.OverviewSettings())
+	case http.MethodPut:
+		var settings overview.Settings
+		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+			return
+		}
+		updated, err := s.app.UpdateOverviewSettings(r.Context(), settings)
+		if err != nil {
+			if isValidationError(err) || strings.HasPrefix(err.Error(), "overview.") {
+				writeValidationError(w, err)
+			} else {
+				writeError(w, http.StatusBadGateway, err)
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	default:
+		methodNotAllowed(w)
+	}
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

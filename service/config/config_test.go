@@ -439,3 +439,18 @@ func TestValidateRejectsNegativeHostSampleInterval(t *testing.T) {
 		t.Fatal("expected validation error for negative host.sample_interval")
 	}
 }
+
+func TestValidateRejectsInvalidOverviewSettings(t *testing.T) {
+	cfg := Config{
+		Garmin:     GarminConfig{WSURL: "ws://example", HeartbeatInterval: 4 * time.Second},
+		Automation: AutomationConfig{Timezone: "Europe/London", HeatingPrograms: []HeatingProgramConfig{{ID: "x", Days: []string{"mon"}, Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}}}}},
+		API:        APIConfig{Listen: ":8080"},
+	}
+	cfg.Overview.UsableBatteryCapacityAh = 0
+	cfg.Overview.GasTankCapacityLitres = -1
+	cfg.Overview.Comfort = []float64{21, 18}
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "overview.usable_battery_capacity_ah") || !strings.Contains(err.Error(), "overview.comfort") {
+		t.Fatalf("expected overview validation errors, got %v", err)
+	}
+}

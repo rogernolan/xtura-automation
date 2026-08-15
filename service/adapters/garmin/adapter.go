@@ -10,6 +10,7 @@ import (
 	rootheating "empirebus-tests/heating"
 	domainheating "empirebus-tests/service/domains/heating"
 	domainlights "empirebus-tests/service/domains/lights"
+	domainoverview "empirebus-tests/service/domains/overview"
 	domainwater "empirebus-tests/service/domains/water"
 )
 
@@ -32,6 +33,7 @@ type Adapter struct {
 	state       domainheating.State
 	lightsState domainlights.State
 	waterState  domainwater.State
+	overview    domainoverview.Telemetry
 	health      domainheating.AdapterHealth
 }
 
@@ -135,10 +137,12 @@ func (a *Adapter) pollState() {
 	a.mu.RUnlock()
 	lights := lightsSnapshotFromSession(session, currentLights)
 	water := waterSnapshotFromSession(session, currentWater)
+	overview := overviewTelemetryFromSession(session)
 	a.mu.Lock()
 	a.state = snapshot
 	a.lightsState = lights
 	a.waterState = water
+	a.overview = overview
 	if !state.LastUpdated.IsZero() {
 		last := state.LastUpdated
 		a.health.LastFrameAt = &last
@@ -164,6 +168,12 @@ func (a *Adapter) WaterState() domainwater.State {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.waterState
+}
+
+func (a *Adapter) OverviewTelemetry() domainoverview.Telemetry {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.overview
 }
 
 func (a *Adapter) Health() domainheating.AdapterHealth {
@@ -413,4 +423,51 @@ func stableTimePointer(current *time.Time, next time.Time) *time.Time {
 		return current
 	}
 	return &next
+}
+
+func overviewTelemetryFromSession(session *rootheating.Session) domainoverview.Telemetry {
+	var telemetry domainoverview.Telemetry
+	telemetry.AldeTemperatureC = overviewScalar(session, rootheating.SignalHeatingActualTemp, 22, func(raw int32) float64 {
+		return float64(raw)/1000 - 273.15
+	}, &telemetry.UpdatedAt)
+	telemetry.FreshWaterPercent = overviewScalar(session, rootheating.SignalFreshWaterPercent, 14, milliUnits, &telemetry.UpdatedAt)
+	telemetry.GreyWaterPercent = overviewScalar(session, rootheating.SignalGreyWaterPercent, 14, milliUnits, &telemetry.UpdatedAt)
+	telemetry.BatteryCurrentA = overviewScalar(session, rootheating.SignalBatteryCurrentA, 6, milliUnits, &telemetry.UpdatedAt)
+	telemetry.BatteryStateOfChargePercent = overviewScalar(session, rootheating.SignalBatteryStateOfChargePercent, 14, milliUnits, &telemetry.UpdatedAt)
+	return telemetry
+}
+
+func overviewScalar(session *rootheating.Session, signal, valueType int, convert func(int32) float64, updatedAt **time.Time) *float64 {
+	frame, at, ok := session.LatestReceivedSignal(signal)
+	if !ok || frame.MessageType != 16 || frame.MessageCmd != 5 || len(frame.Data) < 8 || frame.Data[3] != valueType {
+		return nil
+	}
+	raw, ok := signedInt32LittleEndian(frame.Data[4:8])
+	if !ok {
+		return nil
+	}
+	if *updatedAt == nil || at.After(**updatedAt) {
+		atCopy := at
+		*updatedAt = &atCopy
+	}
+	value := convert(raw)
+	return &value
+}
+
+func signedInt32LittleEndian(data []int) (int32, bool) {
+	if len(data) != 4 {
+		return 0, false
+	}
+	var value uint32
+	for index, item := range data {
+		if item < 0 || item > 255 {
+			return 0, false
+		}
+		value |= uint32(item) << (8 * index)
+	}
+	return int32(value), true
+}
+
+func milliUnits(raw int32) float64 {
+	return float64(raw) / 1000
 }
