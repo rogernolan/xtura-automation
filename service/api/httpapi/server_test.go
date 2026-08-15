@@ -872,8 +872,11 @@ func TestHandlerServesWebIndex(t *testing.T) {
 	if body := rr.Body.String(); !strings.Contains(body, `id="app"`) {
 		t.Fatalf("index body did not contain app root: %s", body)
 	}
-	if body := rr.Body.String(); !strings.Contains(body, `id="buildInfo"`) {
-		t.Fatalf("index body did not contain build footer: %s", body)
+	if body := rr.Body.String(); !strings.Contains(body, `id="deploymentInfo" class="detail-text"`) {
+		t.Fatalf("index body did not contain deployment info line: %s", body)
+	}
+	if body := rr.Body.String(); strings.Contains(body, `id="buildInfo"`) {
+		t.Fatalf("index body must not contain build footer: %s", body)
 	}
 	for _, want := range []string{`href="/static/styles.css?v=dev"`, `src="/static/app.js?v=dev"`} {
 		if !strings.Contains(rr.Body.String(), want) {
@@ -939,7 +942,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange", "screenTitles", "document.title", `select.addEventListener("change"`, `.value = route.section`} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange", "screenTitles", "document.title", `select.addEventListener("change"`, `.value = route.section`, `byId("deploymentInfo")`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}

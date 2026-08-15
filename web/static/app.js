@@ -276,7 +276,7 @@ function render() {
 }
 
 function renderBuild() {
-  const element = byId("buildInfo");
+  const element = byId("deploymentInfo");
   const build = state.build;
   if (!build) {
     element.textContent = "";
