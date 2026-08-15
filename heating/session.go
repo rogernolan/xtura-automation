@@ -43,6 +43,7 @@ type Session struct {
 	state     HeaterState
 	signals   map[int]int
 	signalAt  map[int]time.Time
+	received  map[int]receivedSignal
 	closed    bool
 	readErr   error
 	traceTill time.Time
@@ -67,6 +68,7 @@ func NewSession(cfg SessionConfig) *Session {
 	s := &Session{cfg: cfg}
 	s.signals = make(map[int]int)
 	s.signalAt = make(map[int]time.Time)
+	s.received = make(map[int]receivedSignal)
 	s.cond = sync.NewCond(&s.mu)
 	return s
 }
@@ -130,6 +132,21 @@ func (s *Session) SignalIsOn(signal int) (bool, bool, time.Time) {
 		return false, false, time.Time{}
 	}
 	return value&0x01 != 0, true, s.signalAt[signal]
+}
+
+// LatestReceivedSignal returns the latest received raw frame for signal and
+// its receive timestamp. Returned frame data is a copy and can be modified by
+// the caller without changing the session state.
+func (s *Session) LatestReceivedSignal(signal int) (WireFrame, time.Time, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	received, ok := s.received[signal]
+	if !ok {
+		return WireFrame{}, time.Time{}, false
+	}
+	frame := received.wire
+	frame.Data = append([]int(nil), frame.Data...)
+	return frame, received.at, true
 }
 
 func (s *Session) WithTraceWindow(d time.Duration) {
@@ -286,6 +303,11 @@ func (s *Session) ingest(frame Frame) {
 		s.signals[frame.SignalID()] = frame.Wire.Data[2]
 		s.signalAt[frame.SignalID()] = frame.At
 	}
+	if frame.Direction == DirectionReceive && len(frame.Wire.Data) >= 2 {
+		wire := frame.Wire
+		wire.Data = append([]int(nil), wire.Data...)
+		s.received[frame.SignalID()] = receivedSignal{wire: wire, at: frame.At}
+	}
 	trace := s.cfg.Verbose && frame.RelevantToHeating() && (frame.Direction == DirectionSend || time.Now().Before(s.traceTill))
 	s.cond.Broadcast()
 	s.mu.Unlock()
@@ -295,6 +317,11 @@ func (s *Session) ingest(frame Frame) {
 	if frame.Direction == DirectionReceive && frame.Wire.MessageType == 0x30 && frame.Wire.MessageCmd == 0x05 {
 		_ = s.sendCommand(WireFrame{MessageType: 0x80, MessageCmd: 0x00, Size: 1, Data: []int{0x00}})
 	}
+}
+
+type receivedSignal struct {
+	wire WireFrame
+	at   time.Time
 }
 
 func (s *Session) logFrame(frame Frame) {

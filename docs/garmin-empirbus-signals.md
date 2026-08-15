@@ -56,6 +56,20 @@ For toggle, momentary, and dimmer status, `flags & 0x01` is the on bit; `0x02` i
 
 The signal `105` target-temperature reports use scalar status with value type `22`: signed millikelvin. Convert with `C = value / 1000 - 273.15`; the Garmin UI renders this to its configured display precision. The service rounds this source-derived numeric value to the vehicle's observed 0.5 C setpoint grid for automation decisions.
 
+### Overview scalar telemetry
+
+WDU-client source-map confirmed from `web/index.16816f2f5a38188c2b13.js.map` (reviewed 2026-08-12): scalar status values are signed 32-bit little-endian values. The overview adapter accepts only received scalar status frames (`messagetype=16`, `messagecmd=5`) with the documented value type; malformed, short, or other frame families remain unknown rather than becoming zero.
+
+| Signal | Meaning | Value type | Conversion | Evidence |
+| ---: | --- | ---: | --- | --- |
+| `106` | Actual Temp ALDE | `22` | `raw / 1000 - 273.15` C | WDU-client source map; local signal catalogue |
+| `12` | Fresh Water Value | `14` | `raw / 1000` % | WDU-client source map; local signal catalogue |
+| `13` | Grey Water Value | `14` | `raw / 1000` % | WDU-client source map; local signal catalogue |
+| `212` | Board Battery Current | `6` | `raw / 1000` A | WDU-client source map; local signal catalogue |
+| `213` | Board Battery State Of Charge | `14` | `raw / 1000` % | WDU-client source map; local signal catalogue |
+
+Repo smoke-check: use the on-demand Garmin recording feature to collect received status while viewing the relevant Garmin pages, then confirm the capture contains the expected signal id, value type, and at least eight data bytes before treating a live value as available. The decoder tests in `service/adapters/garmin/adapter_test.go` exercise these source-map conversions, including a negative current and rejected invalid/short frames. This is transport/conversion validation, not a claim that any vehicle reading is fresh.
+
 ### Session bootstrap
 
 Observed session bootstrap traffic:

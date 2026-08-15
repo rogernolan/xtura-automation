@@ -10,6 +10,7 @@ import (
 
 	rootheating "empirebus-tests/heating"
 	domainlights "empirebus-tests/service/domains/lights"
+	domainoverview "empirebus-tests/service/domains/overview"
 
 	"github.com/gorilla/websocket"
 )
@@ -334,4 +335,194 @@ func TestEnsureExteriorOffIgnoresStalePreCommandConfirmation(t *testing.T) {
 	if err != context.DeadlineExceeded {
 		t.Fatalf("got err %v want %v", err, context.DeadlineExceeded)
 	}
+}
+
+func TestOverviewTelemetryDecodesScalarStatusFrames(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		signal      int
+		messageType int
+		messageCmd  int
+		valueType   int
+		raw         int32
+		shortFrame  bool
+		want        *float64
+		field       func(domainoverview.Telemetry) *float64
+	}{
+		{
+			name:        "Alde temperature",
+			signal:      106,
+			messageType: 16,
+			messageCmd:  5,
+			valueType:   22,
+			raw:         293150,
+			want:        float64Pointer(20),
+			field:       func(value domainoverview.Telemetry) *float64 { return value.AldeTemperatureC },
+		},
+		{
+			name:        "fresh water percentage",
+			signal:      12,
+			messageType: 16,
+			messageCmd:  5,
+			valueType:   14,
+			raw:         76500,
+			want:        float64Pointer(76.5),
+			field:       func(value domainoverview.Telemetry) *float64 { return value.FreshWaterPercent },
+		},
+		{
+			name:        "grey water percentage",
+			signal:      13,
+			messageType: 16,
+			messageCmd:  5,
+			valueType:   14,
+			raw:         12345,
+			want:        float64Pointer(12.345),
+			field:       func(value domainoverview.Telemetry) *float64 { return value.GreyWaterPercent },
+		},
+		{
+			name:        "battery current",
+			signal:      212,
+			messageType: 16,
+			messageCmd:  5,
+			valueType:   6,
+			raw:         -1250,
+			want:        float64Pointer(-1.25),
+			field:       func(value domainoverview.Telemetry) *float64 { return value.BatteryCurrentA },
+		},
+		{
+			name:        "battery state of charge percentage",
+			signal:      213,
+			messageType: 16,
+			messageCmd:  5,
+			valueType:   14,
+			raw:         80000,
+			want:        float64Pointer(80),
+			field:       func(value domainoverview.Telemetry) *float64 { return value.BatteryStateOfChargePercent },
+		},
+		{
+			name:        "invalid value type is rejected",
+			signal:      106,
+			messageType: 16,
+			messageCmd:  5,
+			valueType:   14,
+			raw:         293150,
+			field:       func(value domainoverview.Telemetry) *float64 { return value.AldeTemperatureC },
+		},
+		{
+			name:        "short scalar frame is rejected",
+			signal:      12,
+			messageType: 16,
+			messageCmd:  5,
+			valueType:   14,
+			raw:         76500,
+			shortFrame:  true,
+			field:       func(value domainoverview.Telemetry) *float64 { return value.FreshWaterPercent },
+		},
+		{
+			name:        "non-scalar status frame is rejected",
+			signal:      13,
+			messageType: 16,
+			messageCmd:  0,
+			valueType:   14,
+			raw:         12345,
+			field:       func(value domainoverview.Telemetry) *float64 { return value.GreyWaterPercent },
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			session, conn := newOverviewTestSession(t)
+			data := scalarStatusData(tt.signal, tt.valueType, tt.raw)
+			if tt.shortFrame {
+				data = data[:7]
+			}
+			if err := conn.WriteJSON(rootheating.WireFrame{MessageType: tt.messageType, MessageCmd: tt.messageCmd, Size: len(data), Data: data}); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(20 * time.Millisecond)
+
+			adapter := &Adapter{session: session}
+			adapter.pollState()
+			telemetry := adapter.OverviewTelemetry()
+			got := tt.field(telemetry)
+			if tt.want == nil {
+				if got != nil {
+					t.Fatalf("decoded value = %v, want nil", got)
+				}
+				if telemetry.UpdatedAt != nil {
+					t.Fatalf("UpdatedAt = %v, want nil", telemetry.UpdatedAt)
+				}
+				return
+			}
+			if got == nil || *got != *tt.want {
+				t.Fatalf("decoded value = %v, want %v", got, *tt.want)
+			}
+			if telemetry.UpdatedAt == nil {
+				t.Fatal("expected valid scalar status to record update time")
+			}
+		})
+	}
+}
+
+func newOverviewTestSession(t *testing.T) (*rootheating.Session, *websocket.Conn) {
+	t.Helper()
+	conns := make(chan *websocket.Conn, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		select {
+		case conns <- conn:
+		default:
+		}
+		defer conn.Close()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	session := rootheating.NewSession(rootheating.SessionConfig{
+		WSURL:             "ws" + strings.TrimPrefix(server.URL, "http"),
+		HeartbeatInterval: time.Hour,
+		TraceWindow:       time.Second,
+		BootstrapMessages: []string{`{"messagetype":96,"messagecmd":0,"size":0,"data":[]}`},
+	})
+	if err := session.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	select {
+	case conn := <-conns:
+		return session, conn
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for websocket connection")
+		return nil, nil
+	}
+}
+
+func scalarStatusData(signal, valueType int, raw int32) []int {
+	return []int{
+		signal & 0xff,
+		signal >> 8,
+		0,
+		valueType,
+		int(byte(raw)),
+		int(byte(raw >> 8)),
+		int(byte(raw >> 16)),
+		int(byte(raw >> 24)),
+	}
+}
+
+func float64Pointer(value float64) *float64 {
+	return &value
 }
