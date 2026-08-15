@@ -105,6 +105,43 @@ Source-confirmed action values:
 
 Dimmer command uses `messagecmd=3` and `[signal-id LE, 0, value LE]`.
 
+### Non-signal transport frames (`messagetype=32`, `48`, `81`)
+
+Not all received frames carry an EmpirBus signal. The daemon's NDJSON recorder
+derives `signal` as `data[0] | data[1]<<8` for every frame, which only makes
+sense for the signal-bearing types `16` and `17`. For the frame families below
+that heuristic produces meaningless "signal" IDs such as `5634`, `4866`, or
+`39681`; these are SERV transport/UI frames, not EmpirBus signals.
+
+Capture-derived inference (high confidence these are transport frames, not
+signals; medium confidence on the exact per-field semantics below):
+
+- `messagetype=81`, `messagecmd=1` — component name broadcast. `data` contains
+  a UTF-16LE name string; e.g. `[3,18,200,200,...]` decodes to
+  `"Use Trip Footstep"`. Broadcast about once per second in every capture,
+  including idle sessions.
+- `messagetype=32`, `messagecmd=64` — periodic telemetry broadcast, roughly
+  every 1.5 s regardless of user activity, shaped `[2,22,1,X,Y,0,...]` with a
+  continuously rotating `X` (observed values 3–255 across captures) and a
+  mostly session-constant `Y` (2–6). Its exact meaning is unknown.
+- `messagetype=32`, `messagecmd=48` — SERV touch/key event. A press is
+  broadcast as `[2,19,17,0,...]` followed by a release `[2,19,1,0,...]`
+  (~0.4 s later). A page or screen swap broadcasts a burst that enumerates
+  every component (`[2,0,...]`, `[2,1,...]`, ... and `[1,0,...]`,
+  `[1,1,...]`, ...). These also appear during idle navigation.
+- `messagetype=48`, `messagecmd=0` — constant periodic descriptor broadcast
+  every ~4 s, byte-identical payload `[1,155,78,19,227]` in every capture
+  (2026-04 through 2026-08). Fixed signature, not an event.
+
+Evidence: `Heating.har`, `Heating 13C-20C.har`, `Load with Heating on at 20C.har`,
+and `192.168.1.1.har` (2026-04), plus
+`/var/lib/xtura/recordings/garmin-ws-20260815T132037Z.ndjson` (2026-08-15),
+which also shows that moving the fridge between night-mode settings emits no
+signal of its own: the only discrete on/off event in that recording is
+`signal 220` "AC IN Indicator" (`0`→`1`→`0`) coincident with a ~240 W input AC
+load blip. The 205-entry `signal-info.json` catalogue contains no fridge,
+cooling, or night-mode signal.
+
 ## Domain Summary
 
 The current domain groupings come from `empirbus_filter.py` in the related tooling repo:
@@ -437,3 +474,4 @@ Recommended follow-up once the repo is known:
 - Confirm `All Interior Lights Off` via a real browser click HAR.
 - Confirm whether water, power, and fuse controls use the same `type=17` action pattern.
 - Decode `signal 105` for heater target temperature beyond the currently known sample values.
+- Determine whether the fridge has any WDU-visible signal at all: the 2026-08-15 night-mode recording shows no fridge signal, but the toggles may have fallen outside the 18-second capture window. A longer recording with only fridge controls exercised would settle this.
