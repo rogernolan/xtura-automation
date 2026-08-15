@@ -2,7 +2,8 @@
   "name": "xtura-automation",
   "private": true,
   "scripts": {
-    "lint": "eslint web/static/app.js"
+    "lint": "eslint web/static/app.js web/static/navigation.js",
+    "test": "node --test web/static/navigation.test.js"
   },
   "devDependencies": {
     "eslint": "8.57.1"
