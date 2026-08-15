@@ -872,8 +872,11 @@ func TestHandlerServesWebIndex(t *testing.T) {
 	if body := rr.Body.String(); !strings.Contains(body, `id="app"`) {
 		t.Fatalf("index body did not contain app root: %s", body)
 	}
-	if body := rr.Body.String(); !strings.Contains(body, `id="buildInfo"`) {
-		t.Fatalf("index body did not contain build footer: %s", body)
+	if body := rr.Body.String(); !strings.Contains(body, `id="deploymentInfo" class="detail-text"`) {
+		t.Fatalf("index body did not contain deployment info line: %s", body)
+	}
+	if body := rr.Body.String(); strings.Contains(body, `id="buildInfo"`) {
+		t.Fatalf("index body must not contain build footer: %s", body)
 	}
 	for _, want := range []string{`href="/static/styles.css?v=dev"`, `src="/static/app.js?v=dev"`} {
 		if !strings.Contains(rr.Body.String(), want) {
@@ -881,10 +884,16 @@ func TestHandlerServesWebIndex(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
+		`id="pageTitle">Overview<`,
 		`id="overviewNav" class="primary-nav-item" type="button" data-screen="overview" aria-controls="overviewPanel">Overview</button>`,
 		`id="controlsNav" class="primary-nav-item" type="button" data-screen="controls" aria-controls="controlsPanel">Controls</button>`,
 		`id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>`,
 		`id="moreNav" class="primary-nav-item" type="button" data-screen="more" aria-controls="morePanel">More</button>`,
+		`class="primary-nav-inner"`,
+		`id="controlsSection"`, `<option value="heating">Heating</option>`,
+		`<option value="water">Water</option>`, `<option value="lighting">Lighting</option>`,
+		`id="moreSection"`, `<option value="system">System</option>`, `<option value="tools">Tools</option>`,
+		`>Mode<`,
 		`id="controlsHeatingPanel" class="section-panel"`, `id="controlsWaterPanel" class="section-panel" hidden`,
 		`id="controlsLightingPanel" class="section-panel" hidden`, `id="moreSystemPanel" class="section-panel"`,
 		`id="moreToolsPanel" class="section-panel" hidden`, `src="/static/navigation.js?v=dev"`,
@@ -892,6 +901,12 @@ func TestHandlerServesWebIndex(t *testing.T) {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("missing %q", want)
 		}
+	}
+	if body := rr.Body.String(); strings.Contains(body, `class="section-switch"`) {
+		t.Fatalf("index body must not contain section-switch tabs: %s", body)
+	}
+	if body := rr.Body.String(); strings.Contains(body, `class="eyebrow"`) {
+		t.Fatalf("index body must not contain the brand eyebrow: %s", body)
 	}
 	if body := rr.Body.String(); !strings.Contains(body, `id="piStatusPanel" class="panel"`) {
 		t.Fatalf("index body did not contain Pi status panel: %s", body)
@@ -927,7 +942,7 @@ func TestHandlerServesStaticJavaScript(t *testing.T) {
 		t.Fatalf("unexpected cache control %q", cacheControl)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange"} {
+	for _, want := range []string{"class XturaApi", "setHeatingModeSchedule", "setHeatingModeOff", "getBuildInfo", "renderBuild", "renderPiStatus", "getPiStatus", "applyRoute", "navigate", "XturaNavigation.parse", "hashchange", "screenTitles", "document.title", `select.addEventListener("change"`, `.value = route.section`, `byId("deploymentInfo")`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("javascript body did not contain %q: %s", want, body)
 		}
@@ -944,7 +959,24 @@ func TestHandlerServesPortraitMobileBackgroundStyle(t *testing.T) {
 		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.avif?v=1")`, `url("/static/xtura-background.avif?v=1")`} {
+	for _, want := range []string{"@media (max-width: 759px) and (orientation: portrait)", `url("/static/xtura-background-mobile.avif?v=1")`, `url("/static/xtura-background.avif?v=1")`, "body::before", "z-index: -1"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("stylesheet did not contain %q: %s", want, body)
+		}
+	}
+}
+
+func TestHandlerServesFixedBottomNavStyle(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)})
+	req := httptest.NewRequest(http.MethodGet, "/static/styles.css", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("got status %d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{"position: fixed", "bottom: 0", "env(safe-area-inset-bottom, 0px)", ".primary-nav-inner", "max-width: 430px"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("stylesheet did not contain %q: %s", want, body)
 		}

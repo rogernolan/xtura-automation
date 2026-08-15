@@ -11,10 +11,7 @@
     <main id="app" class="app-shell" aria-live="polite">
       <section class="control-surface">
         <header class="app-header">
-          <div>
-            <p class="eyebrow">Xtura</p>
-            <h1>Van control</h1>
-          </div>
+          <h1 id="pageTitle">Overview</h1>
           <span id="connectionStatus" class="connection-pill">Connecting</span>
         </header>
 
@@ -28,16 +25,19 @@
         </section>
 
         <section id="controlsPanel" class="primary-panel" hidden>
-          <nav class="section-switch" aria-label="Controls section">
-            <button class="section-switch-item" type="button" data-section-group="controls" data-section="heating" aria-controls="controlsHeatingPanel">Heating</button>
-            <button class="section-switch-item" type="button" data-section-group="controls" data-section="water" aria-controls="controlsWaterPanel">Water</button>
-            <button class="section-switch-item" type="button" data-section-group="controls" data-section="lighting" aria-controls="controlsLightingPanel">Lighting</button>
-          </nav>
+          <div class="field">
+            <label for="controlsSection">Section</label>
+            <select id="controlsSection" data-section-group="controls" aria-label="Controls section">
+              <option value="heating">Heating</option>
+              <option value="water">Water</option>
+              <option value="lighting">Lighting</option>
+            </select>
+          </div>
 
           <section id="controlsHeatingPanel" class="section-panel" data-section-group="controls" data-section="heating">
             <div class="panel">
               <div class="panel-heading">
-                <h2>Heating</h2>
+                <h2>Mode</h2>
                 <span id="modeState" class="state-text">Loading</span>
               </div>
               <div class="mode-switch" aria-label="Heating mode">
@@ -156,10 +156,13 @@
         </section>
 
         <section id="morePanel" class="primary-panel" hidden>
-          <nav class="section-switch" aria-label="More section">
-            <button class="section-switch-item" type="button" data-section-group="more" data-section="system" aria-controls="moreSystemPanel">System</button>
-            <button class="section-switch-item" type="button" data-section-group="more" data-section="tools" aria-controls="moreToolsPanel">Tools</button>
-          </nav>
+          <div class="field">
+            <label for="moreSection">Section</label>
+            <select id="moreSection" data-section-group="more" aria-label="More section">
+              <option value="system">System</option>
+              <option value="tools">Tools</option>
+            </select>
+          </div>
 
           <section id="moreSystemPanel" class="section-panel" data-section-group="more" data-section="system">
             <div id="piStatusPanel" class="panel">
@@ -170,6 +173,7 @@
               <div id="piStats" class="pi-stats"></div>
               <p id="piDetail" class="detail-text">Waiting for Pi status.</p>
             </div>
+            <p id="deploymentInfo" class="detail-text"></p>
           </section>
 
           <section id="moreToolsPanel" class="section-panel" hidden data-section-group="more" data-section="tools">
@@ -201,15 +205,16 @@
         </section>
 
         <nav class="primary-nav" aria-label="Primary navigation">
-          <button id="overviewNav" class="primary-nav-item" type="button" data-screen="overview" aria-controls="overviewPanel">Overview</button>
-          <button id="controlsNav" class="primary-nav-item" type="button" data-screen="controls" aria-controls="controlsPanel">Controls</button>
-          <button id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>
-          <button id="moreNav" class="primary-nav-item" type="button" data-screen="more" aria-controls="morePanel">More</button>
+          <div class="primary-nav-inner">
+            <button id="overviewNav" class="primary-nav-item" type="button" data-screen="overview" aria-controls="overviewPanel">Overview</button>
+            <button id="controlsNav" class="primary-nav-item" type="button" data-screen="controls" aria-controls="controlsPanel">Controls</button>
+            <button id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>
+            <button id="moreNav" class="primary-nav-item" type="button" data-screen="more" aria-controls="morePanel">More</button>
+          </div>
         </nav>
 
         <p id="statusMessage" class="status-message">Loading controls.</p>
 
-        <footer id="buildInfo" class="build-footer" aria-live="polite"></footer>
       </section>
     </main>
     <script src="/static/navigation.js" defer></script>
