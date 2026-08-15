@@ -77,6 +77,7 @@ Current HTTP endpoints:
 - `GET /v1/health`
 - `GET /v1/build`
 - `GET /v1/location/state`
+- `GET /v1/pi/state`
 - `GET /v1/heating/state`
 - `GET /v1/heating/mode`
 - `POST /v1/heating/mode/schedule`
@@ -131,6 +132,19 @@ The Settings tab also controls GPS trail recording. When enabled, the service sa
 Sample every N seconds is configurable from `1` to `3600` (default `5`). The switches and interval apply immediately on change; live state and errors stream over the `tracking.state_changed` event on `GET /v1/events`. Tracks are listed, downloaded, and deleted through the `/v1/tracks` API. See [gps-tracking.md](docs/gps-tracking.md) for the track file format and API, which is written for consumers such as the InstaBlog agent.
 
 The location service defaults to the Teltonika RUTX50 GPS position endpoint at `http://192.168.51.1/api/gps/position/status` when `location.enabled` is true. It exposes the latest longitude, latitude, and timezone at `GET /v1/location/state`; see [location-service.md](docs/location-service.md) for the RUTX50 endpoint config, timezone lookup, and Pi timezone update setup.
+
+### Pi status
+
+The Tools tab (previously Settings) also shows a **Pi status** panel between
+GPS trails and WebSocket recording. The service samples the host every
+`host.sample_interval` seconds (default `5s`) and streams the snapshot over the
+`pi.state_changed` event on `GET /v1/events`, so the panel stays live. It shows
+CPU model and core count, the 1/5/15-minute load averages, memory usage, disk
+usage for the root and `/var/lib/xtura` filesystems, CPU temperature, uptime,
+and power quality (under-voltage / throttling from `vcgencmd get_throttled`,
+falling back to the `rpi_hwmon` sysfs alarms). Metrics that cannot be read on a
+given host (for example when running the service on a non-Pi machine) are
+reported as unavailable rather than failing the panel.
 
 Current design notes live in:
 
