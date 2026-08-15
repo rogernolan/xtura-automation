@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const fs = require("node:fs");
 const navigation = require("./navigation.js");
 
 test("parses defaults and nested routes", () => {
@@ -19,4 +20,19 @@ test("writes canonical hashes", () => {
   assert.equal(navigation.toHash({ screen: "location", section: null }), "#/location");
   assert.equal(navigation.toHash({ screen: "controls", section: "lighting" }), "#/controls/lighting");
   assert.equal(navigation.toHash({ screen: "more", section: "settings" }), "#/more/settings");
+});
+
+test("overview markup follows the approved grouped layout and deep links", () => {
+  const html = fs.readFileSync(require("node:path").join(__dirname, "index.html"), "utf8");
+  assert.match(html, /class="overview-group overview-temperature-group"/);
+  assert.match(html, /class="overview-group overview-power-group"/);
+  assert.match(html, /class="overview-group overview-supplies-group"/);
+  assert.match(html, /data-overview-route="#\/controls\/heating"/);
+  assert.match(html, /data-overview-route="#\/controls\/water"/);
+  assert.match(html, /data-overview-route="#\/more\/settings"/);
+  assert.match(html, /id="overviewTrend"[^>]*>Trend unavailable</);
+  const styles = fs.readFileSync(require("node:path").join(__dirname, "styles.css"), "utf8");
+  for (const tone of ["cold", "comfortable", "warm", "hot"]) {
+    assert.match(styles, new RegExp(`overview-temperature-card\\[data-tone=\\\"${tone}\\\"\\]`));
+  }
 });

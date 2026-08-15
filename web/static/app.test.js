@@ -88,8 +88,8 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, state };`, context, { filename: "app.js" });
-  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, state: context.module.exports.state, window, elements };
+  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, renderOverview, overviewTemperatureTone, state };`, context, { filename: "app.js" });
+  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, renderOverview: context.module.exports.renderOverview, overviewTemperatureTone: context.module.exports.overviewTemperatureTone, state: context.module.exports.state, window, elements };
 }
 
 test("rerendering overview does not overwrite dirty settings fields", () => {
@@ -99,6 +99,15 @@ test("rerendering overview does not overwrite dirty settings fields", () => {
   elements.comfortCold.value = "12";
   renderOverviewSettings();
   assert.equal(elements.comfortCold.value, "12");
+});
+
+test("temperature tone uses configured comfort bands", () => {
+  const { overviewTemperatureTone } = loadApp({ groupedElements: [] });
+  assert.equal(overviewTemperatureTone(8, [10, 18, 24, 30]), "cold");
+  assert.equal(overviewTemperatureTone(15, [10, 18, 24, 30]), "comfortable");
+  assert.equal(overviewTemperatureTone(21, [10, 18, 24, 30]), "warm");
+  assert.equal(overviewTemperatureTone(28, [10, 18, 24, 30]), "hot");
+  assert.equal(overviewTemperatureTone(undefined, [10, 18, 24, 30]), "unavailable");
 });
 
 test("changing a control inside the water panel does not reset the section hash", () => {

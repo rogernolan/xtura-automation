@@ -158,12 +158,31 @@ h1 {
   backdrop-filter: blur(8px);
 }
 
-.overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
-.overview-hero { grid-column: 1 / -1; }
-.overview-value { display: block; font-size: clamp(2rem, 9vw, 4rem); line-height: 1; margin: 1rem 0 .5rem; }
+.overview-layout { gap: 20px; }
+.overview-group { display: grid; gap: 9px; }
+.overview-group-title { padding: 0 4px; color: var(--muted); font-size: 12px; letter-spacing: .11em; text-transform: uppercase; }
+.overview-card-grid { display: grid; gap: 10px; }
+.overview-power-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.overview-supplies-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.overview-card { display: grid; align-content: start; gap: 9px; min-width: 0; padding: 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; box-shadow: var(--shadow); }
+.overview-card:hover, .overview-card:focus-visible { border-color: var(--accent); outline: 3px solid rgba(31, 95, 212, .18); }
+.overview-temperature-card[data-tone="cold"] { background: linear-gradient(135deg, rgba(126, 183, 255, .34), var(--surface)); border-color: #6aa8e8; }
+.overview-temperature-card[data-tone="comfortable"] { background: linear-gradient(135deg, rgba(111, 208, 154, .34), var(--surface)); border-color: #67b98b; }
+.overview-temperature-card[data-tone="warm"] { background: linear-gradient(135deg, rgba(255, 204, 108, .38), var(--surface)); border-color: #dda743; }
+.overview-temperature-card[data-tone="hot"] { background: linear-gradient(135deg, rgba(246, 137, 111, .38), var(--surface)); border-color: #d8785f; }
+.overview-temperature-card[data-tone="unavailable"] { background: linear-gradient(135deg, rgba(104, 112, 124, .16), var(--surface)); }
+.overview-card-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 850; }
+.overview-temperature-card { min-height: 138px; }
+.overview-temperature-value { display: block; font-size: clamp(2.8rem, 13vw, 4.8rem); line-height: .95; letter-spacing: -.06em; }
+.overview-value { display: block; font-size: clamp(1.7rem, 7vw, 2.5rem); line-height: 1; margin: 8px 0 0; }
+.overview-trend { margin: 0; color: var(--muted); font-size: 12px; font-weight: 700; }
+.overview-supply-card { padding: 13px; }
+.supply-bar { height: 8px; overflow: hidden; border-radius: 99px; background: rgba(35, 42, 52, .12); }
+.supply-bar span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width .25s ease; }
+.supply-bar.is-unavailable span { background: var(--muted); opacity: .35; }
 .settings-form { display: grid; gap: .8rem; }
 .settings-form label { display: grid; gap: .3rem; }
-@media (max-width: 560px) { .overview-grid { grid-template-columns: 1fr; } .overview-hero { grid-column: auto; } }
+@media (max-width: 560px) { .overview-power-grid, .overview-supplies-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .overview-supply-card:last-child { grid-column: 1 / -1; } }
 
 .panel-heading {
   display: flex;
