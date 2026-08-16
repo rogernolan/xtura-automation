@@ -1,0 +1,19 @@
+[Unit]
+Description=EmpireBus Heating Service (staging)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=xtura
+Group=xtura
+WorkingDirectory=/opt/xtura-staging/current
+ExecStart=/opt/xtura-staging/current/empirebusd -config /var/lib/xtura-staging/config.yaml
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

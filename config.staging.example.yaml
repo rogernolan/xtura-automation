@@ -1,0 +1,25 @@
+garmin:
+  # Same SERV as production. The staging instance is a parallel, real-hardware
+  # instance for build verification: anything you command from the staging UI
+  # affects the real heater/valves. Exercise full command flows in the Mac
+  # simulation instead.
+  ws_url: ws://172.16.11.7:8888/ws
+  heartbeat_interval: 4s
+  trace_window: 3s
+
+location:
+  enabled: false
+
+api:
+  listen: 0.0.0.0:8080
+
+automation:
+  timezone: Europe/London
+  # All-off by default. Replace with a short test pattern when you want to
+  # verify schedule behaviour in staging.
+  heating_programs:
+    - id: everyday-default
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+      periods:
+        - start: "00:00"
+          mode: "off"
