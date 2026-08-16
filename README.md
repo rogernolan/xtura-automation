@@ -155,6 +155,25 @@ Current design notes live in:
 - [location-service.md](docs/location-service.md)
 - [gps-tracking.md](docs/gps-tracking.md) — GPS trail track file format, lifecycle, and API for consumers
 
+## Simulated environment (Mac)
+
+For development without touching the real motorhome, run the service against a
+fake Garmin SERV (`cmd/servsim`) that replays a recorded NDJSON capture and
+echoes command state for the heater, valves, and lights:
+
+```bash
+./scripts/sim/run-sim.sh                  # uses the newest captures/garmin-ws-*.ndjson
+./scripts/sim/run-sim.sh captures/my.ndjson
+```
+
+This starts `servsim` on `ws://localhost:8090/ws` and `empirebusd` on
+`http://localhost:8091` with `config.sim.yaml`. Exercise command flows there:
+power on/off, set target temperature, grey-valve open/close, and the exterior
+light flash. `servsim -help` lists options (`-loop` replays the capture
+repeatedly; `-speed` changes replay pacing). Because the fake SERV echo is
+simulation behavior, not browser-confirmed evidence, see the simulation note in
+[garmin-empirbus-signals.md](docs/garmin-empirbus-signals.md).
+
 ## Deployment
 
 The current deployment path is Pi-local build/test/deploy, run as a local user with passwordless sudo on the Pi host, i wound back work on GitHub Actions because complexity.
@@ -203,6 +222,42 @@ Start the service again and re-enable boot startup:
 ```bash
 sudo systemctl enable --now empirebusd.service
 ```
+
+### Staging environment (Jones Pi)
+
+A second, parallel service instance on the Jones Pi that shares the SERV with
+production but runs on its own port, config, and systemd unit:
+
+- releases in `/opt/xtura-staging/releases/<git-sha>`, active link at
+  `/opt/xtura-staging/current`
+- writable service config at `/var/lib/xtura-staging/config.yaml`
+- `empirebusd-staging.service`, HTTP on `:8080`
+
+Setup once on the Pi (mirrors production):
+
+```bash
+sudo mkdir -p /opt/xtura-staging /var/lib/xtura-staging
+sudo cp ~/development/xtura-automation/config.staging.example.yaml /var/lib/xtura-staging/config.yaml
+sudo chown -R xtura:xtura /opt/xtura-staging /var/lib/xtura-staging
+```
+
+Deploy a build to staging (from the Pi's git checkout) or trigger it from the
+Mac:
+
+```bash
+ENVIRONMENT=staging ./scripts/deploy/deploy-on-pi.sh            # on the Pi
+ENVIRONMENT=staging ./scripts/deploy/run-deploy-from-mac.sh <sha>   # from the Mac
+```
+
+Verify with `curl http://127.0.0.1:8080/v1/health` (or open
+`http://jones-pi:8080/`). To promote a verified build to production, deploy the
+same SHA with the default environment.
+
+**Staging talks to the real SERV.** Commands issued from the staging UI affect
+the real heater and valves; use it for read/build verification and the Mac
+simulation for command testing. The SERV's tolerance for two concurrent
+websocket clients is unverified — if staging's connection ever drops
+production's, point staging's `garmin.ws_url` at a `servsim` instance instead.
 
 ### GitHub Actions Attempt
 

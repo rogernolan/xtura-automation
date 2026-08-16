@@ -11,6 +11,7 @@ Derived from current repo files only.
 | Run heating CLI ensure on | `go run ./cmd/heatingctl ensure-on --verbose` | Live hardware command unless `--ws-url` points to a test server. |
 | Get target temp | `go run ./cmd/heatingctl get-target-temp --verbose` | Live websocket read. |
 | Set target temp | `go run ./cmd/heatingctl set-target-temp --value 20.0 --verbose` | Live command; 0.5C increments only. |
+| Run simulated env | `./scripts/sim/run-sim.sh` | Starts `servsim` (fake SERV) and `empirebusd` against `config.sim.yaml`; no real hardware involved. |
 
 ## Deploy
 
@@ -18,6 +19,7 @@ Derived from current repo files only.
 |---|---|---|
 | `scripts/deploy/deploy-on-pi.sh` | Pi-local deploy | Fetches/pulls or checks out target SHA, runs `go test ./...`, builds `cmd/empirebusd`, installs under `/opt/xtura/releases/<sha>`, restarts systemd, curls health. |
 | `scripts/deploy/run-deploy-from-mac.sh` | Remote deploy trigger | SSHes to `${PI_USER}@${PI_HOST}` and runs the Pi deploy script in `${REMOTE_REPO}`. |
+| Staging deploy trigger | `ENVIRONMENT=staging ./scripts/deploy/run-deploy-from-mac.sh` | SSHes to the Pi and deploys to the staging env (`/opt/xtura-staging`, `:8080`). |
 | `ops/systemd/empirebusd.service` | Service unit | Runs as `xtura:xtura`, working directory `/opt/xtura/current`, config `/var/lib/xtura/config.yaml`, restart on failure. |
 | Runtime state | `/var/lib/xtura/config.yaml.runtime.yaml` | Inferred from `runtimeStatePath(configPath)`. |
 
@@ -27,6 +29,9 @@ Derived from current repo files only.
 |---|---|
 | `cmd/empirebusd` | Service daemon entrypoint. |
 | `cmd/heatingctl` | Manual heating CLI for websocket operations. |
+| `cmd/servsim` | Fake Garmin SERV for the local simulated environment; replays NDJSON captures and echoes command state. |
+| `config.sim.yaml` | Config that points `empirebusd` at the local `servsim`. |
+| `scripts/sim/run-sim.sh` | Starts the simulated environment on the Mac. |
 | `service/api/httpapi` | Internal REST/SSE API. |
 | `service/runtime` | Application orchestration, scheduler loop, modes, light flash. |
 | `service/config` | YAML config, schedule document, runtime state validation/persistence. |
