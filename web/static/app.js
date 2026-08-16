@@ -284,19 +284,44 @@ function render() {
 }
 
 function overviewPercent(value) { return value === null || value === undefined ? "Unavailable" : `${Number(value).toFixed(0)}%`; }
+function overviewTemperatureTone(value, thresholds) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "unavailable";
+  const bands = Array.isArray(thresholds) && thresholds.length >= 4 ? thresholds : [10, 18, 24, 30];
+  const temperature = Number(value);
+  if (temperature < (bands[0] + bands[1]) / 2) return "cold";
+  if (temperature < (bands[1] + bands[2]) / 2) return "comfortable";
+  if (temperature < (bands[2] + bands[3]) / 2) return "warm";
+  return "hot";
+}
+function overviewCurrentState(doc) {
+  if (!doc) return "loading";
+  if (doc.status === "stale") return "stale";
+  return doc.status === "available" && doc.battery && doc.battery.current_a !== undefined ? "live" : "unavailable";
+}
 function renderOverview() {
   const doc = state.overview;
   if (!doc) return;
   const stale = doc.status === "stale";
+  const temperatureTone = stale ? "unavailable" : overviewTemperatureTone(doc.alde_temperature_c, state.overviewSettings && state.overviewSettings.comfort_thresholds);
+  if (byId("aldeCard")) byId("aldeCard").dataset.tone = temperatureTone;
   const temperature = byId("aldeTemperature");
   if (temperature) temperature.textContent = doc.alde_temperature_c === undefined ? "Unavailable" : `${Number(doc.alde_temperature_c).toFixed(1)}C`;
   if (byId("aldeState")) byId("aldeState").textContent = stale ? "Stale" : doc.alde_temperature_c === undefined ? "Unavailable" : "Available";
   if (byId("aldeDetail")) byId("aldeDetail").textContent = stale ? "Garmin reading is stale." : doc.alde_temperature_c === undefined ? "No Alde reading received." : "Main temperature source";
   if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
+  if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a).toFixed(1)}A` : "Unavailable";
+  if (byId("batteryCurrentState")) byId("batteryCurrentState").textContent = overviewCurrentState(doc).replace(/^./, (letter) => letter.toUpperCase());
   if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : doc.battery.status === "stale" ? "Stale" : "Unavailable") : "Unavailable";
   if (byId("batteryDetail")) byId("batteryDetail").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Estimated full in ${Number(doc.battery.eta_hours).toFixed(1)}h` : doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a).toFixed(1)}A · No ETA` : "Battery reading unavailable.";
   if (byId("freshWater")) byId("freshWater").textContent = overviewPercent(doc.fresh_water_percent);
   if (byId("greyWater")) byId("greyWater").textContent = overviewPercent(doc.grey_water_percent);
+  ["fresh", "grey"].forEach((kind) => {
+    const value = doc[`${kind}_water_percent`];
+    const bar = byId(`${kind}WaterBar`);
+    if (bar) bar.style.width = value === undefined ? "0%" : `${Math.max(0, Math.min(100, Number(value)))}%`;
+    const status = byId(`${kind}WaterState`);
+    if (status) status.textContent = value === undefined ? (stale ? "Stale" : "Unavailable") : "Available";
+  });
 }
 
 function renderOverviewSettings() {
@@ -1268,6 +1293,12 @@ function connectEvents() {
 }
 
 function bindActions() {
+  document.querySelectorAll("[data-overview-route]").forEach((card) => {
+    card.addEventListener("click", () => {
+      const route = XturaNavigation.parse(card.dataset.overviewRoute);
+      navigate(route.screen, route.section);
+    });
+  });
   document.querySelectorAll("[data-screen]").forEach((button) => {
     button.addEventListener("click", () => navigate(button.dataset.screen, state.sections[button.dataset.screen] || null));
   });
@@ -1437,6 +1468,7 @@ function bindActions() {
         gas_tank_capacity_litres: Number(byId("gasCapacity").value),
       }), "Saving overview settings");
       state.overviewSettingsDirty = false;
+      renderOverview();
       renderOverviewSettings();
     } catch (_) { return; }
   });
