@@ -34,7 +34,6 @@ import (
 	"empirebus-tests/service/tracking"
 )
 
-var recordingDirectory = "/var/lib/xtura/recordings"
 var trackingDirectory = "/var/lib/xtura/tracks"
 
 // sensorCompactInterval is how often the history store retention runs.
@@ -142,7 +141,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		return nil, err
 	}
 	broker := events.NewBroker(32)
-	recorder := recording.New(recordingDirectory, time.Now, logger)
+	recorder := recording.New(cfg.Recording.Dir, time.Now, logger)
 	recorder.SetOnChange(func(state recording.State) {
 		broker.Publish(events.Event{
 			Type:      "recording.state_changed",

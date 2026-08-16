@@ -18,6 +18,7 @@ type Config struct {
 	Host       HostConfig       `yaml:"host,omitempty"`
 	Location   LocationConfig   `yaml:"location,omitempty"`
 	Tracking   TrackingConfig   `yaml:"tracking,omitempty"`
+	Recording  RecordingConfig  `yaml:"recording,omitempty"`
 	Overview   OverviewConfig   `yaml:"overview,omitempty"`
 	Switchbot  SwitchbotConfig  `yaml:"switchbot,omitempty"`
 	Automation AutomationConfig `yaml:"automation"`
@@ -103,6 +104,11 @@ type SwitchbotSensorConfig struct {
 	Primary bool   `yaml:"primary,omitempty"`
 }
 
+// RecordingConfig controls the on-demand WebSocket traffic recording directory.
+type RecordingConfig struct {
+	Dir string `yaml:"dir,omitempty"`
+}
+
 type AutomationConfig struct {
 	Timezone        string                 `yaml:"timezone"`
 	HeatingPrograms []HeatingProgramConfig `yaml:"heating_programs"`
@@ -149,6 +155,7 @@ type NormalizedConfig struct {
 	Host       NormalizedHost
 	Location   NormalizedLocation
 	Tracking   NormalizedTracking
+	Recording  NormalizedRecording
 	Overview   OverviewConfig
 	Switchbot  sensors.Settings
 	API        APIConfig
@@ -174,6 +181,10 @@ type NormalizedTracking struct {
 	WhenEngineOn   bool
 	SampleInterval time.Duration
 	Dir            string
+}
+
+type NormalizedRecording struct {
+	Dir string
 }
 
 type NormalizedAutomation struct {
@@ -364,6 +375,7 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		Host:      normalizeHost(c.Host),
 		Location:  normalizeLocation(c.Location),
 		Tracking:  normalizeTracking(c.Tracking),
+		Recording: normalizeRecording(c.Recording),
 		Overview:  normalizeOverview(c.Overview),
 		Switchbot: normalizeSwitchbot(c.Switchbot),
 		API:       c.API,
@@ -504,6 +516,14 @@ func normalizeTracking(in TrackingConfig) NormalizedTracking {
 	}
 	if out.Dir == "" {
 		out.Dir = "/var/lib/xtura/tracks"
+	}
+	return out
+}
+
+func normalizeRecording(in RecordingConfig) NormalizedRecording {
+	out := NormalizedRecording{Dir: strings.TrimSpace(in.Dir)}
+	if out.Dir == "" {
+		out.Dir = "/var/lib/xtura/recordings"
 	}
 	return out
 }

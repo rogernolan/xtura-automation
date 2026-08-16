@@ -237,6 +237,30 @@ func TestNormalizeTrackingDefaults(t *testing.T) {
 	}
 }
 
+func TestNormalizeRecordingDefaults(t *testing.T) {
+	cfg := trackingBaseConfig()
+	cfg.Recording = RecordingConfig{}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Recording.Dir != "/var/lib/xtura/recordings" {
+		t.Fatalf("got recording dir %q", normalized.Recording.Dir)
+	}
+}
+
+func TestNormalizeRecordingFromConfig(t *testing.T) {
+	cfg := trackingBaseConfig()
+	cfg.Recording = RecordingConfig{Dir: "/var/lib/xtura-staging/recordings"}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Recording.Dir != "/var/lib/xtura-staging/recordings" {
+		t.Fatalf("got recording dir %q", normalized.Recording.Dir)
+	}
+}
+
 func TestValidateTrackingSampleIntervalBounds(t *testing.T) {
 	cases := []struct {
 		name  string

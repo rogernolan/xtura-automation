@@ -138,3 +138,11 @@ func decodeTargetTemperature(data []int) (int, float64, bool) {
 	celsius := float64(raw)/1000 - 273.15
 	return int(raw), math.Round(celsius*2) / 2, true
 }
+
+// DecodeTargetTemperature extracts the displayed setpoint from a signal 105
+// payload, rounding to the observed 0.5 C grid. ok is false when the payload
+// is not a valid signal 105 frame.
+func DecodeTargetTemperature(data []int) (float64, bool) {
+	_, tempC, ok := decodeTargetTemperature(data)
+	return tempC, ok
+}

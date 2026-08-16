@@ -39,6 +39,23 @@ func TestDecodeTargetTemperatureSamples(t *testing.T) {
 	}
 }
 
+func TestDecodeTargetTemperatureExported(t *testing.T) {
+	t.Parallel()
+	temp, ok := DecodeTargetTemperature([]int{105, 0, 0, 22, 12, 74, 4, 0})
+	if !ok {
+		t.Fatal("decode failed")
+	}
+	if temp != 8.0 {
+		t.Fatalf("got %.1f want 8.0", temp)
+	}
+	if _, ok := DecodeTargetTemperature([]int{105, 0, 0, 21, 12, 74, 4, 0}); ok {
+		t.Fatal("expected ok=false when data[3] is not 22")
+	}
+	if _, ok := DecodeTargetTemperature([]int{107, 0, 0, 22, 12, 74, 4, 0}); ok {
+		t.Fatal("expected ok=false when the signal id is not 105")
+	}
+}
+
 func TestDecodeTargetTemperatureUsesFullMillikelvinScalar(t *testing.T) {
 	t.Parallel()
 	raw, got, ok := decodeTargetTemperature([]int{105, 0, 0, 22, 12, 74, 4, 0})
