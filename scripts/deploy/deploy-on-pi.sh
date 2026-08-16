@@ -57,6 +57,12 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
   exit 1
 fi
 
+echo "==> Preparing environment artifacts from current checkout"
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "${WORK_DIR}"' EXIT
+install -m 0644 "${SERVICE_UNIT_SOURCE}" "${WORK_DIR}/service.unit"
+install -m 0440 "${SUDOERS_TIMEZONE_SOURCE}" "${WORK_DIR}/xtura-timezone"
+
 echo "==> Fetching latest refs"
 git fetch origin
 
@@ -80,25 +86,22 @@ else
     echo "unknown commit: ${TARGET_SHA}" >&2
     exit 1
   fi
+  # The environment-aware deploy driver stays the invoked script; the checked-out
+  # tree supplies only the code being built. Re-execing the target's script here
+  # would run an older body that ignores ENVIRONMENT and could deploy to prod.
   git checkout --detach "${TARGET_SHA}"
   TARGET_SHA="$(git rev-parse HEAD)"
-  if [[ -z "${DEPLOY_SCRIPT_RELOADED:-}" ]]; then
-    echo "==> Reloading updated deploy script"
-    DEPLOY_SCRIPT_RELOADED=1 DEPLOY_RETURN_BRANCH="${CURRENT_BRANCH}" exec "${SCRIPT_PATH}" "${TARGET_SHA}"
-  fi
 fi
 
 echo "==> Running tests"
 "${GO_BIN}" test ./...
 
 echo "==> Building ${BINARY_NAME}"
-BUILD_DIR="$(mktemp -d)"
-trap 'rm -rf "${BUILD_DIR}"' EXIT
 SHORT_SHA="${TARGET_SHA:0:7}"
 BUILD_LDFLAGS="-s -w"
 BUILD_LDFLAGS="${BUILD_LDFLAGS} -X empirebus-tests/service/buildinfo.GitSHA=${SHORT_SHA}"
 BUILD_LDFLAGS="${BUILD_LDFLAGS} -X empirebus-tests/service/buildinfo.DeployedAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-CGO_ENABLED=0 "${GO_BIN}" build -trimpath -ldflags="${BUILD_LDFLAGS}" -o "${BUILD_DIR}/${BINARY_NAME}" ./cmd/empirebusd
+CGO_ENABLED=0 "${GO_BIN}" build -trimpath -ldflags="${BUILD_LDFLAGS}" -o "${WORK_DIR}/${BINARY_NAME}" ./cmd/empirebusd
 
 RELEASES_DIR="${INSTALL_ROOT}/releases"
 RELEASE_DIR="${RELEASES_DIR}/${TARGET_SHA}"
@@ -108,10 +111,10 @@ echo "==> Installing release ${TARGET_SHA}"
 sudo mkdir -p "${RELEASES_DIR}" "${DATA_DIR}"
 sudo rm -rf "${RELEASE_DIR}"
 sudo mkdir -p "${RELEASE_DIR}"
-sudo install -m 0755 "${BUILD_DIR}/${BINARY_NAME}" "${RELEASE_DIR}/${BINARY_NAME}"
+sudo install -m 0755 "${WORK_DIR}/${BINARY_NAME}" "${RELEASE_DIR}/${BINARY_NAME}"
 sudo ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
-sudo install -m 0644 "${SERVICE_UNIT_SOURCE}" "${SERVICE_UNIT_DEST}"
-sudo install -m 0440 "${SUDOERS_TIMEZONE_SOURCE}" "${SUDOERS_TIMEZONE_DEST}"
+sudo install -m 0644 "${WORK_DIR}/service.unit" "${SERVICE_UNIT_DEST}"
+sudo install -m 0440 "${WORK_DIR}/xtura-timezone" "${SUDOERS_TIMEZONE_DEST}"
 sudo chown -R xtura:xtura "${INSTALL_ROOT}" "${DATA_DIR}"
 
 echo "==> Migrating garmin.ws_url to the SERV Ethernet endpoint"
