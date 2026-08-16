@@ -298,6 +298,10 @@ function overviewCurrentState(doc) {
   if (doc.status === "stale") return "stale";
   return doc.status === "available" && doc.battery && doc.battery.current_a !== undefined ? "live" : "unavailable";
 }
+function overviewSupplyState(value, status) {
+  if (value !== undefined && status === "available") return "";
+  return status === "stale" ? "Stale" : "Unavailable";
+}
 function renderOverview() {
   const doc = state.overview;
   if (!doc) return;
@@ -320,7 +324,7 @@ function renderOverview() {
     const bar = byId(`${kind}WaterBar`);
     if (bar) bar.style.width = value === undefined ? "0%" : `${Math.max(0, Math.min(100, Number(value)))}%`;
     const status = byId(`${kind}WaterState`);
-    if (status) status.textContent = value === undefined ? (stale ? "Stale" : "Unavailable") : "Available";
+    if (status) status.textContent = overviewSupplyState(value, stale ? "stale" : doc.status);
   });
 }
 
