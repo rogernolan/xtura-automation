@@ -225,12 +225,12 @@ test("renders the primary temperature card and trend", () => {
   };
   renderTemperature(state.overview);
   const html = elements.temperatureBody.innerHTML;
-  assert.match(html, /Main/);
   assert.match(html, /21\.4C/);
   assert.match(html, /Humidity 55%/);
   assert.match(html, /data-tone="warm"/);
   assert.match(html, /↑/);
-  assert.match(html, /overview-trend-chart/);
+  assert.match(html, /overview-primary-row/);
+  assert.match(html, /overview-temperature-chart/);
 });
 
 test("renders other sensors inside the big card and '-' when missing", () => {
@@ -269,7 +269,7 @@ test("does not render the inner sensor row for a single sensor", () => {
   };
   renderTemperature(state.overview);
   const html = elements.temperatureBody.innerHTML;
-  assert.match(html, /Alde/);
+  assert.match(html, /21\.0C/);
   assert.doesNotMatch(html, /overview-sensor-row/);
 });
 

@@ -350,7 +350,6 @@ function renderTemperature(doc) {
   }
   const primary = temp.primary || {};
 
-  const primaryName = (sensors[0] && sensors[0].name) || "";
   const tone = overviewTemperatureTone(primary.temp, thresholds);
   const humidityLine = primary.humidity === undefined ? "" : `<p class="overview-humidity">Humidity ${Number(primary.humidity).toFixed(0)}%</p>`;
   const trend = trendSymbol(primary.trend);
@@ -360,19 +359,24 @@ function renderTemperature(doc) {
     ? `<div class="overview-sensor-row">${sensors.slice(1).map((sensor) => `
         <div class="overview-sub-sensor">
           <span class="overview-sub-sensor-name">${escapeHtml(sensor.name)}</span>
-          <strong class="overview-sub-sensor-value">${sensor.temp === undefined || sensor.temp === null ? "-" : `${Number(sensor.temp).toFixed(1)}C`}</strong>
-          <span class="overview-trend-icon${trendKnown(sensor.trend) ? "" : " is-unknown"}" role="img" aria-label="${escapeHtml(trendLabel(sensor.trend))}">${trendSymbol(sensor.trend)}</span>
+          <div class="overview-sub-sensor-data">
+            <strong class="overview-sub-sensor-value">${sensor.temp === undefined || sensor.temp === null ? "-" : `${Number(sensor.temp).toFixed(1)}C`}</strong>
+            <span class="overview-trend-icon${trendKnown(sensor.trend) ? "" : " is-unknown"}" role="img" aria-label="${escapeHtml(trendLabel(sensor.trend))}">${trendSymbol(sensor.trend)}</span>
+          </div>
         </div>`).join("")}
       </div>`
     : "";
 
   body.innerHTML = `
     <div class="overview-card overview-temperature-card" data-tone="${tone}">
-      <div class="overview-card-heading"><span>${escapeHtml(primaryName)}</span></div>
-      <strong class="overview-temperature-value">${formatTemperature(primary.temp)}</strong>
-      ${humidityLine}
-      <div class="overview-trend-chart">
-        <span class="overview-trend-icon${trendClass}" role="img" aria-label="${escapeHtml(trendLabel(primary.trend))}">${trend}</span>
+      <div class="overview-primary-row">
+        <div class="overview-primary-left">
+          <div class="overview-primary-line">
+            <strong class="overview-temperature-value">${formatTemperature(primary.temp)}</strong>
+            <span class="overview-trend-icon${trendClass}" role="img" aria-label="${escapeHtml(trendLabel(primary.trend))}">${trend}</span>
+          </div>
+          ${humidityLine}
+        </div>
         <canvas class="overview-temperature-chart" aria-hidden="true"></canvas>
       </div>
       ${subSensors}
