@@ -54,6 +54,24 @@ overview:
   gas_tank_capacity_litres: 0
   comfort_thresholds: [10, 18, 24, 30]
 
+switchbot:
+  # BLE temperature/humidity sensors shown in the Overview Temperature panel.
+  # Disabled by default so the service behaves exactly as before. When disabled
+  # the Alde reading (from Garmin) remains the big card.
+  # To configure, run: switchbotctl discover (populates the rolling seen table),
+  # then PUT /v1/sensors/settings (or edit this file and restart). The daemon
+  # requires CAP_NET_ADMIN and CAP_NET_RAW for the HCI socket.
+  enabled: false
+  # hci_device: hci0
+  # sensors:
+  #   - name: Main       # config order controls the small-row display order
+  #     mac: c5:65:68:81:84:32
+  #     primary: true
+  #   - name: Outside
+  #     mac: d6:66:69:92:95:43
+  #   - name: Display
+  #     mac: e7:77:7a:a3:a6:54
+
 host:
   # How often the Pi status pane samples host metrics. Zero uses the 5s default.
   sample_interval: 5s
