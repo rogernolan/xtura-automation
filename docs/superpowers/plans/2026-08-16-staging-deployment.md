@@ -1420,3 +1420,27 @@ git commit -m "docs: document simulated environment and staging deployment"
 - [ ] Manual Mac smoke test (Task 5 Step 5) passes.
 - [ ] Real staging deploy on the Jones Pi done with the user: `ENVIRONMENT=staging ./scripts/deploy/run-deploy-from-mac.sh <sha>`; confirm `empirebusd-staging` serves `:8080/v1/health`, production stays healthy, and note SERV concurrent-client behavior.
 - [ ] All commits are on `feature/staging-deployment` in the worktree.
+
+---
+
+## Post-review revisions (PR #19)
+
+Codex PR review flagged three items, all addressed:
+
+- **Deploy script (P1):** the explicit-SHA re-exec ran the *target's* older deploy
+  script after `git checkout --detach`, so `ENVIRONMENT=staging` with an older
+  SHA silently deployed to prod paths. The re-exec was removed: the invoked
+  (environment-aware) script stays the deploy driver, and the checked-out tree
+  only supplies the code being built. Environment artifacts (systemd unit,
+  sudoers) are materialized from the current checkout *before* checkout so a
+  pre-staging target SHA still installs the correct staging unit. Also added a
+  guard in `run-deploy-from-mac.sh` that refuses `ENVIRONMENT=staging` when the
+  Pi's on-disk deploy script lacks `ENVIRONMENT` support.
+- **servsim concurrent writes (P1):** `replayLoop` and `readLoop` both called
+  `conn.WriteMessage` on the same connection, violating Gorilla's single-writer
+  rule. All writes now go through a per-connection mutex; added
+  `TestServerConcurrentReplayAndCommands`.
+- **Staging recordings (P2):** `service/runtime` used a hard-coded
+  `/var/lib/xtura/recordings` package var. Recording directory is now
+  configurable (`recording.dir`, default unchanged) and
+  `config.staging.example.yaml` sets it to `/var/lib/xtura-staging/recordings`.

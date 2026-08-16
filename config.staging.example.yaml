@@ -10,6 +10,11 @@ garmin:
 location:
   enabled: false
 
+# Keep WebSocket recordings in the staging data directory so they never mix
+# with production recordings under /var/lib/xtura/recordings.
+recording:
+  dir: /var/lib/xtura-staging/recordings
+
 api:
   listen: 0.0.0.0:8080
 
