@@ -80,7 +80,7 @@ func TestFeedReadingDeliversDecodedReading(t *testing.T) {
 	})
 	hum := 55.0
 	battery := 87
-	adapter.FeedReading("c5:65:68:81:84:32", Payload{DevType: 0x77, Temp: 21.4, Humidity: &hum, Battery: &battery}, -50)
+	adapter.FeedReading("c5:65:68:81:84:32", Payload{DevType: 0x77, Temp: 21.4, HasTemp: true, Humidity: &hum, Battery: &battery}, -50)
 	if len(readings) != 1 {
 		t.Fatalf("expected 1 reading, got %d", len(readings))
 	}
@@ -92,6 +92,27 @@ func TestFeedReadingDeliversDecodedReading(t *testing.T) {
 	}
 }
 
+func TestBatteryOnlyPacketDoesNotEmitReading(t *testing.T) {
+	var readings []Reading
+	adapter := New(Config{
+		Settings: sensorsSettingsWith("Main", "c5:65:68:81:84:32", true),
+		OnReading: func(reading Reading) {
+			readings = append(readings, reading)
+		},
+	})
+	// WoSensorTHO battery-only service data: device identified but no
+	// temperature yet (no manufacturer data).
+	ad := adBytes(serviceDataElement(0x77, 0x00, 0x41))
+	event := advReportEvent([]byte{0x32, 0x84, 0x81, 0x68, 0x65, 0xc5}, ad, 0x00)
+	adapter.handleEvent(event)
+	if len(readings) != 0 {
+		t.Fatalf("expected no reading for battery-only packet, got %#v", readings)
+	}
+	if len(adapter.SeenDevices()) != 1 {
+		t.Fatalf("battery-only packet should still record the seen device")
+	}
+}
+
 func TestSettingsUpdateTakesEffectImmediately(t *testing.T) {
 	var readings []Reading
 	adapter := New(Config{
@@ -100,7 +121,10 @@ func TestSettingsUpdateTakesEffectImmediately(t *testing.T) {
 		},
 	})
 	adapter.Configure(sensorsSettingsWith("Outside", "c5:65:68:81:84:32", false))
-	ad := adBytes(serviceDataElement(0x77, 0x00, 0x41))
+	ad := adBytes(
+		serviceDataElement(0x77, 0x00, 0x41),
+		manufacturerElement(0x69, 0x09, 0xc5, 0x65, 0x68, 0x81, 0x84, 0x32, 0x9d, 0x0f, 0x05, 0x06, 0x23, 0x00),
+	)
 	event := advReportEvent([]byte{0x32, 0x84, 0x81, 0x68, 0x65, 0xc5}, ad, 0x00)
 	adapter.handleEvent(event)
 	if len(readings) != 1 || readings[0].ID != "c56568818432" {

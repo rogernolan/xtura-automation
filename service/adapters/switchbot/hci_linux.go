@@ -23,6 +23,10 @@ const (
 	hciEventCommandComplete = 0x0e
 	hciEventLEMeta          = 0x3e
 	leSubeventAdvReport     = 0x02
+
+	// HCI user-channel packets are prefixed with a packet-type byte.
+	hciCommandPacket = 0x01
+	hciEventPacket   = 0x04
 )
 
 const (
@@ -91,7 +95,13 @@ func (a *Adapter) scanLoop(ctx context.Context, device string) error {
 		if n == 0 {
 			continue
 		}
-		a.handleEvent(buffer[:n])
+		// Events from a user-channel socket carry the HCI_EVENT_PKT prefix;
+		// strip it so handleEvent parses the event code at byte 0.
+		data := buffer[:n]
+		if data[0] == hciEventPacket {
+			data = data[1:]
+		}
+		a.handleEvent(data)
 	}
 }
 
@@ -113,10 +123,11 @@ func opcode(ogf, ocf byte) uint16 {
 // hciCommand sends a command and waits for its command-complete event,
 // surfacing a non-zero status as an error.
 func hciCommand(fd int, opcode uint16, params []byte) error {
-	buf := make([]byte, 3+len(params))
-	binary.LittleEndian.PutUint16(buf[0:2], opcode)
-	buf[2] = byte(len(params))
-	copy(buf[3:], params)
+	buf := make([]byte, 4+len(params))
+	buf[0] = hciCommandPacket
+	binary.LittleEndian.PutUint16(buf[1:3], opcode)
+	buf[3] = byte(len(params))
+	copy(buf[4:], params)
 	if _, err := unix.Write(fd, buf); err != nil {
 		return fmt.Errorf("write HCI command 0x%04x: %w", opcode, err)
 	}
@@ -142,13 +153,14 @@ func waitCommandComplete(fd int, opcode uint16, timeout time.Duration) error {
 		if err != nil {
 			return fmt.Errorf("read HCI command complete: %w", err)
 		}
-		if n < 6 || event[0] != hciEventCommandComplete {
+		// User-channel events are prefixed with the HCI_EVENT_PKT byte.
+		if n < 7 || event[0] != hciEventPacket || event[1] != hciEventCommandComplete {
 			continue
 		}
-		if binary.LittleEndian.Uint16(event[3:5]) != opcode {
+		if binary.LittleEndian.Uint16(event[4:6]) != opcode {
 			continue
 		}
-		if status := event[5]; status != 0 {
+		if status := event[6]; status != 0 {
 			return fmt.Errorf("HCI command 0x%04x failed: status 0x%02x", opcode, status)
 		}
 		return nil

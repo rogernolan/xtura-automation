@@ -135,6 +135,7 @@ func (a *App) observeAldeTelemetry() {
 // Alde. When scanning is disabled only Alde is shown.
 func (a *App) temperatureDocument(telemetry overview.Telemetry) overview.Temperature {
 	now := a.nowUTC()
+	aldeStale := aldeTelemetryStale(telemetry, now)
 	a.mu.RLock()
 	settings := a.sensorSettings
 	states := make(map[string]*sensorState, len(a.sensorStates))
@@ -147,7 +148,7 @@ func (a *App) temperatureDocument(telemetry overview.Telemetry) overview.Tempera
 		out := overview.Temperature{Sensors: []overview.TemperatureSensor{}}
 		out.Sensors = append(out.Sensors, a.temperatureSensorEntry(sensors.AldeID, "Alde", "garmin", states[sensors.AldeID], telemetry, now))
 		out.PrimaryID = sensors.AldeID
-		out.Primary = a.temperaturePrimary(sensors.AldeID, states[sensors.AldeID], telemetry.AldeTemperatureC, now)
+		out.Primary = a.temperaturePrimary(sensors.AldeID, states[sensors.AldeID], telemetry.AldeTemperatureC, now, aldeStale)
 		return out
 	}
 
@@ -194,8 +195,14 @@ func (a *App) temperatureDocument(telemetry overview.Telemetry) overview.Tempera
 	if primaryID == sensors.AldeID {
 		primaryTemp = telemetry.AldeTemperatureC
 	}
-	out.Primary = a.temperaturePrimary(primaryID, states[primaryID], primaryTemp, now)
+	out.Primary = a.temperaturePrimary(primaryID, states[primaryID], primaryTemp, now, aldeStale)
 	return out
+}
+
+// aldeTelemetryStale reports whether the Garmin Alde telemetry is older than
+// the overview staleness window (or has never been received).
+func aldeTelemetryStale(telemetry overview.Telemetry, now time.Time) bool {
+	return telemetry.UpdatedAt == nil || now.Sub(*telemetry.UpdatedAt) > overviewStaleAfter
 }
 
 func (a *App) temperatureSensorEntry(id, name, source string, state *sensorState, telemetry overview.Telemetry, now time.Time) overview.TemperatureSensor {
@@ -205,7 +212,8 @@ func (a *App) temperatureSensorEntry(id, name, source string, state *sensorState
 		Source: source,
 		Trend:  string(sensors.TrendUnavailable),
 	}
-	if state != nil {
+	aldeStale := source == "garmin" && aldeTelemetryStale(telemetry, now)
+	if state != nil && !aldeStale {
 		if state.temp != nil {
 			temp := *state.temp
 			entry.Temp = &temp
@@ -223,7 +231,7 @@ func (a *App) temperatureSensorEntry(id, name, source string, state *sensorState
 			entry.LastSeen = &seen
 		}
 	}
-	if source == "garmin" && telemetry.AldeTemperatureC != nil {
+	if source == "garmin" && !aldeStale && telemetry.AldeTemperatureC != nil {
 		temp := *telemetry.AldeTemperatureC
 		entry.Temp = &temp
 		if telemetry.UpdatedAt != nil {
@@ -237,13 +245,14 @@ func (a *App) temperatureSensorEntry(id, name, source string, state *sensorState
 	return entry
 }
 
-func (a *App) temperaturePrimary(id string, state *sensorState, fallbackTemp *float64, now time.Time) *overview.TemperaturePrimary {
+func (a *App) temperaturePrimary(id string, state *sensorState, fallbackTemp *float64, now time.Time, aldeStale bool) *overview.TemperaturePrimary {
 	primary := &overview.TemperaturePrimary{
 		ID:      id,
 		Trend:   string(sensors.TrendUnavailable),
 		History: []overview.TemperaturePoint{},
 	}
-	if state != nil {
+	stale := id == sensors.AldeID && aldeStale
+	if state != nil && !stale {
 		if state.temp != nil {
 			temp := *state.temp
 			primary.Temp = &temp
@@ -253,7 +262,7 @@ func (a *App) temperaturePrimary(id string, state *sensorState, fallbackTemp *fl
 			primary.Humidity = &humidity
 		}
 	}
-	if primary.Temp == nil && fallbackTemp != nil {
+	if primary.Temp == nil && fallbackTemp != nil && !stale {
 		temp := *fallbackTemp
 		primary.Temp = &temp
 	}
@@ -313,24 +322,27 @@ func (a *App) stopSwitchbotScan() {
 	}
 }
 
-// restartSwitchbotIfNeeded applies live enable/disable toggles after settings
-// change: a disabled-to-enabled switch starts the scan, an enabled-to-disabled
-// switch cancels it.
+// restartSwitchbotIfNeeded applies live settings changes after a PUT. When
+// scanning is enabled it restarts the scan so a changed hci_device (or the
+// initial enable) is picked up; when disabled it stops the scan.
 func (a *App) restartSwitchbotIfNeeded() {
-	enabled := false
-	if a.switchbot != nil {
-		enabled = a.switchbot.Settings().Enabled
-	}
+	enabled := a.switchbot != nil && a.switchbot.Settings().Enabled
 	a.switchbotMu.Lock()
 	defer a.switchbotMu.Unlock()
-	if enabled && a.switchbotCancel == nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		a.switchbotCancel = cancel
-		go a.switchbot.Run(ctx)
-	} else if !enabled && a.switchbotCancel != nil {
+	if !enabled {
+		if a.switchbotCancel != nil {
+			a.switchbotCancel()
+			a.switchbotCancel = nil
+		}
+		return
+	}
+	if a.switchbotCancel != nil {
 		a.switchbotCancel()
 		a.switchbotCancel = nil
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.switchbotCancel = cancel
+	go a.switchbot.Run(ctx)
 }
 
 // startSwitchbotSim feeds synthetic SwitchBot readings through the real
@@ -376,6 +388,7 @@ func (a *App) switchbotSimTick() {
 		a.switchbot.FeedReading(sensor.MAC, switchbot.Payload{
 			DevType:  0x77,
 			Temp:     temp,
+			HasTemp:  true,
 			Humidity: &humidity,
 			Battery:  &battery,
 		}, -50)

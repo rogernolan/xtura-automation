@@ -59,7 +59,7 @@ func TestTemperatureDisabledShowsOnlyAlde(t *testing.T) {
 	app, store := newSensorApp(t, settings)
 	seedSamples(t, store, sensors.AldeID, 21.0, 20.0)
 	aldeTemp := 21.0
-	updated := time.Date(2026, 8, 16, 9, 59, 0, 0, time.UTC)
+	updated := time.Date(2026, 8, 16, 9, 59, 55, 0, time.UTC)
 	telemetry := overview.Telemetry{AldeTemperatureC: &aldeTemp, UpdatedAt: &updated}
 
 	doc := app.temperatureDocument(telemetry)
@@ -135,8 +135,27 @@ func TestSensorTrendRising(t *testing.T) {
 	app, store := newSensorApp(t, settings)
 	seedSamples(t, store, sensors.AldeID, 22.0, 20.0)
 	aldeTemp := 22.0
-	doc := app.temperatureDocument(overview.Telemetry{AldeTemperatureC: &aldeTemp})
+	updated := time.Date(2026, 8, 16, 9, 59, 55, 0, time.UTC)
+	doc := app.temperatureDocument(overview.Telemetry{AldeTemperatureC: &aldeTemp, UpdatedAt: &updated})
 	if doc.Primary == nil || doc.Primary.Trend != string(sensors.TrendRising) {
 		t.Fatalf("expected rising trend, got %q", doc.Primary.Trend)
+	}
+}
+
+func TestTemperatureAldeExpiresWhenStale(t *testing.T) {
+	settings := sensors.Settings{Enabled: false}
+	app, _ := newSensorApp(t, settings)
+	aldeTemp := 21.0
+	// UpdatedAt is 1 minute old, beyond the 30s staleness window.
+	updated := time.Date(2026, 8, 16, 9, 59, 0, 0, time.UTC)
+	doc := app.temperatureDocument(overview.Telemetry{AldeTemperatureC: &aldeTemp, UpdatedAt: &updated})
+	if doc.PrimaryID != sensors.AldeID {
+		t.Fatalf("primary: got %q", doc.PrimaryID)
+	}
+	if doc.Primary == nil || doc.Primary.Temp != nil {
+		t.Fatalf("expected stale Alde temp to be suppressed, got %#v", doc.Primary)
+	}
+	if doc.Sensors[0].Temp != nil {
+		t.Fatalf("expected stale Alde sensor entry to omit temp, got %#v", doc.Sensors[0])
 	}
 }

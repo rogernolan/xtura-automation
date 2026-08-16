@@ -4,6 +4,7 @@ package switchbot
 type Payload struct {
 	DevType  byte
 	Temp     float64
+	HasTemp  bool
 	Humidity *float64
 	Battery  *int
 }
@@ -65,6 +66,7 @@ func decodeMeter(serviceData []byte) (Payload, bool) {
 	return Payload{
 		DevType:  serviceData[0],
 		Temp:     temp,
+		HasTemp:  true,
 		Humidity: &humidity,
 		Battery:  &battery,
 	}, true
@@ -102,6 +104,7 @@ func decodeOutdoor(elements []AD, serviceData []byte) (Payload, bool) {
 	}
 	humidity := float64(mfr[10] & 0x7f)
 	payload.Temp = temp
+	payload.HasTemp = true
 	payload.Humidity = &humidity
 	return payload, true
 }

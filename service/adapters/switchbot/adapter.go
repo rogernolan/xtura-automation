@@ -183,7 +183,7 @@ func (a *Adapter) applyReading(mac string, rssi int, payload Payload) {
 	a.mu.Unlock()
 
 	sensor, matched := settings.SensorByMAC(mac)
-	if !matched {
+	if !matched || !payload.HasTemp {
 		return
 	}
 	if a.cfg.OnReading != nil {
