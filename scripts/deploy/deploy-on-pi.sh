@@ -3,17 +3,39 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_PATH="${REPO_ROOT}/scripts/deploy/$(basename "${BASH_SOURCE[0]}")"
-INSTALL_ROOT="/opt/xtura"
-CONFIG_PATH="/var/lib/xtura/config.yaml"
-SERVICE_NAME="empirebusd"
 BINARY_NAME="empirebusd"
 GO_BIN="${GO_BIN:-go}"
-SERVICE_UNIT_SOURCE="${REPO_ROOT}/ops/systemd/empirebusd.service"
-SERVICE_UNIT_DEST="/etc/systemd/system/empirebusd.service"
 SUDOERS_TIMEZONE_SOURCE="${REPO_ROOT}/ops/sudoers/xtura-timezone"
 SUDOERS_TIMEZONE_DEST="/etc/sudoers.d/xtura-timezone"
 
+ENVIRONMENT="${ENVIRONMENT:-prod}"
+case "${ENVIRONMENT}" in
+  prod)
+    INSTALL_ROOT="/opt/xtura"
+    CONFIG_PATH="/var/lib/xtura/config.yaml"
+    DATA_DIR="/var/lib/xtura"
+    SERVICE_NAME="empirebusd"
+    SERVICE_UNIT_SOURCE="${REPO_ROOT}/ops/systemd/empirebusd.service"
+    SERVICE_UNIT_DEST="/etc/systemd/system/empirebusd.service"
+    HEALTH_URL="http://127.0.0.1/v1/health"
+    ;;
+  staging)
+    INSTALL_ROOT="/opt/xtura-staging"
+    CONFIG_PATH="/var/lib/xtura-staging/config.yaml"
+    DATA_DIR="/var/lib/xtura-staging"
+    SERVICE_NAME="empirebusd-staging"
+    SERVICE_UNIT_SOURCE="${REPO_ROOT}/ops/systemd/empirebusd-staging.service"
+    SERVICE_UNIT_DEST="/etc/systemd/system/empirebusd-staging.service"
+    HEALTH_URL="http://127.0.0.1:8080/v1/health"
+    ;;
+  *)
+    echo "unsupported ENVIRONMENT: ${ENVIRONMENT} (expected prod or staging)" >&2
+    exit 1
+    ;;
+esac
+
 cd "${REPO_ROOT}"
+echo "==> Deploying ${SERVICE_NAME} to the ${ENVIRONMENT} environment"
 
 is_raspberry_pi() {
   [[ -r /proc/device-tree/model ]] || return 1
@@ -79,14 +101,14 @@ RELEASE_DIR="${RELEASES_DIR}/${TARGET_SHA}"
 CURRENT_LINK="${INSTALL_ROOT}/current"
 
 echo "==> Installing release ${TARGET_SHA}"
-sudo mkdir -p "${RELEASES_DIR}" /var/lib/xtura
+sudo mkdir -p "${RELEASES_DIR}" "${DATA_DIR}"
 sudo rm -rf "${RELEASE_DIR}"
 sudo mkdir -p "${RELEASE_DIR}"
 sudo install -m 0755 "${BUILD_DIR}/${BINARY_NAME}" "${RELEASE_DIR}/${BINARY_NAME}"
 sudo ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 sudo install -m 0644 "${SERVICE_UNIT_SOURCE}" "${SERVICE_UNIT_DEST}"
 sudo install -m 0440 "${SUDOERS_TIMEZONE_SOURCE}" "${SUDOERS_TIMEZONE_DEST}"
-sudo chown -R xtura:xtura "${INSTALL_ROOT}" /var/lib/xtura
+sudo chown -R xtura:xtura "${INSTALL_ROOT}" "${DATA_DIR}"
 
 echo "==> Migrating garmin.ws_url to the SERV Ethernet endpoint"
 LEGACY_WS_URL="ws://192.168.1.1:8888/ws"
@@ -112,7 +134,7 @@ sudo journalctl -u "${SERVICE_NAME}.service" -n 50 --no-pager
 echo "==> Health check"
 HEALTH_OUTPUT="$(mktemp)"
 for attempt in {1..30}; do
-  if curl --fail --silent --show-error --max-time 2 http://127.0.0.1/v1/health >"${HEALTH_OUTPUT}" 2>&1; then
+  if curl --fail --silent --show-error --max-time 2 "${HEALTH_URL}" >"${HEALTH_OUTPUT}" 2>&1; then
     cat "${HEALTH_OUTPUT}"
     echo
     break
