@@ -166,11 +166,11 @@ h1 {
 .overview-supplies-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .overview-card { display: grid; align-content: start; gap: 9px; min-width: 0; padding: 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; box-shadow: var(--shadow); }
 .overview-card:hover, .overview-card:focus-visible { border-color: var(--accent); outline: 3px solid rgba(31, 95, 212, .18); }
-.overview-temperature-card[data-tone="cold"] { background: var(--surface-strong); border-color: #6aa8e8; box-shadow: inset 0 5px 0 #6aa8e8, var(--shadow); }
-.overview-temperature-card[data-tone="comfortable"] { background: var(--surface-strong); border-color: #67b98b; box-shadow: inset 0 5px 0 #67b98b, var(--shadow); }
-.overview-temperature-card[data-tone="warm"] { background: var(--surface-strong); border-color: #dda743; box-shadow: inset 0 5px 0 #dda743, var(--shadow); }
-.overview-temperature-card[data-tone="hot"] { background: var(--surface-strong); border-color: #d8785f; box-shadow: inset 0 5px 0 #d8785f, var(--shadow); }
-.overview-temperature-card[data-tone="unavailable"] { background: var(--surface-strong); box-shadow: inset 0 5px 0 var(--muted), var(--shadow); }
+.overview-temperature-card[data-tone="cold"] { background: radial-gradient(circle at center, rgba(126, 183, 255, .34), rgba(255, 255, 255, .96) 78%); border-color: #6aa8e8; }
+.overview-temperature-card[data-tone="comfortable"] { background: radial-gradient(circle at center, rgba(111, 208, 154, .34), rgba(255, 255, 255, .96) 78%); border-color: #67b98b; }
+.overview-temperature-card[data-tone="warm"] { background: radial-gradient(circle at center, rgba(255, 204, 108, .38), rgba(255, 255, 255, .96) 78%); border-color: #dda743; }
+.overview-temperature-card[data-tone="hot"] { background: radial-gradient(circle at center, rgba(246, 137, 111, .38), rgba(255, 255, 255, .96) 78%); border-color: #d8785f; }
+.overview-temperature-card[data-tone="unavailable"] { background: radial-gradient(circle at center, rgba(104, 112, 124, .16), rgba(255, 255, 255, .96) 78%); }
 .overview-card-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 850; }
 .overview-temperature-card { min-height: 138px; }
 .overview-temperature-value { display: block; font-size: clamp(2.8rem, 13vw, 4.8rem); line-height: .95; letter-spacing: -.06em; }
