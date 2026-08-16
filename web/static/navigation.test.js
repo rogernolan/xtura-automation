@@ -27,10 +27,9 @@ test("overview markup follows the approved grouped layout and deep links", () =>
   assert.match(html, /class="overview-group overview-temperature-group"/);
   assert.match(html, /class="overview-group overview-power-group"/);
   assert.match(html, /class="overview-group overview-supplies-group"/);
-  assert.match(html, /data-overview-route="#\/controls\/heating"/);
+  assert.match(html, /id="temperatureBody"/);
   assert.match(html, /data-overview-route="#\/controls\/water"/);
   assert.match(html, /data-overview-route="#\/more\/settings"/);
-  assert.match(html, /id="overviewTrend"[^>]*>Trend unavailable</);
   assert.match(html, /id="batteryCurrentState"/);
   const styles = fs.readFileSync(require("node:path").join(__dirname, "styles.css"), "utf8");
   for (const tone of ["cold", "comfortable", "warm", "hot"]) {

@@ -16,6 +16,7 @@ import (
 	"empirebus-tests/heating"
 	"empirebus-tests/service/adapters/garmin"
 	"empirebus-tests/service/adapters/geotimezone"
+	"empirebus-tests/service/adapters/switchbot"
 	"empirebus-tests/service/adapters/teltonika"
 	"empirebus-tests/service/adapters/tzfresolver"
 	"empirebus-tests/service/api/events"
@@ -25,7 +26,9 @@ import (
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	"empirebus-tests/service/domains/overview"
+	"empirebus-tests/service/domains/sensors"
 	domainwater "empirebus-tests/service/domains/water"
+	"empirebus-tests/service/history"
 	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/tracking"
@@ -33,6 +36,9 @@ import (
 
 var recordingDirectory = "/var/lib/xtura/recordings"
 var trackingDirectory = "/var/lib/xtura/tracks"
+
+// sensorCompactInterval is how often the history store retention runs.
+const sensorCompactInterval = time.Hour
 
 type HeatingController interface {
 	EnsureOn(context.Context) error
@@ -89,9 +95,16 @@ type App struct {
 	overviewTelemetry     func() overview.Telemetry
 	sleep                 func(time.Duration)
 	now                   func() time.Time
+	sensorsStore          *history.Store
+	switchbot             *switchbot.Adapter
 
 	mu                 sync.RWMutex
 	configMu           sync.Mutex
+	switchbotMu        sync.Mutex
+	switchbotCancel    context.CancelFunc
+	sensorStates       map[string]*sensorState
+	lastHistory        map[string]sensorStamp
+	sensorSettings     sensors.Settings
 	lightsState        domainlights.State
 	waterState         domainwater.State
 	locationState      domainlocation.State
@@ -197,6 +210,8 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 			trackingManager.ObserveFrame(at, direction, raw)
 		}
 	}
+	sensorStore := history.New(sensorHistoryDirectory, history.DefaultWindow, history.DefaultRetention, time.Now, logger)
+	seedSensorHistory(sensorStore, time.Now().UTC())
 	adapter := garmin.New(garmin.Config{
 		WSURL:             cfg.Garmin.WSURL,
 		Origin:            cfg.Garmin.Origin,
@@ -237,12 +252,23 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		tracking:              trackingManager,
 		overviewTelemetry:     overviewTelemetry,
 		now:                   time.Now,
+		sensorsStore:          sensorStore,
+		sensorStates:          make(map[string]*sensorState),
+		lastHistory:           make(map[string]sensorStamp),
+		sensorSettings:        cfg.Switchbot,
 		schedulerWake:         make(chan struct{}, 1),
 		waterSchedulerWake:    make(chan struct{}, 1),
 	}
+	app.switchbot = switchbot.New(switchbot.Config{
+		Settings:  cfg.Switchbot,
+		Logger:    logger,
+		Now:       time.Now,
+		OnReading: app.handleSensorReading,
+	})
 	go func() {
 		<-ctx.Done()
 		recorder.Shutdown()
+		app.stopSwitchbotScan()
 	}()
 	app.revision = readConfigRevision(configPath)
 	if err := app.loadRuntimeState(); err != nil {
@@ -257,6 +283,9 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		SystemTimezone:     currentSystemTimezone(),
 		TimezoneUpdateMode: timezoneUpdateMode(cfg.Location.TimezoneUpdate),
 	}
+	go app.startSwitchbotScan()
+	go app.startSwitchbotSim(ctx)
+	go app.sensorCompactLoop(ctx)
 	go app.publishStateLoop(ctx)
 	if cfg.Location.Enabled {
 		go app.locationLoop(ctx)
@@ -794,6 +823,7 @@ func (a *App) publishStateLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			a.observeAldeTelemetry()
 			currentOverview := a.Overview()
 			if !reflect.DeepEqual(currentOverview, lastOverview) {
 				lastOverview = currentOverview

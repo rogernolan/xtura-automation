@@ -27,13 +27,49 @@ type Battery struct {
 }
 
 type Document struct {
-	Status            string     `json:"status"`
-	AldeTemperatureC  *float64   `json:"alde_temperature_c,omitempty"`
-	Battery           Battery    `json:"battery"`
-	FreshWaterPercent *float64   `json:"fresh_water_percent,omitempty"`
-	GreyWaterPercent  *float64   `json:"grey_water_percent,omitempty"`
-	Gas               Gas        `json:"gas"`
-	UpdatedAt         *time.Time `json:"updated_at,omitempty"`
+	Status            string      `json:"status"`
+	AldeTemperatureC  *float64    `json:"alde_temperature_c,omitempty"`
+	Battery           Battery     `json:"battery"`
+	FreshWaterPercent *float64    `json:"fresh_water_percent,omitempty"`
+	GreyWaterPercent  *float64    `json:"grey_water_percent,omitempty"`
+	Gas               Gas         `json:"gas"`
+	Temperature       Temperature `json:"temperature"`
+	UpdatedAt         *time.Time  `json:"updated_at,omitempty"`
+}
+
+// Temperature is the temperature panel: the big primary card plus the small
+// sensor row. sensors[0] is the promoted primary.
+type Temperature struct {
+	Sensors   []TemperatureSensor `json:"sensors"`
+	PrimaryID string              `json:"primary_id,omitempty"`
+	Primary   *TemperaturePrimary `json:"primary,omitempty"`
+}
+
+// TemperatureSensor is one entry in the temperature panel.
+type TemperatureSensor struct {
+	ID       string     `json:"id"`
+	Name     string     `json:"name"`
+	Source   string     `json:"source"`
+	Temp     *float64   `json:"temp,omitempty"`
+	Humidity *float64   `json:"humidity,omitempty"`
+	Battery  *int       `json:"battery,omitempty"`
+	Trend    string     `json:"trend"`
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+}
+
+// TemperaturePrimary is the big-card payload with the 2h chart history.
+type TemperaturePrimary struct {
+	ID       string             `json:"id"`
+	Temp     *float64           `json:"temp,omitempty"`
+	Humidity *float64           `json:"humidity,omitempty"`
+	Trend    string             `json:"trend"`
+	History  []TemperaturePoint `json:"history"`
+}
+
+// TemperaturePoint is one chart sample for the primary card.
+type TemperaturePoint struct {
+	At   time.Time `json:"t"`
+	Temp float64   `json:"temp"`
 }
 
 type Gas struct {
