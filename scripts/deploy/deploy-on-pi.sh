@@ -3,17 +3,39 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_PATH="${REPO_ROOT}/scripts/deploy/$(basename "${BASH_SOURCE[0]}")"
-INSTALL_ROOT="/opt/xtura"
-CONFIG_PATH="/var/lib/xtura/config.yaml"
-SERVICE_NAME="empirebusd"
 BINARY_NAME="empirebusd"
 GO_BIN="${GO_BIN:-go}"
-SERVICE_UNIT_SOURCE="${REPO_ROOT}/ops/systemd/empirebusd.service"
-SERVICE_UNIT_DEST="/etc/systemd/system/empirebusd.service"
 SUDOERS_TIMEZONE_SOURCE="${REPO_ROOT}/ops/sudoers/xtura-timezone"
 SUDOERS_TIMEZONE_DEST="/etc/sudoers.d/xtura-timezone"
 
+ENVIRONMENT="${ENVIRONMENT:-prod}"
+case "${ENVIRONMENT}" in
+  prod)
+    INSTALL_ROOT="/opt/xtura"
+    CONFIG_PATH="/var/lib/xtura/config.yaml"
+    DATA_DIR="/var/lib/xtura"
+    SERVICE_NAME="empirebusd"
+    SERVICE_UNIT_SOURCE="${REPO_ROOT}/ops/systemd/empirebusd.service"
+    SERVICE_UNIT_DEST="/etc/systemd/system/empirebusd.service"
+    HEALTH_URL="http://127.0.0.1/v1/health"
+    ;;
+  staging)
+    INSTALL_ROOT="/opt/xtura-staging"
+    CONFIG_PATH="/var/lib/xtura-staging/config.yaml"
+    DATA_DIR="/var/lib/xtura-staging"
+    SERVICE_NAME="empirebusd-staging"
+    SERVICE_UNIT_SOURCE="${REPO_ROOT}/ops/systemd/empirebusd-staging.service"
+    SERVICE_UNIT_DEST="/etc/systemd/system/empirebusd-staging.service"
+    HEALTH_URL="http://127.0.0.1:8080/v1/health"
+    ;;
+  *)
+    echo "unsupported ENVIRONMENT: ${ENVIRONMENT} (expected prod or staging)" >&2
+    exit 1
+    ;;
+esac
+
 cd "${REPO_ROOT}"
+echo "==> Deploying ${SERVICE_NAME} to the ${ENVIRONMENT} environment"
 
 is_raspberry_pi() {
   [[ -r /proc/device-tree/model ]] || return 1
@@ -35,10 +57,16 @@ if [[ ! -f "${CONFIG_PATH}" ]]; then
   exit 1
 fi
 
+echo "==> Preparing environment artifacts from current checkout"
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "${WORK_DIR}"' EXIT
+install -m 0644 "${SERVICE_UNIT_SOURCE}" "${WORK_DIR}/service.unit"
+install -m 0440 "${SUDOERS_TIMEZONE_SOURCE}" "${WORK_DIR}/xtura-timezone"
+
 echo "==> Fetching latest refs"
 git fetch origin
 
-CURRENT_BRANCH="$(git branch --show-current)"
+CURRENT_BRANCH="${DEPLOY_RETURN_BRANCH:-$(git branch --show-current)}"
 CURRENT_SHA="$(git rev-parse HEAD)"
 TARGET_SHA="${1:-HEAD}"
 
@@ -47,7 +75,7 @@ if [[ "${TARGET_SHA}" == "HEAD" ]]; then
   TARGET_SHA="$(git rev-parse HEAD)"
   if [[ "${TARGET_SHA}" != "${CURRENT_SHA}" ]]; then
     echo "==> Reloading updated deploy script"
-    exec "${SCRIPT_PATH}" "${TARGET_SHA}"
+    DEPLOY_RETURN_BRANCH="${CURRENT_BRANCH}" exec "${SCRIPT_PATH}" "${TARGET_SHA}"
   fi
 else
   if [[ ! "${TARGET_SHA}" =~ ^[0-9a-f]{7,40}$ ]]; then
@@ -58,6 +86,9 @@ else
     echo "unknown commit: ${TARGET_SHA}" >&2
     exit 1
   fi
+  # The environment-aware deploy driver stays the invoked script; the checked-out
+  # tree supplies only the code being built. Re-execing the target's script here
+  # would run an older body that ignores ENVIRONMENT and could deploy to prod.
   git checkout --detach "${TARGET_SHA}"
   TARGET_SHA="$(git rev-parse HEAD)"
 fi
@@ -66,27 +97,25 @@ echo "==> Running tests"
 "${GO_BIN}" test ./...
 
 echo "==> Building ${BINARY_NAME}"
-BUILD_DIR="$(mktemp -d)"
-trap 'rm -rf "${BUILD_DIR}"' EXIT
 SHORT_SHA="${TARGET_SHA:0:7}"
 BUILD_LDFLAGS="-s -w"
 BUILD_LDFLAGS="${BUILD_LDFLAGS} -X empirebus-tests/service/buildinfo.GitSHA=${SHORT_SHA}"
 BUILD_LDFLAGS="${BUILD_LDFLAGS} -X empirebus-tests/service/buildinfo.DeployedAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-CGO_ENABLED=0 "${GO_BIN}" build -trimpath -ldflags="${BUILD_LDFLAGS}" -o "${BUILD_DIR}/${BINARY_NAME}" ./cmd/empirebusd
+CGO_ENABLED=0 "${GO_BIN}" build -trimpath -ldflags="${BUILD_LDFLAGS}" -o "${WORK_DIR}/${BINARY_NAME}" ./cmd/empirebusd
 
 RELEASES_DIR="${INSTALL_ROOT}/releases"
 RELEASE_DIR="${RELEASES_DIR}/${TARGET_SHA}"
 CURRENT_LINK="${INSTALL_ROOT}/current"
 
 echo "==> Installing release ${TARGET_SHA}"
-sudo mkdir -p "${RELEASES_DIR}" /var/lib/xtura
+sudo mkdir -p "${RELEASES_DIR}" "${DATA_DIR}"
 sudo rm -rf "${RELEASE_DIR}"
 sudo mkdir -p "${RELEASE_DIR}"
-sudo install -m 0755 "${BUILD_DIR}/${BINARY_NAME}" "${RELEASE_DIR}/${BINARY_NAME}"
+sudo install -m 0755 "${WORK_DIR}/${BINARY_NAME}" "${RELEASE_DIR}/${BINARY_NAME}"
 sudo ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
-sudo install -m 0644 "${SERVICE_UNIT_SOURCE}" "${SERVICE_UNIT_DEST}"
-sudo install -m 0440 "${SUDOERS_TIMEZONE_SOURCE}" "${SUDOERS_TIMEZONE_DEST}"
-sudo chown -R xtura:xtura "${INSTALL_ROOT}" /var/lib/xtura
+sudo install -m 0644 "${WORK_DIR}/service.unit" "${SERVICE_UNIT_DEST}"
+sudo install -m 0440 "${WORK_DIR}/xtura-timezone" "${SUDOERS_TIMEZONE_DEST}"
+sudo chown -R xtura:xtura "${INSTALL_ROOT}" "${DATA_DIR}"
 
 echo "==> Migrating garmin.ws_url to the SERV Ethernet endpoint"
 LEGACY_WS_URL="ws://192.168.1.1:8888/ws"
@@ -112,7 +141,7 @@ sudo journalctl -u "${SERVICE_NAME}.service" -n 50 --no-pager
 echo "==> Health check"
 HEALTH_OUTPUT="$(mktemp)"
 for attempt in {1..30}; do
-  if curl --fail --silent --show-error --max-time 2 http://127.0.0.1/v1/health >"${HEALTH_OUTPUT}" 2>&1; then
+  if curl --fail --silent --show-error --max-time 2 "${HEALTH_URL}" >"${HEALTH_OUTPUT}" 2>&1; then
     cat "${HEALTH_OUTPUT}"
     echo
     break

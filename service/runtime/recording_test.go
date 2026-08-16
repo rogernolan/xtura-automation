@@ -17,13 +17,12 @@ import (
 
 func TestAppStopsRecordingOnContextShutdown(t *testing.T) {
 	dir := t.TempDir()
-	previousDir := recordingDirectory
-	recordingDirectory = dir
-	t.Cleanup(func() { recordingDirectory = previousDir })
+	cfg := testRecordingConfig()
+	cfg.Recording = config.RecordingConfig{Dir: dir}
 
 	rootCtx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	app, err := New(rootCtx, testRecordingConfig(), "", log.New(io.Discard, "", 0))
+	app, err := New(rootCtx, cfg, "", log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,17 @@
+garmin:
+  # Simulated SERV via scripts/sim/run-sim.sh / cmd/servsim.
+  ws_url: ws://localhost:8090/ws
+  heartbeat_interval: 4s
+  trace_window: 3s
+
+api:
+  listen: 0.0.0.0:8091
+
+automation:
+  timezone: Europe/London
+  heating_programs:
+    - id: sim-off
+      days: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+      periods:
+        - start: "00:00"
+          mode: "off"

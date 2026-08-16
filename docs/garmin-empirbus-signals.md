@@ -460,6 +460,32 @@ These names suggest control semantics, but there is not yet a confirming browser
 - `222`: `Power Status: Output AC Watts`
 - `223`: `Power Status: Board Battery Watts`
 
+## Simulation note: `servsim` command echo
+
+`cmd/servsim` is a fake SERV for local development. It replays a recorded
+NDJSON capture for background state and echoes command state for a small set of
+signals so command APIs complete offline. This is **simulation behavior, not
+browser-confirmed evidence**; it exists so the repo can develop and test
+without the motorhome.
+
+| Command frame | Echoed frames |
+| --- | --- |
+| `messagetype=17, messagecmd=0, data=[101,0,3]` | `16/5` `[101,0,1]` then `[102,0,0]`, plus a seeded `[105,...,20.0C]` when no target is known |
+| `messagetype=17, messagecmd=0, data=[101,0,5]` | `16/5` `[101,0,0]` |
+| `messagetype=17, messagecmd=0, data=[47,0,3]` | `16/5` `[47,0,1]` |
+| `messagetype=17, messagecmd=0, data=[48,0,3]` | `16/5` `[48,0,1]` |
+| `messagetype=17, messagecmd=1, data=[107,0,0]` (temp up release) | `16/5` `[105,0,0,22,...]` at +0.5C |
+| `messagetype=17, messagecmd=1, data=[108,0,0]` (temp down release) | `16/5` `[105,0,0,22,...]` at -0.5C |
+| `messagetype=17, messagecmd=1, data=[4,0,v]` | `16/5` `[4,0,v]` |
+| `messagetype=17, messagecmd=1, data=[5,0,v]` | `16/5` `[5,0,v]` |
+
+Echo state frames use the observed SERV state shape (`messagetype=16,
+messagecmd=5, size=8, data=[sigLo,sigHi,value,0,0,0,0,0]`) and the signal `105`
+payload layout above, matching the replayed frames in `garmin-ws-*.ndjson` and
+the `Heating*.har` captures. Source: `cmd/servsim/echo.go`. The 20.0C seed is a
+convenience so `SetTargetTemp` can read a baseline; it is not an observed SERV
+value.
+
 ## Code Red Module Data
 
 This repo currently contains a request to include data from the Code Red module and cite its GitHub source.
