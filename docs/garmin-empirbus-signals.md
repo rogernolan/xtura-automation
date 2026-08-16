@@ -68,6 +68,8 @@ WDU-client source-map confirmed from `web/index.16816f2f5a38188c2b13.js.map` (re
 | `212` | Board Battery Current | `6` | `raw / 1000` A | WDU-client source map; local signal catalogue |
 | `213` | Board Battery State Of Charge | `14` | `raw / 1000` % | WDU-client source map; local signal catalogue |
 
+The service's sensor history store (`service/history`, added 2026-08-16) appends `106` Actual Temp ALDE samples to the Alde sensor's NDJSON file and its trend; the sensor panel shows Alde alongside configured SwitchBot BLE sensors. Repo-local capture evidence, not inferred.
+
 Repo smoke-check: use the on-demand Garmin recording feature to collect received status while viewing the relevant Garmin pages, then confirm the capture contains the expected signal id, value type, and at least eight data bytes before treating a live value as available. The decoder tests in `service/adapters/garmin/adapter_test.go` exercise these source-map conversions, including a negative current and rejected invalid/short frames. This is transport/conversion validation, not a claim that any vehicle reading is fresh.
 
 ### Session bootstrap

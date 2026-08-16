@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"empirebus-tests/service/api/events"
+	"empirebus-tests/service/adapters/switchbot"
 	"empirebus-tests/service/buildinfo"
 	"empirebus-tests/service/config"
 	domainheating "empirebus-tests/service/domains/heating"
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	"empirebus-tests/service/domains/overview"
+	"empirebus-tests/service/domains/sensors"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
@@ -59,6 +61,12 @@ type fakeApp struct {
 	overview           overview.Document
 	overviewSettings   overview.Settings
 	updateOverviewErr  error
+	sensorSettings     sensors.Settings
+	updateSensorErr    error
+	discoverDevices    []switchbot.SeenDevice
+	discoverErr        error
+	history            []sensors.Sample
+	historyErr         error
 }
 
 func (f fakeApp) Health() runtime.ServiceHealthView {
@@ -177,6 +185,25 @@ func (f fakeApp) Overview() overview.Document         { return f.overview }
 func (f fakeApp) OverviewSettings() overview.Settings { return f.overviewSettings }
 func (f fakeApp) UpdateOverviewSettings(_ context.Context, settings overview.Settings) (overview.Settings, error) {
 	return settings, f.updateOverviewErr
+}
+
+func (f fakeApp) SensorSettings() sensors.Settings {
+	return f.sensorSettings
+}
+
+func (f fakeApp) UpdateSensorSettings(_ context.Context, settings sensors.Settings) (sensors.Settings, error) {
+	if f.updateSensorErr != nil {
+		return sensors.Settings{}, f.updateSensorErr
+	}
+	return settings, nil
+}
+
+func (f fakeApp) SensorDiscover(_ context.Context) ([]switchbot.SeenDevice, error) {
+	return f.discoverDevices, f.discoverErr
+}
+
+func (f fakeApp) SensorHistory(string, int) ([]sensors.Sample, error) {
+	return f.history, f.historyErr
 }
 
 func (f fakeApp) TrackingDirectory() string {

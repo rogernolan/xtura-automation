@@ -12,12 +12,14 @@ import (
 	"strings"
 	"time"
 
+	"empirebus-tests/service/adapters/switchbot"
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/buildinfo"
 	"empirebus-tests/service/config"
 	domainlights "empirebus-tests/service/domains/lights"
 	domainlocation "empirebus-tests/service/domains/location"
 	"empirebus-tests/service/domains/overview"
+	"empirebus-tests/service/domains/sensors"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/host"
 	"empirebus-tests/service/recording"
@@ -61,6 +63,10 @@ type Application interface {
 	Overview() overview.Document
 	OverviewSettings() overview.Settings
 	UpdateOverviewSettings(context.Context, overview.Settings) (overview.Settings, error)
+	SensorSettings() sensors.Settings
+	UpdateSensorSettings(context.Context, sensors.Settings) (sensors.Settings, error)
+	SensorDiscover(context.Context) ([]switchbot.SeenDevice, error)
+	SensorHistory(string, int) ([]sensors.Sample, error)
 	UpdateTrackingSettings(context.Context, tracking.Settings) (tracking.Settings, error)
 	TrackingState() tracking.State
 	StartTracking(context.Context) (tracking.State, error)
@@ -108,6 +114,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/tracking/state", s.handleTrackingState)
 	mux.HandleFunc("/v1/tracking/start", s.handleTrackingStart)
 	mux.HandleFunc("/v1/tracking/stop", s.handleTrackingStop)
+	mux.HandleFunc("/v1/sensors/settings", s.handleSensorSettings)
+	mux.HandleFunc("/v1/sensors/discover", s.handleSensorDiscover)
+	mux.HandleFunc("/v1/sensors/history/{id}", s.handleSensorHistory)
 	mux.HandleFunc("/v1/tracks", s.handleTracks)
 	mux.HandleFunc("/v1/tracks/{name}", s.handleTrack)
 	mux.HandleFunc("/v1/events", s.handleEvents)
@@ -655,6 +664,61 @@ func (s *Server) handleTracks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, files)
+}
+
+func (s *Server) handleSensorSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.app.SensorSettings())
+	case http.MethodPut:
+		var settings sensors.Settings
+		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("decode request: %w", err))
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		updated, err := s.app.UpdateSensorSettings(ctx, settings)
+		if err != nil {
+			if isValidationError(err) || strings.HasPrefix(err.Error(), "switchbot.") {
+				writeValidationError(w, err)
+			} else {
+				writeError(w, http.StatusBadGateway, err)
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleSensorDiscover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	devices, err := s.app.SensorDiscover(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, devices)
+}
+
+func (s *Server) handleSensorHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	samples, err := s.app.SensorHistory(r.PathValue("id"), 720)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, samples)
 }
 
 func (s *Server) handleTrack(w http.ResponseWriter, r *http.Request) {

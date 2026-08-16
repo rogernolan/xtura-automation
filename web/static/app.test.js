@@ -12,11 +12,16 @@ class ElementStub {
     this.value = options.value || "";
     this.checked = options.checked || false;
     this.textContent = options.textContent || "";
+    this.innerHTML = options.innerHTML || "";
     this.disabled = false;
     this.hidden = false;
     this.listeners = new Map();
     this.parentNode = null;
     this.classList = { toggle() {} };
+  }
+
+  querySelector() {
+    return null;
   }
 
   addEventListener(type, listener) {
@@ -49,6 +54,7 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
     "scheduleForm",
     "overviewSettingsForm", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
+    "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
   const document = {
@@ -88,8 +94,8 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, renderOverview, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
-  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, renderOverview: context.module.exports.renderOverview, overviewTemperatureTone: context.module.exports.overviewTemperatureTone, overviewCurrentState: context.module.exports.overviewCurrentState, overviewSupplyState: context.module.exports.overviewSupplyState, state: context.module.exports.state, window, elements };
+  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, trendSymbol, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
+  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, renderOverview: context.module.exports.renderOverview, renderTemperature: context.module.exports.renderTemperature, trendLabel: context.module.exports.trendLabel, trendSymbol: context.module.exports.trendSymbol, overviewTemperatureTone: context.module.exports.overviewTemperatureTone, overviewCurrentState: context.module.exports.overviewCurrentState, overviewSupplyState: context.module.exports.overviewSupplyState, state: context.module.exports.state, window, elements };
 }
 
 test("rerendering overview does not overwrite dirty settings fields", () => {
@@ -205,4 +211,88 @@ test("changing the more dropdown navigates to the selected section", () => {
   moreSelect.dispatchEvent({ type: "change", bubbles: true });
 
   assert.equal(window.location.hash, "#/more/tools");
+});
+
+test("renders the primary temperature card and trend", () => {
+  const { renderTemperature, elements, state } = loadApp({ groupedElements: [] });
+  state.overviewSettings = { comfort_thresholds: [10, 18, 24, 30] };
+  state.overview = {
+    temperature: {
+      primary_id: "abc",
+      primary: { id: "abc", temp: 21.4, humidity: 55, trend: "rising", history: [] },
+      sensors: [{ id: "abc", name: "Main", temp: 21.4, trend: "rising" }],
+    },
+  };
+  renderTemperature(state.overview);
+  const html = elements.temperatureBody.innerHTML;
+  assert.match(html, /21\.4C/);
+  assert.match(html, /Humidity 55%/);
+  assert.match(html, /data-tone="warm"/);
+  assert.match(html, /↑/);
+  assert.match(html, /overview-primary-row/);
+  assert.match(html, /overview-temperature-chart/);
+});
+
+test("renders other sensors inside the big card and '-' when missing", () => {
+  const { renderTemperature, elements, state } = loadApp({ groupedElements: [] });
+  state.overview = {
+    temperature: {
+      primary_id: "abc",
+      primary: { id: "abc", temp: 20, trend: "steady", history: [] },
+      sensors: [
+        { id: "abc", name: "Main", temp: 20, trend: "steady" },
+        { id: "out", name: "Outside", temp: 12.3, trend: "falling" },
+        { id: "alde", name: "Alde", trend: "unavailable" },
+      ],
+    },
+  };
+  renderTemperature(state.overview);
+  const html = elements.temperatureBody.innerHTML;
+  assert.match(html, /overview-sensor-row/);
+  assert.match(html, /overview-sub-sensor/);
+  assert.match(html, /Outside/);
+  assert.match(html, /12\.3C/);
+  assert.match(html, /↓/);
+  assert.match(html, /Alde/);
+  assert.match(html, />-</);
+  assert.match(html, /\?/);
+});
+
+test("does not render the inner sensor row for a single sensor", () => {
+  const { renderTemperature, elements, state } = loadApp({ groupedElements: [] });
+  state.overview = {
+    temperature: {
+      primary_id: "alde",
+      primary: { id: "alde", temp: 21, trend: "unavailable", history: [] },
+      sensors: [{ id: "alde", name: "Alde", temp: 21, trend: "unavailable" }],
+    },
+  };
+  renderTemperature(state.overview);
+  const html = elements.temperatureBody.innerHTML;
+  assert.match(html, /21\.0C/);
+  assert.doesNotMatch(html, /overview-sensor-row/);
+});
+
+test("renders waiting message when temperature data is absent", () => {
+  const { renderTemperature, elements, state } = loadApp({ groupedElements: [] });
+  renderTemperature({});
+  assert.match(elements.temperatureBody.innerHTML, /Waiting for temperature/);
+});
+
+test("trend label maps every trend value", () => {
+  const { trendLabel } = loadApp({ groupedElements: [] });
+  assert.equal(trendLabel("rising"), "Rising");
+  assert.equal(trendLabel("falling"), "Falling");
+  assert.equal(trendLabel("steady"), "Steady");
+  assert.equal(trendLabel("unavailable"), "Trend unavailable");
+  assert.equal(trendLabel(undefined), "Trend unavailable");
+});
+
+test("trend symbol maps the four states", () => {
+  const { trendSymbol } = loadApp({ groupedElements: [] });
+  assert.equal(trendSymbol("rising"), "↑");
+  assert.equal(trendSymbol("falling"), "↓");
+  assert.equal(trendSymbol("steady"), "–");
+  assert.equal(trendSymbol("unavailable"), "?");
+  assert.equal(trendSymbol(undefined), "?");
 });

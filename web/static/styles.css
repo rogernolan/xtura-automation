@@ -166,16 +166,30 @@ h1 {
 .overview-supplies-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .overview-card { display: grid; align-content: start; gap: 9px; min-width: 0; padding: 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; box-shadow: var(--shadow); }
 .overview-card:hover, .overview-card:focus-visible { border-color: var(--accent); outline: 3px solid rgba(31, 95, 212, .18); }
-.overview-temperature-card[data-tone="cold"] { background: radial-gradient(circle at center, rgba(126, 183, 255, .34), rgba(255, 255, 255, .96) 78%); border-color: #6aa8e8; }
-.overview-temperature-card[data-tone="comfortable"] { background: radial-gradient(circle at center, rgba(111, 208, 154, .34), rgba(255, 255, 255, .96) 78%); border-color: #67b98b; }
-.overview-temperature-card[data-tone="warm"] { background: radial-gradient(circle at center, rgba(255, 204, 108, .38), rgba(255, 255, 255, .96) 78%); border-color: #dda743; }
-.overview-temperature-card[data-tone="hot"] { background: radial-gradient(circle at center, rgba(246, 137, 111, .38), rgba(255, 255, 255, .96) 78%); border-color: #d8785f; }
-.overview-temperature-card[data-tone="unavailable"] { background: radial-gradient(circle at center, rgba(104, 112, 124, .16), rgba(255, 255, 255, .96) 78%); }
+.overview-temperature-card[data-tone="cold"] { background: radial-gradient(circle at center, rgba(126, 183, 255, .38) 0%, rgba(126, 183, 255, 0) 140%), var(--surface); border-color: #6aa8e8; }
+.overview-temperature-card[data-tone="comfortable"] { background: radial-gradient(circle at center, rgba(111, 208, 154, .38) 0%, rgba(111, 208, 154, 0) 140%), var(--surface); border-color: #67b98b; }
+.overview-temperature-card[data-tone="warm"] { background: radial-gradient(circle at center, rgba(255, 204, 108, .42) 0%, rgba(255, 204, 108, 0) 140%), var(--surface); border-color: #dda743; }
+.overview-temperature-card[data-tone="hot"] { background: radial-gradient(circle at center, rgba(246, 137, 111, .42) 0%, rgba(246, 137, 111, 0) 140%), var(--surface); border-color: #d8785f; }
+.overview-temperature-card[data-tone="unavailable"] { background: radial-gradient(circle at center, rgba(104, 112, 124, .18) 0%, rgba(104, 112, 124, 0) 140%), var(--surface); }
 .overview-card-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 850; }
-.overview-temperature-card { min-height: 138px; }
-.overview-temperature-value { display: block; font-size: clamp(2.8rem, 13vw, 4.8rem); line-height: .95; letter-spacing: -.06em; }
+.overview-temperature-card { min-height: 0; }
+.overview-temperature-value { display: block; font-size: clamp(2.4rem, 11vw, 4.2rem); line-height: .95; letter-spacing: -.06em; }
 .overview-value { display: block; font-size: clamp(1.7rem, 7vw, 2.5rem); line-height: 1; margin: 8px 0 0; }
 .overview-trend { margin: 0; color: var(--muted); font-size: 12px; font-weight: 700; }
+.overview-primary-row { display: flex; align-items: center; gap: 16px; }
+.overview-primary-left { display: grid; gap: 4px; min-width: 0; flex: 0 1 auto; }
+.overview-primary-line { display: flex; align-items: center; gap: 10px; }
+.overview-humidity { margin: 0; color: var(--muted); font-size: 13px; font-weight: 700; }
+.overview-trend-icon { flex: 0 0 auto; font-size: 20px; line-height: 1; color: var(--accent); }
+.overview-trend-icon.is-unknown { color: var(--muted); }
+.overview-temperature-chart { flex: 1 1 auto; min-width: 0; width: auto; height: 64px; }
+.overview-sensor-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.overview-sub-sensor { display: grid; gap: 4px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255, 255, 255, .38); }
+.overview-sub-sensor-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.overview-sub-sensor-data { display: flex; flex-wrap: nowrap; align-items: baseline; gap: 8px; }
+.overview-sub-sensor-data .overview-sub-sensor-value,
+.overview-sub-sensor-data .overview-trend-icon { white-space: nowrap; flex: 0 0 auto; }
+.overview-sub-sensor-value { font-size: clamp(1.3rem, 5vw, 1.8rem); line-height: 1; }
 .overview-supply-card { padding: 13px; }
 .supply-bar { height: 8px; overflow: hidden; border-radius: 99px; background: rgba(35, 42, 52, .12); }
 .supply-bar span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width .25s ease; }

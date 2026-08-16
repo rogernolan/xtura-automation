@@ -46,6 +46,7 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 		UpdatedAt:         telemetry.UpdatedAt,
 		Gas:               overview.Gas{Status: "mopeka_not_configured"},
 		Battery:           overview.Battery{StateOfChargePercent: telemetry.BatteryStateOfChargePercent, CurrentA: telemetry.BatteryCurrentA, Status: "unavailable"},
+		Temperature:       a.temperatureDocument(telemetry),
 	}
 	if telemetry.BatteryCurrentA != nil {
 		if *telemetry.BatteryCurrentA > 0 {

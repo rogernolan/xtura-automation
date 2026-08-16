@@ -302,16 +302,126 @@ function overviewSupplyState(value, status) {
   if (value !== undefined && status === "available") return "";
   return status === "stale" ? "Stale" : "Unavailable";
 }
+function escapeHtml(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function trendLabel(trend) {
+  if (trend === "rising") return "Rising";
+  if (trend === "falling") return "Falling";
+  if (trend === "steady") return "Steady";
+  return "Trend unavailable";
+}
+
+// trendSymbol renders the trend as one of four states: up, down, dash (no
+// change) and question mark (not yet known).
+function trendSymbol(trend) {
+  if (trend === "rising") return "↑";
+  if (trend === "falling") return "↓";
+  if (trend === "steady") return "–";
+  return "?";
+}
+
+function trendKnown(trend) {
+  return trend === "rising" || trend === "falling" || trend === "steady";
+}
+
+function formatTemperature(value) {
+  return value === undefined || value === null ? "Unavailable" : `${Number(value).toFixed(1)}C`;
+}
+
+function temperatureThresholds() {
+  return state.overviewSettings && state.overviewSettings.comfort_thresholds;
+}
+
+function renderTemperature(doc) {
+  const body = byId("temperatureBody");
+  if (!body) return;
+  const temp = doc && doc.temperature;
+  const sensors = (temp && temp.sensors) || [];
+  const thresholds = temperatureThresholds();
+  if (!temp || sensors.length === 0) {
+    body.innerHTML = '<p class="detail-text">Waiting for temperature.</p>';
+    return;
+  }
+  const primary = temp.primary || {};
+
+  const tone = overviewTemperatureTone(primary.temp, thresholds);
+  const humidityLine = primary.humidity === undefined ? "" : `<p class="overview-humidity">Humidity ${Number(primary.humidity).toFixed(0)}%</p>`;
+  const trend = trendSymbol(primary.trend);
+  const trendClass = trendKnown(primary.trend) ? "" : " is-unknown";
+
+  const subSensors = sensors.length > 1
+    ? `<div class="overview-sensor-row">${sensors.slice(1).map((sensor) => `
+        <div class="overview-sub-sensor">
+          <span class="overview-sub-sensor-name">${escapeHtml(sensor.name)}</span>
+          <div class="overview-sub-sensor-data">
+            <strong class="overview-sub-sensor-value">${sensor.temp === undefined || sensor.temp === null ? "-" : `${Number(sensor.temp).toFixed(1)}C`}</strong>
+            <span class="overview-trend-icon${trendKnown(sensor.trend) ? "" : " is-unknown"}" role="img" aria-label="${escapeHtml(trendLabel(sensor.trend))}">${trendSymbol(sensor.trend)}</span>
+          </div>
+        </div>`).join("")}
+      </div>`
+    : "";
+
+  body.innerHTML = `
+    <div class="overview-card overview-temperature-card" data-tone="${tone}">
+      <div class="overview-primary-row">
+        <div class="overview-primary-left">
+          <div class="overview-primary-line">
+            <strong class="overview-temperature-value">${formatTemperature(primary.temp)}</strong>
+            <span class="overview-trend-icon${trendClass}" role="img" aria-label="${escapeHtml(trendLabel(primary.trend))}">${trend}</span>
+          </div>
+          ${humidityLine}
+        </div>
+        <canvas class="overview-temperature-chart" aria-hidden="true"></canvas>
+      </div>
+      ${subSensors}
+    </div>`;
+  drawTemperatureChart(body.querySelector(".overview-temperature-chart"), primary.history);
+}
+
+function drawTemperatureChart(canvas, history) {
+  if (!canvas) return;
+  const ctx = canvas.getContext && canvas.getContext("2d");
+  if (!ctx) return;
+  const points = (history || []).filter((point) => typeof point.temp === "number" && point.t);
+  if (points.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth || 300;
+  const cssHeight = canvas.clientHeight || 56;
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  const times = points.map((point) => new Date(point.t).getTime());
+  const temps = points.map((point) => point.temp);
+  const minTemp = Math.min.apply(null, temps);
+  const maxTemp = Math.max.apply(null, temps);
+  const tempSpan = (maxTemp - minTemp) || 1;
+  const timeSpan = (times[times.length - 1] - times[0]) || 1;
+  const pad = 4;
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const x = pad + ((new Date(point.t).getTime() - times[0]) / timeSpan) * (cssWidth - pad * 2);
+    const y = pad + (1 - (point.temp - minTemp) / tempSpan) * (cssHeight - pad * 2);
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = "#3b7fdd";
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+}
+
 function renderOverview() {
   const doc = state.overview;
   if (!doc) return;
   const stale = doc.status === "stale";
-  const temperatureTone = stale ? "unavailable" : overviewTemperatureTone(doc.alde_temperature_c, state.overviewSettings && state.overviewSettings.comfort_thresholds);
-  if (byId("aldeCard")) byId("aldeCard").dataset.tone = temperatureTone;
-  const temperature = byId("aldeTemperature");
-  if (temperature) temperature.textContent = doc.alde_temperature_c === undefined ? "Unavailable" : `${Number(doc.alde_temperature_c).toFixed(1)}C`;
-  if (byId("aldeState")) byId("aldeState").textContent = stale ? "Stale" : doc.alde_temperature_c === undefined ? "Unavailable" : "Available";
-  if (byId("aldeDetail")) byId("aldeDetail").textContent = stale ? "Garmin reading is stale." : doc.alde_temperature_c === undefined ? "No Alde reading received." : "Main temperature source";
+  renderTemperature(doc);
   if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
   if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a).toFixed(1)}A` : "Unavailable";
   if (byId("batteryCurrentState")) byId("batteryCurrentState").textContent = overviewCurrentState(doc).replace(/^./, (letter) => letter.toUpperCase());

@@ -6,6 +6,7 @@ require github.com/gorilla/websocket v1.5.3
 
 require (
 	github.com/ringsaturn/tzf v1.2.0
+	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

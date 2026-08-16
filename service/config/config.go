@@ -8,6 +8,7 @@ import (
 	"time"
 
 	domainheating "empirebus-tests/service/domains/heating"
+	"empirebus-tests/service/domains/sensors"
 
 	"gopkg.in/yaml.v3"
 )
@@ -19,6 +20,7 @@ type Config struct {
 	Tracking   TrackingConfig   `yaml:"tracking,omitempty"`
 	Recording  RecordingConfig  `yaml:"recording,omitempty"`
 	Overview   OverviewConfig   `yaml:"overview,omitempty"`
+	Switchbot  SwitchbotConfig  `yaml:"switchbot,omitempty"`
 	Automation AutomationConfig `yaml:"automation"`
 	API        APIConfig        `yaml:"api"`
 }
@@ -86,6 +88,22 @@ type TrackingConfig struct {
 	Dir            string        `yaml:"dir,omitempty"`
 }
 
+// SwitchbotConfig configures the BLE temperature sensor scanning. It is
+// disabled by default so the service behaves exactly as before until sensors
+// are configured and verified.
+type SwitchbotConfig struct {
+	Enabled   bool                    `yaml:"enabled,omitempty"`
+	HCIDevice string                  `yaml:"hci_device,omitempty"`
+	Sensors   []SwitchbotSensorConfig `yaml:"sensors,omitempty"`
+}
+
+// SwitchbotSensorConfig is one configured BLE thermometer.
+type SwitchbotSensorConfig struct {
+	Name    string `yaml:"name"`
+	MAC     string `yaml:"mac"`
+	Primary bool   `yaml:"primary,omitempty"`
+}
+
 // RecordingConfig controls the on-demand WebSocket traffic recording directory.
 type RecordingConfig struct {
 	Dir string `yaml:"dir,omitempty"`
@@ -139,6 +157,7 @@ type NormalizedConfig struct {
 	Tracking   NormalizedTracking
 	Recording  NormalizedRecording
 	Overview   OverviewConfig
+	Switchbot  sensors.Settings
 	API        APIConfig
 	Automation NormalizedAutomation
 }
@@ -296,6 +315,11 @@ func (c Config) Validate() error {
 	if (c.Tracking.WhenEngineOn != nil || c.Tracking.SampleInterval != 0 || c.Tracking.Dir != "") && !c.Location.Enabled {
 		problems = append(problems, "tracking requires location.enabled")
 	}
+	if c.Switchbot.Enabled || c.Switchbot.HCIDevice != "" || len(c.Switchbot.Sensors) > 0 {
+		if err := normalizeSwitchbot(c.Switchbot).Validate(); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
 	if len(c.Automation.HeatingPrograms) == 0 {
 		problems = append(problems, "automation.heating_programs must contain at least one program")
 	}
@@ -353,6 +377,7 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		Tracking:  normalizeTracking(c.Tracking),
 		Recording: normalizeRecording(c.Recording),
 		Overview:  normalizeOverview(c.Overview),
+		Switchbot: normalizeSwitchbot(c.Switchbot),
 		API:       c.API,
 		Automation: NormalizedAutomation{
 			Location:        loc,
@@ -454,6 +479,24 @@ func normalizeHost(in HostConfig) NormalizedHost {
 	out := NormalizedHost{SampleInterval: in.SampleInterval}
 	if out.SampleInterval <= 0 {
 		out.SampleInterval = 5 * time.Second
+	}
+	return out
+}
+
+func normalizeSwitchbot(in SwitchbotConfig) sensors.Settings {
+	out := sensors.Settings{
+		Enabled:   in.Enabled,
+		HCIDevice: strings.TrimSpace(in.HCIDevice),
+	}
+	if out.HCIDevice == "" {
+		out.HCIDevice = "hci0"
+	}
+	for _, sensor := range in.Sensors {
+		out.Sensors = append(out.Sensors, sensors.SensorConfig{
+			Name:    strings.TrimSpace(sensor.Name),
+			MAC:     strings.TrimSpace(sensor.MAC),
+			Primary: sensor.Primary,
+		})
 	}
 	return out
 }
