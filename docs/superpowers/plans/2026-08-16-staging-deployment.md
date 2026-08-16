@@ -1253,6 +1253,8 @@ rg -n 'INSTALL_ROOT|CONFIG_PATH|DATA_DIR|HEALTH_URL|SERVICE_NAME=' scripts/deplo
 ```
 Expected: the prod values appear under the `prod)` case and the script defaults `ENVIRONMENT=prod`.
 
+> Deviation (2026-08-16): the first staging deploy silently deployed to PROD paths because `deploy-on-pi.sh` reads its whole body into memory at startup, then `git checkout --detach <sha>` replaces the file mid-run while bash keeps executing the old body — so the ENVIRONMENT-aware script never ran. Fixed by making the explicit-SHA path re-`exec` itself after checkout (guarded by `DEPLOY_SCRIPT_RELOADED`, preserving the original branch in `DEPLOY_RETURN_BRANCH`), mirroring the existing HEAD reload path.
+
 > The real staging deploy (install on the Pi) is out of scope for this task's automated verification; it will be done with the user against the Jones Pi. Verify no stray `sudo mkdir`/`chown`/health references to the old hard-coded `/var/lib/xtura` or port 80 remain in the prod path by reading the final file.
 
 - [ ] **Step 5: Commit**

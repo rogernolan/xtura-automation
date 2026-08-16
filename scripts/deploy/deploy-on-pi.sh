@@ -60,7 +60,7 @@ fi
 echo "==> Fetching latest refs"
 git fetch origin
 
-CURRENT_BRANCH="$(git branch --show-current)"
+CURRENT_BRANCH="${DEPLOY_RETURN_BRANCH:-$(git branch --show-current)}"
 CURRENT_SHA="$(git rev-parse HEAD)"
 TARGET_SHA="${1:-HEAD}"
 
@@ -69,7 +69,7 @@ if [[ "${TARGET_SHA}" == "HEAD" ]]; then
   TARGET_SHA="$(git rev-parse HEAD)"
   if [[ "${TARGET_SHA}" != "${CURRENT_SHA}" ]]; then
     echo "==> Reloading updated deploy script"
-    exec "${SCRIPT_PATH}" "${TARGET_SHA}"
+    DEPLOY_RETURN_BRANCH="${CURRENT_BRANCH}" exec "${SCRIPT_PATH}" "${TARGET_SHA}"
   fi
 else
   if [[ ! "${TARGET_SHA}" =~ ^[0-9a-f]{7,40}$ ]]; then
@@ -82,6 +82,10 @@ else
   fi
   git checkout --detach "${TARGET_SHA}"
   TARGET_SHA="$(git rev-parse HEAD)"
+  if [[ -z "${DEPLOY_SCRIPT_RELOADED:-}" ]]; then
+    echo "==> Reloading updated deploy script"
+    DEPLOY_SCRIPT_RELOADED=1 DEPLOY_RETURN_BRANCH="${CURRENT_BRANCH}" exec "${SCRIPT_PATH}" "${TARGET_SHA}"
+  fi
 fi
 
 echo "==> Running tests"
