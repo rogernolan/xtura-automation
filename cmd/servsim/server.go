@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"empirebus-tests/heating"
@@ -58,13 +59,23 @@ func (s *Server) handleConn(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 	model := newEchoModel()
+	writeMu := &sync.Mutex{}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	go s.replayLoop(ctx, conn, model)
-	s.readLoop(ctx, conn, model)
+	go s.replayLoop(ctx, conn, writeMu, model)
+	s.readLoop(ctx, conn, writeMu, model)
 }
 
-func (s *Server) replayLoop(ctx context.Context, conn *websocket.Conn, model *echoModel) {
+// writeFrame serializes all writes to a connection. Gorilla WebSocket allows
+// only one concurrent writer per connection, and the replay and read loops
+// write from different goroutines (capture frames vs command echoes).
+func (s *Server) writeFrame(conn *websocket.Conn, writeMu *sync.Mutex, message string) error {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	return conn.WriteMessage(websocket.TextMessage, []byte(message))
+}
+
+func (s *Server) replayLoop(ctx context.Context, conn *websocket.Conn, writeMu *sync.Mutex, model *echoModel) {
 	for {
 		for _, item := range s.capture {
 			delay := time.Duration(float64(item.delay) / s.speed)
@@ -73,7 +84,7 @@ func (s *Server) replayLoop(ctx context.Context, conn *websocket.Conn, model *ec
 				return
 			case <-time.After(delay):
 			}
-			if err := conn.WriteMessage(websocket.TextMessage, []byte(item.message)); err != nil {
+			if err := s.writeFrame(conn, writeMu, item.message); err != nil {
 				return
 			}
 			if wire, err := heating.ParseWireFrame(item.message); err == nil {
@@ -89,7 +100,7 @@ func (s *Server) replayLoop(ctx context.Context, conn *websocket.Conn, model *ec
 	}
 }
 
-func (s *Server) readLoop(ctx context.Context, conn *websocket.Conn, model *echoModel) {
+func (s *Server) readLoop(ctx context.Context, conn *websocket.Conn, writeMu *sync.Mutex, model *echoModel) {
 	for {
 		_, payload, err := conn.ReadMessage()
 		if err != nil {
@@ -104,7 +115,7 @@ func (s *Server) readLoop(ctx context.Context, conn *websocket.Conn, model *echo
 			continue
 		}
 		for _, out := range model.onCommand(wire) {
-			if err := conn.WriteMessage(websocket.TextMessage, []byte(out)); err != nil {
+			if err := s.writeFrame(conn, writeMu, out); err != nil {
 				return
 			}
 			if s.verbose {
