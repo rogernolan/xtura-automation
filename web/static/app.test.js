@@ -88,8 +88,8 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, renderOverview, overviewTemperatureTone, overviewCurrentState, state };`, context, { filename: "app.js" });
-  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, renderOverview: context.module.exports.renderOverview, overviewTemperatureTone: context.module.exports.overviewTemperatureTone, overviewCurrentState: context.module.exports.overviewCurrentState, state: context.module.exports.state, window, elements };
+  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, renderOverview, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
+  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, renderOverview: context.module.exports.renderOverview, overviewTemperatureTone: context.module.exports.overviewTemperatureTone, overviewCurrentState: context.module.exports.overviewCurrentState, overviewSupplyState: context.module.exports.overviewSupplyState, state: context.module.exports.state, window, elements };
 }
 
 test("rerendering overview does not overwrite dirty settings fields", () => {
@@ -117,6 +117,13 @@ test("charge current status reflects telemetry freshness", () => {
   assert.equal(overviewCurrentState({ status: "available", battery: { current_a: 2 } }), "live");
   assert.equal(overviewCurrentState({ status: "available", battery: {} }), "unavailable");
   assert.equal(overviewCurrentState({ status: "stale", battery: {} }), "stale");
+});
+
+test("healthy supplies leave their status label blank", () => {
+  const { overviewSupplyState } = loadApp({ groupedElements: [] });
+  assert.equal(overviewSupplyState(42, "available"), "");
+  assert.equal(overviewSupplyState(undefined, "available"), "Unavailable");
+  assert.equal(overviewSupplyState(undefined, "stale"), "Stale");
 });
 
 test("changing a control inside the water panel does not reset the section hash", () => {
