@@ -35,8 +35,8 @@ test("overview markup follows the approved grouped layout and deep links", () =>
   for (const tone of ["cold", "comfortable", "warm", "hot"]) {
     assert.match(styles, new RegExp(`overview-temperature-card\\[data-tone=\\\"${tone}\\\"\\]`));
   }
-  assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{ background: radial-gradient\(/);
-  assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*rgba\(255, 255, 255, \.96\)/);
+  assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*radial-gradient\(/);
+  assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*var\(--surface\)/);
   assert.match(styles, /\.overview-group-title \{[^}]*color: var\(--text\)/);
   assert.match(styles, /background-image: linear-gradient\(rgba\(231, 226, 216, 0\.6/);
 });
