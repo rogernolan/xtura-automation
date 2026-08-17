@@ -173,8 +173,7 @@ const fallbackVisibleSlots = [
 ];
 const api = new XturaApi();
 const state = {
-  route: { screen: "overview", section: null },
-  sections: { controls: "heating", more: "system" },
+  route: { page: "overview" },
   build: null,
   lights: null,
   water: null,
@@ -240,33 +239,93 @@ function setConnection(message, tone = "normal") {
   element.dataset.tone = tone;
 }
 
-const screenTitles = { overview: "Overview", controls: "Controls", location: "Location", more: "More" };
+const pageTitles = {
+  overview: "Overview",
+  heating: "Heating",
+  water: "Water",
+  lighting: "Lighting",
+  location: "Location",
+  system: "System",
+  tools: "Tools",
+  settings: "Settings",
+};
+const pageIds = XturaNavigation.pages.map((page) => `${page}Panel`);
 
 function applyRoute(route) {
-  state.route = route;
-  if (route.section) {
-    state.sections[route.screen] = route.section;
+  const page = XturaNavigation.pages.includes(route && route.page) ? route.page : "overview";
+  const canonicalHash = XturaNavigation.toHash({ page });
+  if (window.location.hash !== canonicalHash) {
+    window.location.hash = canonicalHash;
   }
-  const title = screenTitles[route.screen] || "Xtura";
+  state.route = { page };
+  const title = pageTitles[page] || "Xtura";
   byId("pageTitle").textContent = title;
   document.title = title;
-  ["overview", "controls", "location", "more"].forEach((screen) => {
-    byId(`${screen}Nav`).classList.toggle("is-active", route.screen === screen);
-    byId(`${screen}Panel`).hidden = route.screen !== screen;
+  pageIds.forEach((id, index) => {
+    const panel = byId(id);
+    if (panel) {
+      panel.hidden = XturaNavigation.pages[index] !== page;
+    }
   });
-  if (route.section) {
-    const selector = byId(`${route.screen}Section`);
-    if (selector) selector.value = route.section;
-  }
-  document.querySelectorAll(".section-panel").forEach((panel) => {
-    panel.hidden = !(panel.dataset.sectionGroup === route.screen && panel.dataset.section === route.section);
+  XturaNavigation.pages.forEach((name) => {
+    const link = document.querySelector(`[data-page="${name}"]`);
+    if (!link) {
+      return;
+    }
+    if (name === page) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
   });
 }
 
-function navigate(screen, section = null) {
-  const hash = XturaNavigation.toHash({ screen, section });
-  if (window.location.hash === hash) applyRoute(XturaNavigation.parse(hash));
-  else window.location.hash = hash;
+function navigate(page) {
+  const hash = XturaNavigation.toHash({ page });
+  if (window.location.hash === hash) {
+    applyRoute(XturaNavigation.parse(hash));
+    return;
+  }
+  window.location.hash = hash;
+}
+
+function openNavigation() {
+  const drawer = byId("navigationDrawer");
+  const backdrop = byId("navigationBackdrop");
+  const menuButton = byId("menuButton");
+  if (drawer) {
+    drawer.hidden = false;
+    drawer.setAttribute("aria-hidden", "false");
+  }
+  if (backdrop) {
+    backdrop.hidden = false;
+  }
+  if (menuButton) {
+    menuButton.setAttribute("aria-expanded", "true");
+  }
+  const firstLink = drawer && drawer.querySelector("[data-page]");
+  if (firstLink) {
+    firstLink.focus();
+  }
+}
+
+function closeNavigation({ restoreFocus = true } = {}) {
+  const drawer = byId("navigationDrawer");
+  const backdrop = byId("navigationBackdrop");
+  const menuButton = byId("menuButton");
+  if (drawer) {
+    drawer.hidden = true;
+    drawer.setAttribute("aria-hidden", "true");
+  }
+  if (backdrop) {
+    backdrop.hidden = true;
+  }
+  if (menuButton) {
+    menuButton.setAttribute("aria-expanded", "false");
+    if (restoreFocus) {
+      menuButton.focus();
+    }
+  }
 }
 
 function render() {
@@ -1410,14 +1469,23 @@ function bindActions() {
   document.querySelectorAll("[data-overview-route]").forEach((card) => {
     card.addEventListener("click", () => {
       const route = XturaNavigation.parse(card.dataset.overviewRoute);
-      navigate(route.screen, route.section);
+      navigate(route.page);
     });
   });
-  document.querySelectorAll("[data-screen]").forEach((button) => {
-    button.addEventListener("click", () => navigate(button.dataset.screen, state.sections[button.dataset.screen] || null));
+  document.querySelectorAll("[data-page]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      navigate(link.dataset.page);
+      closeNavigation();
+    });
   });
-  document.querySelectorAll("select[data-section-group]").forEach((select) => {
-    select.addEventListener("change", () => navigate(select.dataset.sectionGroup, select.value));
+  byId("menuButton").addEventListener("click", openNavigation);
+  byId("closeMenuButton").addEventListener("click", () => closeNavigation());
+  byId("navigationBackdrop").addEventListener("click", () => closeNavigation());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !byId("navigationDrawer").hidden) {
+      closeNavigation();
+    }
   });
   byId("flashLights").addEventListener("click", async () => {
     try {

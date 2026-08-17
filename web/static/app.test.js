@@ -14,10 +14,13 @@ class ElementStub {
     this.textContent = options.textContent || "";
     this.innerHTML = options.innerHTML || "";
     this.disabled = false;
-    this.hidden = false;
+    this.hidden = options.hidden || false;
     this.listeners = new Map();
     this.parentNode = null;
+    this.ownerDocument = null;
+    this.attributes = new Map(Object.entries(options.attributes || {}));
     this.classList = { toggle() {} };
+    this.style = {};
   }
 
   querySelector() {
@@ -32,6 +35,9 @@ class ElementStub {
   }
 
   dispatchEvent(event) {
+    event.preventDefault = event.preventDefault || (() => {
+      event.defaultPrevented = true;
+    });
     event.target = event.target || this;
     event.currentTarget = this;
     for (const listener of this.listeners.get(event.type) || []) {
@@ -42,39 +48,125 @@ class ElementStub {
     }
   }
 
-  setAttribute() {}
+  focus() {
+    if (this.ownerDocument) {
+      this.ownerDocument.activeElement = this;
+    }
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
+  }
+
+  getAttribute(name) {
+    return this.attributes.has(name) ? this.attributes.get(name) : null;
+  }
+
+  removeAttribute(name) {
+    this.attributes.delete(name);
+  }
+
+  querySelector(selector) {
+    if (selector === "[data-page]") {
+      return this.firstPageLink || null;
+    }
+    return null;
+  }
 }
 
-function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/controls/water" }) {
+function dispatchWithListeners(target, listeners, event) {
+  event.preventDefault = event.preventDefault || (() => {
+    event.defaultPrevented = true;
+  });
+  event.target = event.target || target;
+  event.currentTarget = target;
+  for (const listener of listeners.get(event.type) || []) {
+    listener.call(target, event);
+  }
+}
+
+function loadApp({ hash = "#/overview" } = {}) {
   const ids = [
-    "statusMessage", "connectionStatus", "pageTitle", "overviewNav", "controlsNav", "locationNav", "moreNav",
-    "overviewPanel", "controlsPanel", "locationPanel", "morePanel", "flashLights", "flashCount",
+    "statusMessage", "connectionStatus", "pageTitle",
+    "menuButton", "closeMenuButton", "navigationBackdrop", "navigationDrawer",
+    "overviewPanel", "heatingPanel", "waterPanel", "lightingPanel", "locationPanel", "systemPanel", "toolsPanel", "settingsPanel",
+    "flashLights", "flashCount",
     "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton",
     "recordingDuration", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval",
     "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
-    "scheduleForm",
+    "scheduleForm", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
     "overviewSettingsForm", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
     "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
+  elements.menuButton.setAttribute("aria-expanded", "false");
+  elements.navigationBackdrop.hidden = true;
+  elements.navigationDrawer.hidden = true;
+
+  const pageLinks = navigation.pages.map((page) => {
+    const id = `${page}Link`;
+    const link = new ElementStub(id, {
+      dataset: { page },
+      attributes: { href: `#/${page}` },
+    });
+    elements[id] = link;
+    return link;
+  });
+  elements.navigationDrawer.firstPageLink = pageLinks[0];
+
+  elements.aldeCard = new ElementStub("aldeCard", {
+    dataset: { overviewRoute: "#/heating" },
+  });
+
+  const documentListeners = new Map();
   const document = {
+    activeElement: null,
     getElementById(id) {
       return elements[id] || null;
     },
+    querySelector(selector) {
+      const match = selector.match(/^\[data-page="([^"]+)"\]$/);
+      if (match) {
+        return elements[`${match[1]}Link`] || null;
+      }
+      if (selector === "[data-page]") {
+        return pageLinks[0] || null;
+      }
+      return null;
+    },
     querySelectorAll(selector) {
-      if (selector === "[data-screen]") return [];
+      if (selector === "[data-page]") return pageLinks;
+      if (selector === "[data-overview-route]") return [elements.aldeCard];
       if (selector === "[data-target]") return [];
-      if (selector === "select[data-section-group]") return selectElements;
-      if (selector === "[data-section-group]") return groupedElements;
-      if (selector === ".section-panel") return [];
       return [];
     },
-    addEventListener() {},
+    addEventListener(type, listener) {
+      if (!documentListeners.has(type)) {
+        documentListeners.set(type, []);
+      }
+      documentListeners.get(type).push(listener);
+    },
+    dispatchEvent(event) {
+      dispatchWithListeners(this, documentListeners, event);
+    },
     title: "Xtura",
   };
+  for (const element of Object.values(elements)) {
+    element.ownerDocument = document;
+  }
+
+  const windowListeners = new Map();
   const window = {
     location: { hash },
-    addEventListener() {},
+    addEventListener(type, listener) {
+      if (!windowListeners.has(type)) {
+        windowListeners.set(type, []);
+      }
+      windowListeners.get(type).push(listener);
+    },
+    dispatchEvent(event) {
+      dispatchWithListeners(this, windowListeners, event);
+    },
     setInterval() {
       return 1;
     },
@@ -94,12 +186,27 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, trendSymbol, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
-  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, renderOverview: context.module.exports.renderOverview, renderTemperature: context.module.exports.renderTemperature, trendLabel: context.module.exports.trendLabel, trendSymbol: context.module.exports.trendSymbol, overviewTemperatureTone: context.module.exports.overviewTemperatureTone, overviewCurrentState: context.module.exports.overviewCurrentState, overviewSupplyState: context.module.exports.overviewSupplyState, state: context.module.exports.state, window, elements };
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, trendSymbol, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
+  return {
+    applyRoute: context.module.exports.applyRoute,
+    bindActions: context.module.exports.bindActions,
+    renderOverviewSettings: context.module.exports.renderOverviewSettings,
+    renderOverview: context.module.exports.renderOverview,
+    renderTemperature: context.module.exports.renderTemperature,
+    trendLabel: context.module.exports.trendLabel,
+    trendSymbol: context.module.exports.trendSymbol,
+    overviewTemperatureTone: context.module.exports.overviewTemperatureTone,
+    overviewCurrentState: context.module.exports.overviewCurrentState,
+    overviewSupplyState: context.module.exports.overviewSupplyState,
+    state: context.module.exports.state,
+    document,
+    window,
+    elements,
+  };
 }
 
 test("rerendering overview does not overwrite dirty settings fields", () => {
-  const { renderOverviewSettings, state, elements } = loadApp({ groupedElements: [] });
+  const { renderOverviewSettings, state, elements } = loadApp();
   state.overviewSettings = { comfort_thresholds: [10, 18, 24, 30], usable_battery_capacity_ah: 100, gas_tank_capacity_litres: 0 };
   state.overviewSettingsDirty = true;
   elements.comfortCold.value = "12";
@@ -108,7 +215,7 @@ test("rerendering overview does not overwrite dirty settings fields", () => {
 });
 
 test("temperature tone uses configured comfort bands", () => {
-  const { overviewTemperatureTone } = loadApp({ groupedElements: [] });
+  const { overviewTemperatureTone } = loadApp();
   assert.equal(overviewTemperatureTone(8, [10, 18, 24, 30]), "cold");
   assert.equal(overviewTemperatureTone(15, [10, 18, 24, 30]), "comfortable");
   assert.equal(overviewTemperatureTone(21, [10, 18, 24, 30]), "warm");
@@ -118,7 +225,7 @@ test("temperature tone uses configured comfort bands", () => {
 });
 
 test("charge current status reflects telemetry freshness", () => {
-  const { overviewCurrentState } = loadApp({ groupedElements: [] });
+  const { overviewCurrentState } = loadApp();
   assert.equal(overviewCurrentState(null), "loading");
   assert.equal(overviewCurrentState({ status: "available", battery: { current_a: 2 } }), "live");
   assert.equal(overviewCurrentState({ status: "available", battery: {} }), "unavailable");
@@ -126,91 +233,75 @@ test("charge current status reflects telemetry freshness", () => {
 });
 
 test("healthy supplies leave their status label blank", () => {
-  const { overviewSupplyState } = loadApp({ groupedElements: [] });
+  const { overviewSupplyState } = loadApp();
   assert.equal(overviewSupplyState(42, "available"), "");
   assert.equal(overviewSupplyState(undefined, "available"), "Unavailable");
   assert.equal(overviewSupplyState(undefined, "stale"), "Stale");
 });
 
-test("changing a control inside the water panel does not reset the section hash", () => {
-  const waterPanel = new ElementStub("controlsWaterPanel", {
-    dataset: { sectionGroup: "controls", section: "water" },
-  });
-  const controlsSelect = new ElementStub("controlsSection", {
-    dataset: { sectionGroup: "controls" },
-    value: "water",
-  });
-  const childControl = new ElementStub("greyScheduleDuration", { value: "45" });
-  childControl.parentNode = waterPanel;
+test("applyRoute shows the selected page and marks its drawer link", () => {
+  const { applyRoute, document, elements } = loadApp();
 
-  const { bindActions, window } = loadApp({
-    groupedElements: [controlsSelect, waterPanel],
-    selectElements: [controlsSelect],
-  });
-  bindActions();
+  applyRoute({ page: "water" });
 
-  childControl.dispatchEvent({ type: "change", bubbles: true });
-
-  assert.equal(window.location.hash, "#/controls/water");
+  assert.equal(elements.pageTitle.textContent, "Water");
+  assert.equal(document.title, "Water");
+  assert.equal(elements.overviewPanel.hidden, true);
+  assert.equal(elements.waterPanel.hidden, false);
+  assert.equal(elements.waterLink.getAttribute("aria-current"), "page");
+  assert.equal(elements.overviewLink.getAttribute("aria-current"), null);
 });
 
-test("changing the controls dropdown navigates to the selected section", () => {
-  const controlsSelect = new ElementStub("controlsSection", {
-    dataset: { sectionGroup: "controls" },
-    value: "heating",
-  });
+test("applyRoute rewrites legacy hashes to the canonical overview route", () => {
+  const { applyRoute, window } = loadApp({ hash: "#/controls/heating" });
 
-  const { bindActions, window } = loadApp({
-    groupedElements: [controlsSelect],
-    hash: "#/controls/heating",
-  });
-  bindActions();
+  applyRoute(navigation.parse(window.location.hash));
 
-  controlsSelect.value = "lighting";
-  controlsSelect.dispatchEvent({ type: "change", bubbles: true });
-
-  assert.equal(window.location.hash, "#/controls/lighting");
+  assert.equal(window.location.hash, "#/overview");
 });
 
-test("changing a control inside the tools panel does not reset the section hash", () => {
-  const toolsPanel = new ElementStub("moreToolsPanel", {
-    dataset: { sectionGroup: "more", section: "tools" },
-  });
-  const moreSelect = new ElementStub("moreSection", {
-    dataset: { sectionGroup: "more" },
-    value: "tools",
-  });
-  const childControl = new ElementStub("recordingDuration", { value: "10" });
-  childControl.parentNode = toolsPanel;
-
-  const { bindActions, window } = loadApp({
-    groupedElements: [moreSelect, toolsPanel],
-    selectElements: [moreSelect],
-    hash: "#/more/tools",
-  });
+test("navigation controls open and close the drawer with focus management", () => {
+  const { bindActions, document, elements } = loadApp();
   bindActions();
 
-  childControl.dispatchEvent({ type: "change", bubbles: true });
+  elements.menuButton.dispatchEvent({ type: "click" });
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.menuButton.getAttribute("aria-expanded"), "true");
+  assert.equal(document.activeElement, elements.overviewLink);
 
-  assert.equal(window.location.hash, "#/more/tools");
+  document.dispatchEvent({ type: "keydown", key: "Escape" });
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.navigationBackdrop.hidden, true);
+  assert.equal(elements.menuButton.getAttribute("aria-expanded"), "false");
+  assert.equal(document.activeElement, elements.menuButton);
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  elements.navigationBackdrop.dispatchEvent({ type: "click" });
+  assert.equal(elements.navigationDrawer.hidden, true);
 });
 
-test("changing the more dropdown navigates to the selected section", () => {
-  const moreSelect = new ElementStub("moreSection", {
-    dataset: { sectionGroup: "more" },
-    value: "system",
-  });
-
-  const { bindActions, window } = loadApp({
-    groupedElements: [moreSelect],
-    hash: "#/more/system",
-  });
+test("page links navigate and close the drawer", () => {
+  const { bindActions, window, elements } = loadApp({ hash: "#/overview" });
   bindActions();
 
-  moreSelect.value = "tools";
-  moreSelect.dispatchEvent({ type: "change", bubbles: true });
+  elements.menuButton.dispatchEvent({ type: "click" });
+  const event = { type: "click" };
+  elements.heatingLink.dispatchEvent(event);
 
-  assert.equal(window.location.hash, "#/more/tools");
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(window.location.hash, "#/heating");
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.navigationBackdrop.hidden, true);
+});
+
+test("overview temperature cards deep link to heating", () => {
+  const { bindActions, window, elements } = loadApp({ hash: "#/overview" });
+  bindActions();
+
+  elements.aldeCard.dispatchEvent({ type: "click" });
+
+  assert.equal(window.location.hash, "#/heating");
 });
 
 test("renders the primary temperature card and trend", () => {
