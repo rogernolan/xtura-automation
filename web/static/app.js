@@ -549,21 +549,25 @@ function trendLabel(trend) {
   return "Trend unavailable";
 }
 
-// trendSymbol renders the trend as one of four states: up, down, dash (no
-// change) and question mark (not yet known).
-function trendSymbol(trend) {
-  if (trend === "rising") return "↑";
-  if (trend === "falling") return "↓";
-  if (trend === "steady") return "–";
-  return "?";
+function getTrendState(trend) {
+  return {
+    up: trend === "rising",
+    flat: trend === "steady",
+    down: trend === "falling",
+  };
 }
 
-function trendKnown(trend) {
-  return trend === "rising" || trend === "falling" || trend === "steady";
+function renderTrendControl(trend) {
+  const s = getTrendState(trend);
+  const aria = escapeHtml(trendLabel(trend));
+  const up = `<svg viewBox="0 0 10 10" class="overview-trend-svg"><path d="M5 8 L5 2 M2 5 L5 2 L8 5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const flat = `<svg viewBox="0 0 10 10" class="overview-trend-svg"><line x1="2" y1="5" x2="8" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+  const down = `<svg viewBox="0 0 10 10" class="overview-trend-svg"><path d="M5 2 L5 8 M2 5 L5 8 L8 5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<span class="overview-trend-control" role="img" aria-label="${aria}"><span class="overview-trend-glyph overview-trend-up${s.up ? " is-active" : ""}">${up}</span><span class="overview-trend-glyph overview-trend-flat${s.flat ? " is-active" : ""}">${flat}</span><span class="overview-trend-glyph overview-trend-down${s.down ? " is-active" : ""}">${down}</span></span>`;
 }
 
 function formatTemperature(value) {
-  return value === undefined || value === null ? "Unavailable" : `${Number(value).toFixed(1)}C`;
+  return value === undefined || value === null ? "Unavailable" : `${Number(value).toFixed(1)}`;
 }
 
 function temperatureThresholds() {
@@ -584,16 +588,16 @@ function renderTemperature(doc) {
 
   const tone = overviewTemperatureTone(primary.temp, thresholds);
   const humidityLine = primary.humidity === undefined ? "" : `<p class="overview-humidity">Humidity ${Number(primary.humidity).toFixed(0)}%</p>`;
-  const trend = trendSymbol(primary.trend);
-  const trendClass = trendKnown(primary.trend) ? "" : " is-unknown";
 
   const subSensors = sensors.length > 1
     ? `<div class="overview-sensor-row">${sensors.slice(1).map((sensor) => `
         <a class="overview-sub-sensor" href="#/heating" data-overview-route="#/heating">
           <span class="overview-sub-sensor-name">${escapeHtml(sensor.name)}</span>
           <div class="overview-sub-sensor-data">
-            <strong class="overview-sub-sensor-value">${sensor.temp === undefined || sensor.temp === null ? "-" : `${Number(sensor.temp).toFixed(1)}C`}</strong>
-            <span class="overview-trend-icon${trendKnown(sensor.trend) ? "" : " is-unknown"}" role="img" aria-label="${escapeHtml(trendLabel(sensor.trend))}">${trendSymbol(sensor.trend)}</span>
+            <span class="overview-sensor-group">
+              <strong class="overview-sub-sensor-value">${sensor.temp === undefined || sensor.temp === null ? "-" : `${Number(sensor.temp).toFixed(1)}`}</strong>
+              ${renderTrendControl(sensor.trend)}
+            </span>
           </div>
         </a>`).join("")}
       </div>`
@@ -604,8 +608,10 @@ function renderTemperature(doc) {
       <div class="overview-primary-row">
         <div class="overview-primary-left">
           <div class="overview-primary-line">
-            <strong class="overview-temperature-value">${formatTemperature(primary.temp)}</strong>
-            <span class="overview-trend-icon${trendClass}" role="img" aria-label="${escapeHtml(trendLabel(primary.trend))}">${trend}</span>
+            <span class="overview-temperature-value-group">
+              <strong class="overview-temperature-value${primary.temp === undefined || primary.temp === null ? " is-unavailable" : ""}">${formatTemperature(primary.temp)}</strong>
+              ${renderTrendControl(primary.trend)}
+            </span>
           </div>
           ${humidityLine}
         </div>
@@ -614,6 +620,28 @@ function renderTemperature(doc) {
       ${subSensors}
     </button>`;
   drawTemperatureChart(body.querySelector(".overview-temperature-chart"), primary.history);
+}
+
+function temperatureChartDomain(temps) {
+  const minTemp = Math.min.apply(null, temps);
+  const maxTemp = Math.max.apply(null, temps);
+  const yBottom = Math.floor(minTemp / 5) * 5;
+  const yTop = Math.ceil(maxTemp / 5) * 5;
+  return { minTemp, maxTemp, yBottom, yTop, ySpan: (yTop - yBottom) || 1 };
+}
+
+function temperatureChartHourBoundaries(times) {
+  const boundaries = [];
+  const start = new Date(times[0]);
+  for (let offset = 1; offset < 3; offset += 1) {
+    const boundaryTime = new Date(start);
+    boundaryTime.setHours(start.getHours() + offset, 0, 0, 0);
+    const boundaryMs = boundaryTime.getTime();
+    if (boundaryMs > times[0] && boundaryMs < times[times.length - 1]) {
+      boundaries.push({ ms: boundaryMs, label: `${String(boundaryTime.getHours()).padStart(2, "0")}:00` });
+    }
+  }
+  return boundaries;
 }
 
 function drawTemperatureChart(canvas, history) {
@@ -631,15 +659,51 @@ function drawTemperatureChart(canvas, history) {
   ctx.clearRect(0, 0, cssWidth, cssHeight);
   const times = points.map((point) => new Date(point.t).getTime());
   const temps = points.map((point) => point.temp);
-  const minTemp = Math.min.apply(null, temps);
-  const maxTemp = Math.max.apply(null, temps);
-  const tempSpan = (maxTemp - minTemp) || 1;
+  const { yBottom, yTop, ySpan } = temperatureChartDomain(temps);
   const timeSpan = (times[times.length - 1] - times[0]) || 1;
-  const pad = 4;
+  const pad = { left: 36, top: 4, right: 4, bottom: 16 };
+  const chartWidth = cssWidth - pad.left - pad.right;
+  const chartHeight = cssHeight - pad.top - pad.bottom;
+
+  const axisColor = "rgba(0, 0, 0, 0.22)";
+  const axisFont = "10px -apple-system, BlinkMacSystemFont, sans-serif";
+
+  const yMid = (yTop + yBottom) / 2;
+  const yValues = [yTop, yMid, yBottom];
+  ctx.font = axisFont;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  yValues.forEach((yVal) => {
+    const y = pad.top + (1 - (yVal - yBottom) / ySpan) * chartHeight;
+    ctx.strokeStyle = axisColor;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(cssWidth - pad.right, y);
+    ctx.stroke();
+    ctx.fillStyle = axisColor;
+    ctx.fillText(`${Math.round(yVal)}`, pad.left - 4, y);
+  });
+
+  const hourBoundaries = temperatureChartHourBoundaries(times);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  hourBoundaries.forEach(({ ms, label }) => {
+    const x = pad.left + ((ms - times[0]) / timeSpan) * chartWidth;
+    ctx.strokeStyle = axisColor;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, pad.top);
+    ctx.lineTo(x, cssHeight - pad.bottom);
+    ctx.stroke();
+    ctx.fillStyle = axisColor;
+    ctx.fillText(label, x, cssHeight - pad.bottom + 3);
+  });
+
   ctx.beginPath();
   points.forEach((point, index) => {
-    const x = pad + ((new Date(point.t).getTime() - times[0]) / timeSpan) * (cssWidth - pad * 2);
-    const y = pad + (1 - (point.temp - minTemp) / tempSpan) * (cssHeight - pad * 2);
+    const x = pad.left + ((new Date(point.t).getTime() - times[0]) / timeSpan) * chartWidth;
+    const y = pad.top + (1 - (point.temp - yBottom) / ySpan) * chartHeight;
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });

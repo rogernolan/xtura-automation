@@ -7,6 +7,18 @@ garmin:
 api:
   listen: 0.0.0.0:8091
 
+switchbot:
+  enabled: true
+  hci_device: hci0
+  sensors:
+    - name: Main
+      mac: "AA:BB:CC:DD:EE:01"
+      primary: true
+    - name: Outside
+      mac: "AA:BB:CC:DD:EE:02"
+    - name: Display
+      mac: "AA:BB:CC:DD:EE:03"
+
 automation:
   timezone: Europe/London
   heating_programs:

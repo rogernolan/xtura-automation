@@ -65,6 +65,6 @@ done
 
 echo "==> Starting empirebusd (config=config.sim.yaml)"
 echo "    UI/API: http://localhost:8091"
-"${BUILD_DIR}/empirebusd" -config ./config.sim.yaml &
+XTURA_SIM_SWITCHBOT=1 "${BUILD_DIR}/empirebusd" -config ./config.sim.yaml &
 EMPIREBUSD_PID=$!
 wait "${EMPIREBUSD_PID}"
