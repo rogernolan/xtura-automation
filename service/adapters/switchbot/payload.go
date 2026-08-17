@@ -1,5 +1,10 @@
 package switchbot
 
+import (
+	"encoding/hex"
+	"strings"
+)
+
 // Payload is a decoded SwitchBot thermometer advertisement.
 type Payload struct {
 	DevType  byte
@@ -30,11 +35,7 @@ func devTypeOf(serviceData []byte) byte {
 func Decode(elements []AD) (Payload, bool) {
 	serviceData, ok := serviceData16(elements, switchBotServiceUUID)
 	if !ok {
-		mfr, hasManufacturerData := manufacturerData(elements, switchBotCompanyID)
-		if !hasManufacturerData {
-			return Payload{}, false
-		}
-		return decodeManufacturerOnly(mfr)
+		return Payload{}, false
 	}
 	switch devTypeOf(serviceData) {
 	case devTypeMeter, devTypeMeterAdd:
@@ -46,25 +47,20 @@ func Decode(elements []AD) (Payload, bool) {
 	}
 }
 
-func decodeManufacturerOnly(mfr []byte) (Payload, bool) {
-	if len(mfr) < 11 {
-		return Payload{}, false
-	}
-	payload := Payload{DevType: devTypeOutdoor}
-	battery := int(mfr[6] & 0x7f)
-	payload.Battery = &battery
-	return decodeManufacturerTemperature(payload, mfr)
-}
-
 // DecodeOutdoorMFR decodes an outdoor sensor from manufacturer data alone.
-// It should only be called for MACs previously confirmed as outdoor (0x77)
-// via service-data advertisements. Battery is unknown.
-func DecodeOutdoorMFR(elements []AD) (Payload, bool) {
+// The embedded MAC is used as a model-specific discriminator because other
+// SwitchBot products also use company ID 0x0969.
+func DecodeOutdoorMFR(elements []AD, mac string) (Payload, bool) {
 	mfr, ok := manufacturerData(elements, switchBotCompanyID)
-	if !ok || len(mfr) < 11 {
+	if !ok || len(mfr) != 11 || !manufacturerMACMatches(mfr, mac) {
 		return Payload{}, false
 	}
 	return decodeOutdoorMFR(mfr), true
+}
+
+func manufacturerMACMatches(mfr []byte, mac string) bool {
+	normalized := strings.ReplaceAll(strings.ToLower(mac), ":", "")
+	return len(mfr) >= 6 && hex.EncodeToString(mfr[:6]) == normalized
 }
 
 // decodeMeter decodes WoSensorTH (Meter). Layout of the 0xFD3D service data

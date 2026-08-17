@@ -52,11 +52,10 @@ type Adapter struct {
 	logger *log.Logger
 	now    func() time.Time
 
-	mu            sync.RWMutex
-	settings      sensors.Settings
-	seen          map[string]SeenDevice
-	knownOutdoor  map[string]bool
-	lastErr       string
+	mu       sync.RWMutex
+	settings sensors.Settings
+	seen     map[string]SeenDevice
+	lastErr  string
 }
 
 // New creates an adapter. It does not start scanning until Run is called.
@@ -68,12 +67,11 @@ func New(cfg Config) *Adapter {
 		cfg.Logger = log.Default()
 	}
 	return &Adapter{
-		cfg:          cfg,
-		logger:       cfg.Logger,
-		now:          cfg.Now,
-		settings:     cfg.Settings,
-		seen:         make(map[string]SeenDevice),
-		knownOutdoor: make(map[string]bool),
+		cfg:      cfg,
+		logger:   cfg.Logger,
+		now:      cfg.Now,
+		settings: cfg.Settings,
+		seen:     make(map[string]SeenDevice),
 	}
 }
 
@@ -164,25 +162,14 @@ func (a *Adapter) handleReport(report AdvertisingReport) {
 		return
 	}
 	payload, ok := Decode(elements)
-	if ok {
-		a.mu.Lock()
-		if payload.DevType == devTypeOutdoor {
-			a.knownOutdoor[report.MAC] = true
-		}
-		a.mu.Unlock()
-		a.applyReading(report.MAC, report.RSSI, payload)
-		return
+	if !ok {
+		// Manufacturer-only packets contain no service-data device type. Only
+		// accept the exact thermometer shape and a matching embedded MAC, so
+		// other SwitchBot products cannot be decoded as temperature readings.
+		payload, ok = DecodeOutdoorMFR(elements, report.MAC)
 	}
-	// When the outdoor sensor alternates to a manufacturer-data-only
-	// advertisement (no 0xFD3D service data), decode it only if we have
-	// previously confirmed this MAC as an outdoor sensor via service data.
-	a.mu.RLock()
-	confirmed := a.knownOutdoor[report.MAC]
-	a.mu.RUnlock()
-	if confirmed {
-		if payload, ok = DecodeOutdoorMFR(elements); ok {
-			a.applyReading(report.MAC, report.RSSI, payload)
-		}
+	if ok {
+		a.applyReading(report.MAC, report.RSSI, payload)
 	}
 }
 
