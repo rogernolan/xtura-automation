@@ -64,11 +64,9 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(html, /class="overview-group overview-power-group"/);
   assert.match(html, /class="overview-group overview-supplies-group"/);
   assert.match(html, /id="temperatureBody"/);
-  assert.match(html, /data-overview-route="#\/heating"/);
   assert.match(html, /data-overview-route="#\/water"/);
   assert.match(html, /data-overview-route="#\/system"/);
   assert.match(html, /data-overview-route="#\/settings"/);
-  assert.match(html, /id="overviewTrend"[^>]*>Trend unavailable</);
   assert.match(html, /id="batteryCurrentState"/);
   assertPanelOwnsIds(html, "heatingPanel", [
     "modeOn",

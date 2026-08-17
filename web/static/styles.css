@@ -252,7 +252,8 @@ h1 {
 .overview-trend-icon.is-unknown { color: var(--muted); }
 .overview-temperature-chart { flex: 1 1 auto; min-width: 0; width: auto; height: 64px; }
 .overview-sensor-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
-.overview-sub-sensor { display: grid; gap: 4px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255, 255, 255, .38); }
+.overview-sub-sensor { display: grid; gap: 4px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255, 255, 255, .38); color: inherit; text-align: left; text-decoration: none; }
+.overview-sub-sensor:hover, .overview-sub-sensor:focus-visible { border-color: var(--accent); outline: 3px solid rgba(31, 95, 212, .18); }
 .overview-sub-sensor-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .overview-sub-sensor-data { display: flex; flex-wrap: nowrap; align-items: baseline; gap: 8px; }
 .overview-sub-sensor-data .overview-sub-sensor-value,

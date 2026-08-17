@@ -381,6 +381,7 @@ test("renders the primary temperature card and trend", () => {
   renderTemperature(state.overview);
   const html = elements.temperatureBody.innerHTML;
   assert.match(html, /21\.4C/);
+  assert.match(html, /data-overview-route="#\/heating"/);
   assert.match(html, /Humidity 55%/);
   assert.match(html, /data-tone="warm"/);
   assert.match(html, /↑/);

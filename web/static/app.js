@@ -511,18 +511,18 @@ function renderTemperature(doc) {
 
   const subSensors = sensors.length > 1
     ? `<div class="overview-sensor-row">${sensors.slice(1).map((sensor) => `
-        <div class="overview-sub-sensor">
+        <a class="overview-sub-sensor" href="#/heating" data-overview-route="#/heating">
           <span class="overview-sub-sensor-name">${escapeHtml(sensor.name)}</span>
           <div class="overview-sub-sensor-data">
             <strong class="overview-sub-sensor-value">${sensor.temp === undefined || sensor.temp === null ? "-" : `${Number(sensor.temp).toFixed(1)}C`}</strong>
             <span class="overview-trend-icon${trendKnown(sensor.trend) ? "" : " is-unknown"}" role="img" aria-label="${escapeHtml(trendLabel(sensor.trend))}">${trendSymbol(sensor.trend)}</span>
           </div>
-        </div>`).join("")}
+        </a>`).join("")}
       </div>`
     : "";
 
   body.innerHTML = `
-    <div class="overview-card overview-temperature-card" data-tone="${tone}">
+    <button class="overview-card overview-temperature-card" type="button" data-tone="${tone}" data-overview-route="#/heating">
       <div class="overview-primary-row">
         <div class="overview-primary-left">
           <div class="overview-primary-line">
@@ -534,7 +534,7 @@ function renderTemperature(doc) {
         <canvas class="overview-temperature-chart" aria-hidden="true"></canvas>
       </div>
       ${subSensors}
-    </div>`;
+    </button>`;
   drawTemperatureChart(body.querySelector(".overview-temperature-chart"), primary.history);
 }
 
