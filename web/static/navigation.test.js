@@ -143,6 +143,7 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(styles, /\.overview-temperature-card \{[^}]*width: 100%;[^}]*min-width: 0;/);
   assert.match(styles, /\.overview-sensor-row \{[^}]*display: flex;[^}]*flex-wrap: nowrap;/);
   assert.match(styles, /\.overview-sub-sensor \{[^}]*min-width: 0;[^}]*flex: 1 1 0;/);
+  assert.doesNotMatch(styles, /@media \(max-width: 560px\) \{ \.overview-power-layout, \.overview-supplies-grid \{ grid-template-columns: 1fr; \} \}/);
   assert.match(styles, /background-image: linear-gradient\(rgba\(231, 226, 216, 0\.6/);
   assert.match(styles, /\.navigation-drawer \{[^}]*transform: translateX\(-16px\)/);
   assert.match(styles, /\.navigation-drawer a\[aria-current="page"\]:hover \{[^}]*background: var\(--accent-pressed\)[^}]*color: #ffffff/);
