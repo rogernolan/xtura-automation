@@ -141,4 +141,6 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*var\(--surface\)/);
   assert.match(styles, /\.overview-group-title \{[^}]*color: var\(--text\)/);
   assert.match(styles, /background-image: linear-gradient\(rgba\(231, 226, 216, 0\.6/);
+  assert.match(styles, /\.navigation-drawer \{[^}]*transform: translateX\(-16px\)/);
+  assert.match(styles, /\.navigation-drawer a\[aria-current="page"\]:hover \{[^}]*background: var\(--accent-pressed\)[^}]*color: #ffffff/);
 });

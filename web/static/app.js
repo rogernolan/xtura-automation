@@ -456,6 +456,9 @@ function closeNavigation({ restoreFocus = true } = {}) {
   const drawer = byId("navigationDrawer");
   const backdrop = byId("navigationBackdrop");
   const menuButton = byId("menuButton");
+  if (cancelNavigationClose) {
+    cancelNavigationClose();
+  }
   if (cancelNavigationOpen) {
     cancelNavigationOpen();
   }

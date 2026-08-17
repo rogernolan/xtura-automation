@@ -81,3 +81,28 @@ Accessibility behavior was retained: ARIA expanded/hidden state, inert and `aria
 
 - `docs/superpowers/plans/2026-08-17-navigation-drawer-polish.md` remains pre-existing and untracked, excluded from this fix commit.
 - `scripts/sim/run-sim.sh` was not changed, and the simulator was not run or restarted.
+
+## Task 1 final drawer review fix (2026-08-17)
+
+### Changed files
+
+- `web/static/app.js`
+  - Cancels any outstanding close listener and fallback timer at the start of `closeNavigation`, making repeated close actions idempotent and preventing stale cleanup from hiding a reopened drawer.
+- `web/static/app.test.js`
+  - Adds a regression that closes with Escape, closes again through the backdrop, reopens, and dispatches the stale transition event.
+- `web/static/styles.css`
+  - Uses `translateX(-16px)` for the closed drawer state.
+  - Keeps the current navigation page white on hover while using `var(--accent-pressed)`.
+- `web/static/navigation.test.js`
+  - Asserts the closed drawer offset and current-page hover styling.
+
+### Verification
+
+- `npm test`: 25 passed, 0 failed.
+- `npm run lint`: passed with no errors.
+- `git diff --check`: passed.
+- `go test ./...`: passed.
+
+### Concerns
+
+- `scripts/sim/run-sim.sh` was not changed, and the simulator was not deployed, run, or restarted.

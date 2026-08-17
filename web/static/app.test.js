@@ -391,6 +391,25 @@ test("navigation drawer applies its open state after a rendered closed frame", (
   assert.equal(elements.navigationBackdrop.classList.contains("is-open"), true);
 });
 
+test("reopening after repeated closes ignores stale drawer transition cleanup", () => {
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  document.dispatchEvent({ type: "keydown", key: "Escape" });
+  elements.navigationBackdrop.dispatchEvent({ type: "click" });
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
+
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), true);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), true);
+});
+
 test("reduced motion closes the drawer immediately", () => {
   const { bindActions, elements } = loadApp({ reducedMotion: true });
   bindActions();

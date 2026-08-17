@@ -152,7 +152,7 @@ h1 {
   background: var(--surface);
   color: var(--text);
   opacity: 0;
-  transform: translateX(-100%);
+  transform: translateX(-16px);
   transition: opacity 180ms ease, transform 220ms ease;
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
@@ -217,6 +217,11 @@ h1 {
 
 .navigation-drawer a:hover {
   background: rgba(31, 95, 212, 0.12);
+}
+
+.navigation-drawer a[aria-current="page"]:hover {
+  background: var(--accent-pressed);
+  color: #ffffff;
 }
 
 .navigation-drawer a:focus-visible {
