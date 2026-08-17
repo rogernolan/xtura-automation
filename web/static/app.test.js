@@ -300,14 +300,14 @@ test("charge current status reflects telemetry freshness", () => {
   const { overviewCurrentState } = loadApp();
   assert.equal(overviewCurrentState(null), "loading");
   assert.equal(overviewCurrentState({ status: "available", battery: { current_a: 2 } }), "live");
-  assert.equal(overviewCurrentState({ status: "available", battery: {} }), "unavailable");
+  assert.equal(overviewCurrentState({ status: "available", battery: {} }), "N/A");
   assert.equal(overviewCurrentState({ status: "stale", battery: {} }), "stale");
 });
 
 test("healthy supplies leave their status label blank", () => {
   const { overviewSupplyState } = loadApp();
   assert.equal(overviewSupplyState(42, "available"), "");
-  assert.equal(overviewSupplyState(undefined, "available"), "Unavailable");
+  assert.equal(overviewSupplyState(undefined, "available"), "N/A");
   assert.equal(overviewSupplyState(undefined, "stale"), "Stale");
 });
 
@@ -576,8 +576,8 @@ test("trend label maps every trend value", () => {
   assert.equal(trendLabel("rising"), "Rising");
   assert.equal(trendLabel("falling"), "Falling");
   assert.equal(trendLabel("steady"), "Steady");
-  assert.equal(trendLabel("unavailable"), "Trend unavailable");
-  assert.equal(trendLabel(undefined), "Trend unavailable");
+  assert.equal(trendLabel("unavailable"), "Trend N/A");
+  assert.equal(trendLabel(undefined), "Trend N/A");
 });
 
 test("trend state maps the four states", () => {

@@ -515,7 +515,7 @@ function render() {
   syncCountdownRefresh();
 }
 
-function overviewPercent(value) { return value === null || value === undefined ? "Unavailable" : `${Number(value).toFixed(0)}%`; }
+function overviewPercent(value) { return value === null || value === undefined ? "N/A" : `${Number(value).toFixed(0)}%`; }
 function overviewTemperatureTone(value, thresholds) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "unavailable";
   const bands = Array.isArray(thresholds) && thresholds.length >= 4 ? thresholds : [10, 18, 24, 30];
@@ -528,11 +528,11 @@ function overviewTemperatureTone(value, thresholds) {
 function overviewCurrentState(doc) {
   if (!doc) return "loading";
   if (doc.status === "stale") return "stale";
-  return doc.status === "available" && doc.battery && doc.battery.current_a !== undefined ? "live" : "unavailable";
+  return doc.status === "available" && doc.battery && doc.battery.current_a !== undefined ? "live" : "N/A";
 }
 function overviewSupplyState(value, status) {
   if (value !== undefined && status === "available") return "";
-  return status === "stale" ? "Stale" : "Unavailable";
+  return status === "stale" ? "Stale" : "N/A";
 }
 function escapeHtml(value) {
   return String(value === null || value === undefined ? "" : value)
@@ -546,7 +546,7 @@ function trendLabel(trend) {
   if (trend === "rising") return "Rising";
   if (trend === "falling") return "Falling";
   if (trend === "steady") return "Steady";
-  return "Trend unavailable";
+  return "Trend N/A";
 }
 
 function getTrendState(trend) {
@@ -567,7 +567,7 @@ function renderTrendControl(trend) {
 }
 
 function formatTemperature(value) {
-  return value === undefined || value === null ? "Unavailable" : `${Number(value).toFixed(1)}`;
+  return value === undefined || value === null ? "N/A" : `${Number(value).toFixed(1)}`;
 }
 
 function temperatureThresholds() {
@@ -719,10 +719,10 @@ function renderOverview() {
   const stale = doc.status === "stale";
   renderTemperature(doc);
   if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
-  if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a).toFixed(1)}A` : "Unavailable";
-  if (byId("batteryCurrentState")) byId("batteryCurrentState").textContent = overviewCurrentState(doc).replace(/^./, (letter) => letter.toUpperCase());
-  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : doc.battery.status === "stale" ? "Stale" : "Unavailable") : "Unavailable";
-  if (byId("batteryDetail")) byId("batteryDetail").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Estimated full in ${Number(doc.battery.eta_hours).toFixed(1)}h` : doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a).toFixed(1)}A · No ETA` : "Battery reading unavailable.";
+  if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a) >= 0 ? "+" : ""}${Number(doc.battery.current_a).toFixed(1)}A` : "--";
+  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : doc.battery.status === "stale" ? "Stale" : "N/A") : "N/A";
+  if (byId("timeToFull")) byId("timeToFull").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Time to full: ${Number(doc.battery.eta_hours).toFixed(1)}h` : "Time to full: N/A";
+  if (byId("batteryBar")) { const pct = doc.battery && doc.battery.state_of_charge_percent; byId("batteryBar").style.width = pct === undefined || pct === null ? "0%" : `${Math.max(0, Math.min(100, Number(pct)))}%`; }
   if (byId("freshWater")) byId("freshWater").textContent = overviewPercent(doc.fresh_water_percent);
   if (byId("greyWater")) byId("greyWater").textContent = overviewPercent(doc.grey_water_percent);
   ["fresh", "grey"].forEach((kind) => {

@@ -65,9 +65,9 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(html, /class="overview-group overview-supplies-group"/);
   assert.match(html, /id="temperatureBody"/);
   assert.match(html, /data-overview-route="#\/water"/);
-  assert.match(html, /data-overview-route="#\/system"/);
-  assert.match(html, /data-overview-route="#\/settings"/);
-  assert.match(html, /id="batteryCurrentState"/);
+  assert.match(html, /data-overview-route="#\/more\/settings"/);
+  assert.match(html, /data-overview-route="#\/more\/settings"/);
+  assert.match(html, /id="batteryCurrent"/);
   assertPanelOwnsIds(html, "heatingPanel", [
     "modeOn",
     "modeSchedule",
