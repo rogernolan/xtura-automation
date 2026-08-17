@@ -17,6 +17,28 @@ if [[ ! -f "${CAPTURE}" ]]; then
   exit 1
 fi
 
+stop_existing_listener() {
+  local port="$1"
+  local pids
+  pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -z "${pids}" ]]; then
+    return
+  fi
+  echo "==> Stopping existing listener(s) on :${port}: ${pids//$'\n'/ }"
+  kill ${pids} 2>/dev/null || true
+  for _ in {1..20}; do
+    if ! lsof -tiTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+      return
+    fi
+    sleep 0.1
+  done
+  pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
+  [[ -z "${pids}" ]] || kill -9 ${pids} 2>/dev/null || true
+}
+
+stop_existing_listener 8090
+stop_existing_listener 8091
+
 BUILD_DIR="$(mktemp -d)"
 cd "${REPO_ROOT}"
 
@@ -27,7 +49,12 @@ go build -o "${BUILD_DIR}/empirebusd" ./cmd/empirebusd
 echo "==> Starting servsim (capture=${CAPTURE})"
 "${BUILD_DIR}/servsim" -listen :8090 -capture "${CAPTURE}" &
 SERVSIM_PID=$!
-trap 'kill "${SERVSIM_PID}" 2>/dev/null || true; rm -rf "${BUILD_DIR}"' EXIT
+cleanup() {
+  [[ -z "${EMPIREBUSD_PID:-}" ]] || kill "${EMPIREBUSD_PID}" 2>/dev/null || true
+  [[ -z "${SERVSIM_PID:-}" ]] || kill "${SERVSIM_PID}" 2>/dev/null || true
+  rm -rf "${BUILD_DIR}"
+}
+trap cleanup EXIT INT TERM
 
 for _ in {1..50}; do
   if curl --silent --output /dev/null --max-time 1 http://127.0.0.1:8090/; then
@@ -38,4 +65,6 @@ done
 
 echo "==> Starting empirebusd (config=config.sim.yaml)"
 echo "    UI/API: http://localhost:8091"
-"${BUILD_DIR}/empirebusd" -config ./config.sim.yaml
+"${BUILD_DIR}/empirebusd" -config ./config.sim.yaml &
+EMPIREBUSD_PID=$!
+wait "${EMPIREBUSD_PID}"
