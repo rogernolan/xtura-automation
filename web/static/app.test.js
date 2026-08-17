@@ -487,6 +487,21 @@ test("overview temperature cards deep link to heating", () => {
   assert.equal(window.location.hash, "#/heating");
 });
 
+test("dynamically rendered temperature card uses delegated deep link", () => {
+  const { bindActions, window, elements } = loadApp({ hash: "#/overview" });
+  bindActions();
+  const generatedCard = {
+    dataset: { overviewRoute: "#/heating" },
+    closest() {
+      return this;
+    },
+  };
+
+  elements.temperatureBody.dispatchEvent({ type: "click", target: generatedCard });
+
+  assert.equal(window.location.hash, "#/heating");
+});
+
 test("renders the primary temperature card and trend", () => {
   const { renderTemperature, elements, state } = loadApp({ groupedElements: [] });
   state.overviewSettings = { comfort_thresholds: [10, 18, 24, 30] };

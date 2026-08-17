@@ -1638,13 +1638,23 @@ function connectEvents() {
   });
 }
 
+function handleOverviewRoute(event) {
+  const target = event.target && typeof event.target.closest === "function"
+    ? event.target.closest("[data-overview-route]")
+    : event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.overviewRoute
+      ? event.currentTarget
+      : null;
+  if (!target) return;
+  event.preventDefault();
+  const route = XturaNavigation.parse(target.dataset.overviewRoute);
+  navigate(route.page);
+}
+
 function bindActions() {
   document.querySelectorAll("[data-overview-route]").forEach((card) => {
-    card.addEventListener("click", () => {
-      const route = XturaNavigation.parse(card.dataset.overviewRoute);
-      navigate(route.page);
-    });
+    card.addEventListener("click", handleOverviewRoute);
   });
+  byId("temperatureBody").addEventListener("click", handleOverviewRoute);
   document.querySelectorAll("[data-page]").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
