@@ -14,10 +14,27 @@ class ElementStub {
     this.textContent = options.textContent || "";
     this.innerHTML = options.innerHTML || "";
     this.disabled = false;
-    this.hidden = false;
+    this.hidden = options.hidden || false;
     this.listeners = new Map();
     this.parentNode = null;
-    this.classList = { toggle() {} };
+    this.ownerDocument = null;
+    this.attributes = new Map(Object.entries(options.attributes || {}));
+    const classes = new Set();
+    this.classList = {
+      add: (...names) => names.forEach((name) => classes.add(name)),
+      remove: (...names) => names.forEach((name) => classes.delete(name)),
+      contains: (name) => classes.has(name),
+      toggle: (name, force) => {
+        const next = force === undefined ? !classes.has(name) : force;
+        if (next) classes.add(name);
+        else classes.delete(name);
+        return next;
+      },
+    };
+    this.style = {};
+    this.children = options.children || [];
+    this.focusables = options.focusables || [];
+    this.inert = false;
   }
 
   querySelector() {
@@ -31,7 +48,15 @@ class ElementStub {
     this.listeners.get(type).push(listener);
   }
 
+  removeEventListener(type, listener) {
+    const listeners = this.listeners.get(type) || [];
+    this.listeners.set(type, listeners.filter((registered) => registered !== listener));
+  }
+
   dispatchEvent(event) {
+    event.preventDefault = event.preventDefault || (() => {
+      event.defaultPrevented = true;
+    });
     event.target = event.target || this;
     event.currentTarget = this;
     for (const listener of this.listeners.get(event.type) || []) {
@@ -42,43 +67,172 @@ class ElementStub {
     }
   }
 
-  setAttribute() {}
+  focus() {
+    if (this.ownerDocument) {
+      this.ownerDocument.activeElement = this;
+    }
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
+  }
+
+  getAttribute(name) {
+    return this.attributes.has(name) ? this.attributes.get(name) : null;
+  }
+
+  removeAttribute(name) {
+    this.attributes.delete(name);
+  }
+
+  hasAttribute(name) {
+    return this.attributes.has(name);
+  }
+
+  querySelector(selector) {
+    if (selector === "[data-page]") {
+      return this.firstPageLink || null;
+    }
+    return null;
+  }
+
+  querySelectorAll(selector) {
+    if (selector === "[data-page]") {
+      return this.pageLinks || [];
+    }
+    if (this.focusables.length > 0) {
+      return this.focusables;
+    }
+    return [];
+  }
+
+  contains(node) {
+    if (node === this) {
+      return true;
+    }
+    return this.children.some((child) => child === node || child.contains(node));
+  }
 }
 
-function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/controls/water" }) {
+function dispatchWithListeners(target, listeners, event) {
+  event.preventDefault = event.preventDefault || (() => {
+    event.defaultPrevented = true;
+  });
+  event.target = event.target || target;
+  event.currentTarget = target;
+  for (const listener of listeners.get(event.type) || []) {
+    listener.call(target, event);
+  }
+}
+
+function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
   const ids = [
-    "statusMessage", "connectionStatus", "pageTitle", "overviewNav", "controlsNav", "locationNav", "moreNav",
-    "overviewPanel", "controlsPanel", "locationPanel", "morePanel", "flashLights", "flashCount",
+    "statusMessage", "connectionStatus", "pageTitle",
+    "appContent",
+    "menuButton", "closeMenuButton", "navigationBackdrop", "navigationDrawer",
+    "overviewPanel", "heatingPanel", "waterPanel", "lightingPanel", "locationPanel", "systemPanel", "toolsPanel", "settingsPanel",
+    "flashLights", "flashCount",
     "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton",
     "recordingDuration", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval",
     "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
-    "scheduleForm",
+    "scheduleForm", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
     "overviewSettingsForm", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
     "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
+  const drawerLayoutReads = [];
+  Object.defineProperty(elements.navigationDrawer, "offsetWidth", {
+    get() {
+      drawerLayoutReads.push(elements.navigationDrawer.classList.contains("is-open"));
+      return 320;
+    },
+  });
+  elements.menuButton.setAttribute("aria-expanded", "false");
+  elements.navigationBackdrop.hidden = true;
+  elements.navigationDrawer.hidden = true;
+
+  const pageLinks = navigation.pages.map((page) => {
+    const id = `${page}Link`;
+    const link = new ElementStub(id, {
+      dataset: { page },
+      attributes: { href: `#/${page}` },
+    });
+    elements[id] = link;
+    return link;
+  });
+  elements.navigationDrawer.pageLinks = pageLinks;
+  elements.navigationDrawer.focusables = [elements.closeMenuButton, ...pageLinks];
+  elements.navigationDrawer.children = [elements.closeMenuButton, ...pageLinks];
+  elements.navigationDrawer.firstPageLink = pageLinks[0];
+  elements.appContent.focusables = [elements.menuButton];
+  elements.appContent.children = [elements.menuButton];
+
+  elements.aldeCard = new ElementStub("aldeCard", {
+    dataset: { overviewRoute: "#/heating" },
+  });
+
+  const documentListeners = new Map();
   const document = {
+    activeElement: null,
     getElementById(id) {
       return elements[id] || null;
     },
+    querySelector(selector) {
+      const match = selector.match(/^\[data-page="([^"]+)"\]$/);
+      if (match) {
+        return elements[`${match[1]}Link`] || null;
+      }
+      if (selector === "[data-page]") {
+        return pageLinks[0] || null;
+      }
+      return null;
+    },
     querySelectorAll(selector) {
-      if (selector === "[data-screen]") return [];
+      if (selector === "[data-page]") return pageLinks;
+      if (selector === "[data-overview-route]") return [elements.aldeCard];
       if (selector === "[data-target]") return [];
-      if (selector === "select[data-section-group]") return selectElements;
-      if (selector === "[data-section-group]") return groupedElements;
-      if (selector === ".section-panel") return [];
       return [];
     },
-    addEventListener() {},
+    addEventListener(type, listener) {
+      if (!documentListeners.has(type)) {
+        documentListeners.set(type, []);
+      }
+      documentListeners.get(type).push(listener);
+    },
+    dispatchEvent(event) {
+      dispatchWithListeners(this, documentListeners, event);
+    },
     title: "Xtura",
   };
+  for (const element of Object.values(elements)) {
+    element.ownerDocument = document;
+  }
+
+  const animationFrames = [];
+  const windowListeners = new Map();
   const window = {
     location: { hash },
-    addEventListener() {},
+    matchMedia: () => ({ matches: reducedMotion }),
+    addEventListener(type, listener) {
+      if (!windowListeners.has(type)) {
+        windowListeners.set(type, []);
+      }
+      windowListeners.get(type).push(listener);
+    },
+    dispatchEvent(event) {
+      dispatchWithListeners(this, windowListeners, event);
+    },
     setInterval() {
       return 1;
     },
     clearInterval() {},
+    requestAnimationFrame(callback) {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    },
+    cancelAnimationFrame(frame) {
+      animationFrames[frame - 1] = null;
+    },
   };
   const context = {
     console,
@@ -94,12 +248,34 @@ function loadApp({ groupedElements, selectElements = groupedElements, hash = "#/
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, trendSymbol, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
-  return { bindActions: context.module.exports.bindActions, renderOverviewSettings: context.module.exports.renderOverviewSettings, renderOverview: context.module.exports.renderOverview, renderTemperature: context.module.exports.renderTemperature, trendLabel: context.module.exports.trendLabel, trendSymbol: context.module.exports.trendSymbol, overviewTemperatureTone: context.module.exports.overviewTemperatureTone, overviewCurrentState: context.module.exports.overviewCurrentState, overviewSupplyState: context.module.exports.overviewSupplyState, state: context.module.exports.state, window, elements };
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, trendSymbol, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
+  return {
+    applyRoute: context.module.exports.applyRoute,
+    bindActions: context.module.exports.bindActions,
+    renderOverviewSettings: context.module.exports.renderOverviewSettings,
+    renderOverview: context.module.exports.renderOverview,
+    renderTemperature: context.module.exports.renderTemperature,
+    trendLabel: context.module.exports.trendLabel,
+    trendSymbol: context.module.exports.trendSymbol,
+    overviewTemperatureTone: context.module.exports.overviewTemperatureTone,
+    overviewCurrentState: context.module.exports.overviewCurrentState,
+    overviewSupplyState: context.module.exports.overviewSupplyState,
+    state: context.module.exports.state,
+    document,
+    window,
+    elements,
+    drawerLayoutReads,
+    runAnimationFrames() {
+      while (animationFrames.length > 0) {
+        const callback = animationFrames.shift();
+        if (callback) callback();
+      }
+    },
+  };
 }
 
 test("rerendering overview does not overwrite dirty settings fields", () => {
-  const { renderOverviewSettings, state, elements } = loadApp({ groupedElements: [] });
+  const { renderOverviewSettings, state, elements } = loadApp();
   state.overviewSettings = { comfort_thresholds: [10, 18, 24, 30], usable_battery_capacity_ah: 100, gas_tank_capacity_litres: 0 };
   state.overviewSettingsDirty = true;
   elements.comfortCold.value = "12";
@@ -108,7 +284,7 @@ test("rerendering overview does not overwrite dirty settings fields", () => {
 });
 
 test("temperature tone uses configured comfort bands", () => {
-  const { overviewTemperatureTone } = loadApp({ groupedElements: [] });
+  const { overviewTemperatureTone } = loadApp();
   assert.equal(overviewTemperatureTone(8, [10, 18, 24, 30]), "cold");
   assert.equal(overviewTemperatureTone(15, [10, 18, 24, 30]), "comfortable");
   assert.equal(overviewTemperatureTone(21, [10, 18, 24, 30]), "warm");
@@ -118,7 +294,7 @@ test("temperature tone uses configured comfort bands", () => {
 });
 
 test("charge current status reflects telemetry freshness", () => {
-  const { overviewCurrentState } = loadApp({ groupedElements: [] });
+  const { overviewCurrentState } = loadApp();
   assert.equal(overviewCurrentState(null), "loading");
   assert.equal(overviewCurrentState({ status: "available", battery: { current_a: 2 } }), "live");
   assert.equal(overviewCurrentState({ status: "available", battery: {} }), "unavailable");
@@ -126,91 +302,204 @@ test("charge current status reflects telemetry freshness", () => {
 });
 
 test("healthy supplies leave their status label blank", () => {
-  const { overviewSupplyState } = loadApp({ groupedElements: [] });
+  const { overviewSupplyState } = loadApp();
   assert.equal(overviewSupplyState(42, "available"), "");
   assert.equal(overviewSupplyState(undefined, "available"), "Unavailable");
   assert.equal(overviewSupplyState(undefined, "stale"), "Stale");
 });
 
-test("changing a control inside the water panel does not reset the section hash", () => {
-  const waterPanel = new ElementStub("controlsWaterPanel", {
-    dataset: { sectionGroup: "controls", section: "water" },
-  });
-  const controlsSelect = new ElementStub("controlsSection", {
-    dataset: { sectionGroup: "controls" },
-    value: "water",
-  });
-  const childControl = new ElementStub("greyScheduleDuration", { value: "45" });
-  childControl.parentNode = waterPanel;
+test("applyRoute shows the selected page and marks its drawer link", () => {
+  const { applyRoute, document, elements } = loadApp();
 
-  const { bindActions, window } = loadApp({
-    groupedElements: [controlsSelect, waterPanel],
-    selectElements: [controlsSelect],
-  });
-  bindActions();
+  applyRoute({ page: "water" });
 
-  childControl.dispatchEvent({ type: "change", bubbles: true });
-
-  assert.equal(window.location.hash, "#/controls/water");
+  assert.equal(elements.pageTitle.textContent, "Water");
+  assert.equal(document.title, "Water");
+  assert.equal(elements.overviewPanel.hidden, true);
+  assert.equal(elements.waterPanel.hidden, false);
+  assert.equal(elements.waterLink.getAttribute("aria-current"), "page");
+  assert.equal(elements.overviewLink.getAttribute("aria-current"), null);
 });
 
-test("changing the controls dropdown navigates to the selected section", () => {
-  const controlsSelect = new ElementStub("controlsSection", {
-    dataset: { sectionGroup: "controls" },
-    value: "heating",
-  });
+test("applyRoute rewrites legacy hashes to the canonical overview route", () => {
+  const { applyRoute, window } = loadApp({ hash: "#/controls/heating" });
 
-  const { bindActions, window } = loadApp({
-    groupedElements: [controlsSelect],
-    hash: "#/controls/heating",
-  });
-  bindActions();
+  applyRoute(navigation.parse(window.location.hash));
 
-  controlsSelect.value = "lighting";
-  controlsSelect.dispatchEvent({ type: "change", bubbles: true });
-
-  assert.equal(window.location.hash, "#/controls/lighting");
+  assert.equal(window.location.hash, "#/overview");
 });
 
-test("changing a control inside the tools panel does not reset the section hash", () => {
-  const toolsPanel = new ElementStub("moreToolsPanel", {
-    dataset: { sectionGroup: "more", section: "tools" },
-  });
-  const moreSelect = new ElementStub("moreSection", {
-    dataset: { sectionGroup: "more" },
-    value: "tools",
-  });
-  const childControl = new ElementStub("recordingDuration", { value: "10" });
-  childControl.parentNode = toolsPanel;
-
-  const { bindActions, window } = loadApp({
-    groupedElements: [moreSelect, toolsPanel],
-    selectElements: [moreSelect],
-    hash: "#/more/tools",
-  });
+test("navigation controls open and close the drawer with focus management", () => {
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
   bindActions();
 
-  childControl.dispatchEvent({ type: "change", bubbles: true });
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), true);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), true);
+  assert.equal(elements.menuButton.getAttribute("aria-expanded"), "true");
+  assert.equal(elements.appContent.inert, true);
+  assert.equal(elements.appContent.getAttribute("aria-hidden"), "true");
+  assert.equal(document.activeElement, elements.overviewLink);
 
-  assert.equal(window.location.hash, "#/more/tools");
+  document.dispatchEvent({ type: "keydown", key: "Escape" });
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), false);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), false);
+  assert.equal(elements.menuButton.getAttribute("aria-expanded"), "false");
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(elements.appContent.getAttribute("aria-hidden"), null);
+  assert.equal(document.activeElement, elements.menuButton);
+
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.navigationBackdrop.hidden, true);
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  elements.navigationBackdrop.dispatchEvent({ type: "click" });
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(document.activeElement, elements.menuButton);
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  elements.closeMenuButton.dispatchEvent({ type: "click" });
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(document.activeElement, elements.menuButton);
 });
 
-test("changing the more dropdown navigates to the selected section", () => {
-  const moreSelect = new ElementStub("moreSection", {
-    dataset: { sectionGroup: "more" },
-    value: "system",
-  });
-
-  const { bindActions, window } = loadApp({
-    groupedElements: [moreSelect],
-    hash: "#/more/system",
-  });
+test("navigation drawer applies its open state after a rendered closed frame", () => {
+  const { bindActions, drawerLayoutReads, elements, runAnimationFrames } = loadApp();
   bindActions();
 
-  moreSelect.value = "tools";
-  moreSelect.dispatchEvent({ type: "change", bubbles: true });
+  elements.menuButton.dispatchEvent({ type: "click" });
 
-  assert.equal(window.location.hash, "#/more/tools");
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), false);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), false);
+  assert.deepEqual(drawerLayoutReads, [false]);
+
+  runAnimationFrames();
+
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), true);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), true);
+});
+
+test("reopening after repeated closes ignores stale drawer transition cleanup", () => {
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  document.dispatchEvent({ type: "keydown", key: "Escape" });
+  elements.navigationBackdrop.dispatchEvent({ type: "click" });
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
+
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), true);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), true);
+});
+
+test("reduced motion closes the drawer immediately", () => {
+  const { bindActions, elements } = loadApp({ reducedMotion: true });
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  elements.closeMenuButton.dispatchEvent({ type: "click" });
+
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.navigationBackdrop.hidden, true);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), false);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), false);
+});
+
+test("navigation drawer keeps Tab and Shift+Tab focus inside drawer controls", () => {
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  elements.settingsLink.focus();
+  const tabEvent = { type: "keydown", key: "Tab" };
+  document.dispatchEvent(tabEvent);
+
+  assert.equal(tabEvent.defaultPrevented, true);
+  assert.equal(document.activeElement, elements.closeMenuButton);
+
+  elements.closeMenuButton.focus();
+  const shiftTabEvent = { type: "keydown", key: "Tab", shiftKey: true };
+  document.dispatchEvent(shiftTabEvent);
+
+  assert.equal(shiftTabEvent.defaultPrevented, true);
+  assert.equal(document.activeElement, elements.settingsLink);
+});
+
+test("closing navigation drawer does not trap Tab in aria-hidden content", () => {
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  elements.closeMenuButton.dispatchEvent({ type: "click" });
+
+  const tabEvent = { type: "keydown", key: "Tab" };
+  document.dispatchEvent(tabEvent);
+
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationDrawer.getAttribute("aria-hidden"), "true");
+  assert.equal(tabEvent.defaultPrevented, undefined);
+  assert.equal(document.activeElement, elements.menuButton);
+});
+
+test("page links navigate and close the drawer", () => {
+  const { bindActions, document, window, elements } = loadApp({ hash: "#/overview" });
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  const event = { type: "click" };
+  elements.heatingLink.dispatchEvent(event);
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
+
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(window.location.hash, "#/heating");
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.navigationBackdrop.hidden, true);
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(document.activeElement, elements.menuButton);
+});
+
+test("overview temperature cards deep link to heating", () => {
+  const { bindActions, window, elements } = loadApp({ hash: "#/overview" });
+  bindActions();
+
+  elements.aldeCard.dispatchEvent({ type: "click" });
+
+  assert.equal(window.location.hash, "#/heating");
+});
+
+test("dynamically rendered temperature card uses delegated deep link", () => {
+  const { bindActions, window, elements } = loadApp({ hash: "#/overview" });
+  bindActions();
+  const generatedCard = {
+    dataset: { overviewRoute: "#/heating" },
+    closest() {
+      return this;
+    },
+  };
+
+  elements.temperatureBody.dispatchEvent({ type: "click", target: generatedCard });
+
+  assert.equal(window.location.hash, "#/heating");
 });
 
 test("renders the primary temperature card and trend", () => {
@@ -226,6 +515,7 @@ test("renders the primary temperature card and trend", () => {
   renderTemperature(state.overview);
   const html = elements.temperatureBody.innerHTML;
   assert.match(html, /21\.4C/);
+  assert.match(html, /data-overview-route="#\/heating"/);
   assert.match(html, /Humidity 55%/);
   assert.match(html, /data-tone="warm"/);
   assert.match(html, /↑/);

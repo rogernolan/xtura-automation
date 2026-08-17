@@ -10,12 +10,28 @@
   <body>
     <main id="app" class="app-shell" aria-live="polite">
       <section class="control-surface">
+        <div id="navigationBackdrop" class="navigation-backdrop" hidden></div>
+        <aside id="navigationDrawer" class="navigation-drawer" aria-label="Site navigation" aria-hidden="true" hidden>
+          <div class="navigation-drawer-heading"><h2>Pages</h2><button id="closeMenuButton" type="button" aria-label="Close navigation">×</button></div>
+          <nav>
+            <a data-page="overview" href="#/overview">Overview</a>
+            <a data-page="heating" href="#/heating">Heating</a>
+            <a data-page="water" href="#/water">Water</a>
+            <a data-page="lighting" href="#/lighting">Lighting</a>
+            <a data-page="location" href="#/location">Location</a>
+            <a data-page="system" href="#/system">System</a>
+            <a data-page="tools" href="#/tools">Tools</a>
+            <a data-page="settings" href="#/settings">Settings</a>
+          </nav>
+        </aside>
+        <div id="appContent">
         <header class="app-header">
+          <button id="menuButton" class="menu-button" type="button" aria-label="Open navigation" aria-controls="navigationDrawer" aria-expanded="false">☰</button>
           <h1 id="pageTitle">Overview</h1>
           <span id="connectionStatus" class="connection-pill">Connecting</span>
         </header>
 
-        <section id="overviewPanel" class="primary-panel overview-layout">
+        <section id="overviewPanel" class="page-panel overview-layout">
           <section class="overview-group overview-temperature-group" aria-labelledby="temperatureGroupTitle">
             <h2 id="temperatureGroupTitle" class="overview-group-title">Temperature</h2>
             <div id="temperatureBody"></div>
@@ -24,12 +40,12 @@
           <section class="overview-group overview-power-group" aria-labelledby="powerGroupTitle">
             <h2 id="powerGroupTitle" class="overview-group-title">Power</h2>
             <div class="overview-card-grid overview-power-grid">
-              <button id="batterySocCard" class="overview-card" type="button" data-overview-route="#/more/settings">
+              <button id="batterySocCard" class="overview-card" type="button" data-overview-route="#/system">
                 <div class="overview-card-heading"><span>Battery</span><span id="batteryState" class="state-text">Loading</span></div>
                 <strong id="batterySoc" class="overview-value">--</strong>
                 <p class="detail-text">State of charge</p>
               </button>
-              <button id="batteryCurrentCard" class="overview-card" type="button" data-overview-route="#/more/settings">
+              <button id="batteryCurrentCard" class="overview-card" type="button" data-overview-route="#/system">
                 <div class="overview-card-heading"><span>Charge current</span><span id="batteryCurrentState" class="state-text">Loading</span></div>
                 <strong id="batteryCurrent" class="overview-value">--</strong>
                 <p id="batteryDetail" class="detail-text">Waiting for battery.</p>
@@ -40,19 +56,19 @@
           <section class="overview-group overview-supplies-group" aria-labelledby="suppliesGroupTitle">
             <h2 id="suppliesGroupTitle" class="overview-group-title">Supplies</h2>
             <div class="overview-card-grid overview-supplies-grid">
-              <button id="freshWaterCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/controls/water">
+              <button id="freshWaterCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/water">
                 <div class="overview-card-heading"><span>Fresh water</span><span id="freshWaterState" class="state-text"></span></div>
                 <strong id="freshWater" class="overview-value">--</strong>
                 <div class="supply-bar" aria-hidden="true"><span id="freshWaterBar"></span></div>
                 <p class="detail-text">Garmin percentage</p>
               </button>
-              <button id="greyWaterCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/controls/water">
+              <button id="greyWaterCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/water">
                 <div class="overview-card-heading"><span>Grey water</span><span id="greyWaterState" class="state-text"></span></div>
                 <strong id="greyWater" class="overview-value">--</strong>
                 <div class="supply-bar" aria-hidden="true"><span id="greyWaterBar"></span></div>
                 <p class="detail-text">Garmin percentage</p>
               </button>
-              <button id="gasCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/more/settings">
+              <button id="gasCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/settings">
                 <div class="overview-card-heading"><span>Gas</span><span class="state-text">Unavailable</span></div>
                 <strong class="overview-value">--</strong>
                 <div class="supply-bar is-unavailable" aria-hidden="true"><span></span></div>
@@ -62,115 +78,104 @@
           </section>
         </section>
 
-        <section id="controlsPanel" class="primary-panel" hidden>
-          <div class="field">
-            <label for="controlsSection">Section</label>
-            <select id="controlsSection" data-section-group="controls" aria-label="Controls section">
-              <option value="heating">Heating</option>
-              <option value="water">Water</option>
-              <option value="lighting">Lighting</option>
-            </select>
+        <section id="heatingPanel" class="page-panel" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Mode</h2>
+              <span id="modeState" class="state-text">Loading</span>
+            </div>
+            <div class="mode-switch" aria-label="Heating mode">
+              <button id="modeOn" class="mode-option" type="button">On</button>
+              <button id="modeSchedule" class="mode-option" type="button">Schedule</button>
+              <button id="modeOff" class="mode-option" type="button">Off</button>
+            </div>
           </div>
 
-          <section id="controlsHeatingPanel" class="section-panel" data-section-group="controls" data-section="heating">
-            <div class="panel">
-              <div class="panel-heading">
-                <h2>Mode</h2>
-                <span id="modeState" class="state-text">Loading</span>
-              </div>
-              <div class="mode-switch" aria-label="Heating mode">
-                <button id="modeOn" class="mode-option" type="button">On</button>
-                <button id="modeSchedule" class="mode-option" type="button">Schedule</button>
-                <button id="modeOff" class="mode-option" type="button">Off</button>
-              </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Target</h2>
+              <span id="targetState" class="state-text">Set point</span>
             </div>
+            <div class="target-stepper" aria-label="Heating target">
+              <button id="targetDown" class="icon-button" type="button" aria-label="Decrease target">-</button>
+              <div id="targetValue" class="target-value">18.0C</div>
+              <button id="targetUp" class="icon-button" type="button" aria-label="Increase target">+</button>
+            </div>
+            <div class="quick-targets" aria-label="Quick targets">
+              <button class="secondary-action" type="button" data-target="5">5C</button>
+              <button class="secondary-action" type="button" data-target="18">18C</button>
+              <button class="secondary-action" type="button" data-target="21">21C</button>
+            </div>
+            <p id="modeDetail" class="detail-text">Waiting for heating mode.</p>
+          </div>
 
-            <div class="panel">
-              <div class="panel-heading">
-                <h2>Target</h2>
-                <span id="targetState" class="state-text">Set point</span>
+          <div id="boostPanel" class="panel">
+            <button id="boostButton" class="primary-action" type="button">Boost to 21C for 1 hour</button>
+            <div id="boostRunning" class="boost-running" hidden>
+              <div>
+                <strong id="boostTarget">21.0C</strong>
+                <span id="boostRemaining">-- remaining</span>
               </div>
-              <div class="target-stepper" aria-label="Heating target">
-                <button id="targetDown" class="icon-button" type="button" aria-label="Decrease target">-</button>
-                <div id="targetValue" class="target-value">18.0C</div>
-                <button id="targetUp" class="icon-button" type="button" aria-label="Increase target">+</button>
-              </div>
-              <div class="quick-targets" aria-label="Quick targets">
-                <button class="secondary-action" type="button" data-target="5">5C</button>
-                <button class="secondary-action" type="button" data-target="18">18C</button>
-                <button class="secondary-action" type="button" data-target="21">21C</button>
-              </div>
-              <p id="modeDetail" class="detail-text">Waiting for heating mode.</p>
+              <button id="cancelBoostButton" class="secondary-wide" type="button">CANCEL BOOST</button>
             </div>
+          </div>
 
-            <div id="boostPanel" class="panel">
-              <button id="boostButton" class="primary-action" type="button">Boost to 21C for 1 hour</button>
-              <div id="boostRunning" class="boost-running" hidden>
-                <div>
-                  <strong id="boostTarget">21.0C</strong>
-                  <span id="boostRemaining">-- remaining</span>
-                </div>
-                <button id="cancelBoostButton" class="secondary-wide" type="button">CANCEL BOOST</button>
-              </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Schedule</h2>
+              <span id="scheduleState" class="state-text">Loading</span>
             </div>
-
-            <div class="panel">
-              <div class="panel-heading">
-                <h2>Schedule</h2>
-                <span id="scheduleState" class="state-text">Loading</span>
-              </div>
-              <form id="scheduleForm" class="schedule-form">
-                <div id="scheduleSlots" class="schedule-slots"></div>
-                <button id="saveSchedule" class="primary-action" type="submit">Save schedule</button>
-              </form>
-              <p id="scheduleDetail" class="detail-text">Waiting for schedule.</p>
-            </div>
-          </section>
-
-          <section id="controlsWaterPanel" class="section-panel" hidden data-section-group="controls" data-section="water">
-            <div class="panel">
-              <div class="panel-heading">
-                <h2>Grey water valve</h2>
-                <span id="waterState" class="state-text">Loading</span>
-              </div>
-              <div class="valve-actions">
-                <button id="openGreyValve" class="primary-action" type="button">Open</button>
-                <button id="closeGreyValve" class="secondary-wide" type="button">Close</button>
-              </div>
-              <div class="grey-schedule-control">
-                <div class="field">
-                  <label for="greyScheduleTime">Open at</label>
-                  <input id="greyScheduleTime" name="grey-schedule-time" type="time" value="03:00" step="60">
-                </div>
-                <span class="schedule-separator" aria-hidden="true">for</span>
-                <div class="field">
-                  <label for="greyScheduleDuration">Minutes</label>
-                  <input id="greyScheduleDuration" name="grey-schedule-duration" type="number" min="1" max="1440" step="1" value="30" inputmode="numeric">
-                </div>
-                <button id="greyScheduleButton" class="secondary-wide" type="button">Schedule</button>
-              </div>
-              <p id="greyScheduleMessage" class="detail-text"></p>
-              <p id="waterDetail" class="detail-text">Waiting for water state.</p>
-            </div>
-          </section>
-
-          <section id="controlsLightingPanel" class="section-panel" hidden data-section-group="controls" data-section="lighting">
-            <div class="panel">
-              <div class="panel-heading">
-                <h2>Exterior lights</h2>
-                <span id="lightsState" class="state-text">Loading</span>
-              </div>
-              <div class="flash-control">
-                <label for="flashCount">Flashes</label>
-                <input id="flashCount" name="flash-count" type="number" min="1" max="5" step="1" value="1" inputmode="numeric">
-              </div>
-              <button id="flashLights" class="primary-action" type="button">Flash exterior lights</button>
-              <p id="lightsDetail" class="detail-text">Waiting for light state.</p>
-            </div>
-          </section>
+            <form id="scheduleForm" class="schedule-form">
+              <div id="scheduleSlots" class="schedule-slots"></div>
+              <button id="saveSchedule" class="primary-action" type="submit">Save schedule</button>
+            </form>
+            <p id="scheduleDetail" class="detail-text">Waiting for schedule.</p>
+          </div>
         </section>
 
-        <section id="locationPanel" class="primary-panel" hidden>
+        <section id="waterPanel" class="page-panel" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Grey water valve</h2>
+              <span id="waterState" class="state-text">Loading</span>
+            </div>
+            <div class="valve-actions">
+              <button id="openGreyValve" class="primary-action" type="button">Open</button>
+              <button id="closeGreyValve" class="secondary-wide" type="button">Close</button>
+            </div>
+            <div class="grey-schedule-control">
+              <div class="field">
+                <label for="greyScheduleTime">Open at</label>
+                <input id="greyScheduleTime" name="grey-schedule-time" type="time" value="03:00" step="60">
+              </div>
+              <span class="schedule-separator" aria-hidden="true">for</span>
+              <div class="field">
+                <label for="greyScheduleDuration">Minutes</label>
+                <input id="greyScheduleDuration" name="grey-schedule-duration" type="number" min="1" max="1440" step="1" value="30" inputmode="numeric">
+              </div>
+              <button id="greyScheduleButton" class="secondary-wide" type="button">Schedule</button>
+            </div>
+            <p id="greyScheduleMessage" class="detail-text"></p>
+            <p id="waterDetail" class="detail-text">Waiting for water state.</p>
+          </div>
+        </section>
+
+        <section id="lightingPanel" class="page-panel" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Exterior lights</h2>
+              <span id="lightsState" class="state-text">Loading</span>
+            </div>
+            <div class="flash-control">
+              <label for="flashCount">Flashes</label>
+              <input id="flashCount" name="flash-count" type="number" min="1" max="5" step="1" value="1" inputmode="numeric">
+            </div>
+            <button id="flashLights" class="primary-action" type="button">Flash exterior lights</button>
+            <p id="lightsDetail" class="detail-text">Waiting for light state.</p>
+          </div>
+        </section>
+
+        <section id="locationPanel" class="page-panel" hidden>
           <div id="trackingPanel" class="panel">
             <div class="panel-heading">
               <h2>GPS trails</h2>
@@ -193,81 +198,61 @@
           </div>
         </section>
 
-        <section id="morePanel" class="primary-panel" hidden>
-          <div class="field">
-            <label for="moreSection">Section</label>
-            <select id="moreSection" data-section-group="more" aria-label="More section">
-              <option value="system">System</option>
-              <option value="tools">Tools</option>
-              <option value="settings">Settings</option>
-            </select>
+        <section id="systemPanel" class="page-panel" hidden>
+          <div id="piStatusPanel" class="panel">
+            <div class="panel-heading">
+              <h2>Pi status</h2>
+              <span id="piPowerState" class="state-text">Loading</span>
+            </div>
+            <div id="piStats" class="pi-stats"></div>
+            <p id="piDetail" class="detail-text">Waiting for Pi status.</p>
           </div>
-
-          <section id="moreSystemPanel" class="section-panel" data-section-group="more" data-section="system">
-            <div id="piStatusPanel" class="panel">
-              <div class="panel-heading">
-                <h2>Pi status</h2>
-                <span id="piPowerState" class="state-text">Loading</span>
-              </div>
-              <div id="piStats" class="pi-stats"></div>
-              <p id="piDetail" class="detail-text">Waiting for Pi status.</p>
-            </div>
-            <p id="deploymentInfo" class="detail-text"></p>
-          </section>
-
-          <section id="moreToolsPanel" class="section-panel" hidden data-section-group="more" data-section="tools">
-            <div id="recordingPanel" class="panel">
-              <div class="panel-heading">
-                <h2>WebSocket recording</h2>
-                <span id="recordingState" class="state-text">Idle</span>
-              </div>
-              <div class="recording-fields">
-                <div class="field">
-                  <label for="recordingWaitFor">Wait for</label>
-                  <select id="recordingWaitFor">
-                    <option value="immediate" selected>Start immediately</option>
-                    <option value="engine_on">Engine on</option>
-                    <option value="heating_on">Heating on</option>
-                    <option value="victron_on">Victron inverter on</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="recordingDuration">Record for minutes</label>
-                  <input id="recordingDuration" type="number" min="0" step="1" value="1" inputmode="numeric">
-                </div>
-              </div>
-              <button id="recordingButton" class="primary-action" type="button">Start recording</button>
-              <p class="detail-text">0 records until you press Stop or the service restarts.</p>
-              <p id="recordingDetail" class="detail-text">No recording is active.</p>
-            </div>
-          </section>
-
-          <section id="moreSettingsPanel" class="section-panel" hidden data-section-group="more" data-section="settings">
-            <div class="panel"><div class="panel-heading"><h2>Overview settings</h2><span id="overviewSettingsState" class="state-text">Loading</span></div>
-              <form id="overviewSettingsForm" class="settings-form">
-                <label>Cold threshold <input id="comfortCold" type="number" step="0.1"></label>
-                <label>Comfort threshold <input id="comfortComfort" type="number" step="0.1"></label>
-                <label>Warm threshold <input id="comfortWarm" type="number" step="0.1"></label>
-                <label>Hot threshold <input id="comfortHot" type="number" step="0.1"></label>
-                <label>Usable battery (Ah) <input id="batteryCapacity" type="number" min="0.1" step="0.1"></label>
-                <label>Gas tank (litres) <input id="gasCapacity" type="number" min="0" step="0.1"></label>
-                <button class="primary-action" type="submit">Save settings</button>
-              </form>
-            </div>
-          </section>
+          <p id="deploymentInfo" class="detail-text"></p>
         </section>
 
-        <nav class="primary-nav" aria-label="Primary navigation">
-          <div class="primary-nav-inner">
-            <button id="overviewNav" class="primary-nav-item" type="button" data-screen="overview" aria-controls="overviewPanel">Overview</button>
-            <button id="controlsNav" class="primary-nav-item" type="button" data-screen="controls" aria-controls="controlsPanel">Controls</button>
-            <button id="locationNav" class="primary-nav-item" type="button" data-screen="location" aria-controls="locationPanel">Location</button>
-            <button id="moreNav" class="primary-nav-item" type="button" data-screen="more" aria-controls="morePanel">More</button>
+        <section id="toolsPanel" class="page-panel" hidden>
+          <div id="recordingPanel" class="panel">
+            <div class="panel-heading">
+              <h2>WebSocket recording</h2>
+              <span id="recordingState" class="state-text">Idle</span>
+            </div>
+            <div class="recording-fields">
+              <div class="field">
+                <label for="recordingWaitFor">Wait for</label>
+                <select id="recordingWaitFor">
+                  <option value="immediate" selected>Start immediately</option>
+                  <option value="engine_on">Engine on</option>
+                  <option value="heating_on">Heating on</option>
+                  <option value="victron_on">Victron inverter on</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="recordingDuration">Record for minutes</label>
+                <input id="recordingDuration" type="number" min="0" step="1" value="1" inputmode="numeric">
+              </div>
+            </div>
+            <button id="recordingButton" class="primary-action" type="button">Start recording</button>
+            <p class="detail-text">0 records until you press Stop or the service restarts.</p>
+            <p id="recordingDetail" class="detail-text">No recording is active.</p>
           </div>
-        </nav>
+        </section>
+
+        <section id="settingsPanel" class="page-panel" hidden>
+          <div class="panel"><div class="panel-heading"><h2>Overview settings</h2><span id="overviewSettingsState" class="state-text">Loading</span></div>
+            <form id="overviewSettingsForm" class="settings-form">
+              <label>Cold threshold <input id="comfortCold" type="number" step="0.1"></label>
+              <label>Comfort threshold <input id="comfortComfort" type="number" step="0.1"></label>
+              <label>Warm threshold <input id="comfortWarm" type="number" step="0.1"></label>
+              <label>Hot threshold <input id="comfortHot" type="number" step="0.1"></label>
+              <label>Usable battery (Ah) <input id="batteryCapacity" type="number" min="0.1" step="0.1"></label>
+              <label>Gas tank (litres) <input id="gasCapacity" type="number" min="0" step="0.1"></label>
+              <button class="primary-action" type="submit">Save settings</button>
+            </form>
+          </div>
+        </section>
 
         <p id="statusMessage" class="status-message">Loading controls.</p>
-
+        </div>
       </section>
     </main>
     <script src="/static/navigation.js" defer></script>

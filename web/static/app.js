@@ -173,8 +173,7 @@ const fallbackVisibleSlots = [
 ];
 const api = new XturaApi();
 const state = {
-  route: { screen: "overview", section: null },
-  sections: { controls: "heating", more: "system" },
+  route: { page: "overview" },
   build: null,
   lights: null,
   water: null,
@@ -240,33 +239,266 @@ function setConnection(message, tone = "normal") {
   element.dataset.tone = tone;
 }
 
-const screenTitles = { overview: "Overview", controls: "Controls", location: "Location", more: "More" };
+const pageTitles = {
+  overview: "Overview",
+  heating: "Heating",
+  water: "Water",
+  lighting: "Lighting",
+  location: "Location",
+  system: "System",
+  tools: "Tools",
+  settings: "Settings",
+};
+const pageIds = XturaNavigation.pages.map((page) => `${page}Panel`);
+const focusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+let cancelNavigationClose = null;
+let cancelNavigationOpen = null;
 
-function applyRoute(route) {
-  state.route = route;
-  if (route.section) {
-    state.sections[route.screen] = route.section;
+function focusableElements(container) {
+  if (!container || typeof container.querySelectorAll !== "function") {
+    return [];
   }
-  const title = screenTitles[route.screen] || "Xtura";
-  byId("pageTitle").textContent = title;
-  document.title = title;
-  ["overview", "controls", "location", "more"].forEach((screen) => {
-    byId(`${screen}Nav`).classList.toggle("is-active", route.screen === screen);
-    byId(`${screen}Panel`).hidden = route.screen !== screen;
-  });
-  if (route.section) {
-    const selector = byId(`${route.screen}Section`);
-    if (selector) selector.value = route.section;
-  }
-  document.querySelectorAll(".section-panel").forEach((panel) => {
-    panel.hidden = !(panel.dataset.sectionGroup === route.screen && panel.dataset.section === route.section);
+  return Array.from(container.querySelectorAll(focusableSelector)).filter((element) => (
+    !element.hidden
+    && !element.disabled
+    && (!element.getAttribute || element.getAttribute("aria-hidden") !== "true")
+  ));
+}
+
+function setInertFallback(element, obscured) {
+  focusableElements(element).forEach((focusable) => {
+    if (obscured) {
+      if (!focusable.dataset) {
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(focusable.dataset, "previousTabindex")) {
+        const previous = focusable.getAttribute && focusable.getAttribute("tabindex");
+        focusable.dataset.previousTabindex = previous === null ? "" : previous;
+      }
+      if (focusable.setAttribute) {
+        focusable.setAttribute("tabindex", "-1");
+      }
+      return;
+    }
+    if (!focusable.dataset || !Object.prototype.hasOwnProperty.call(focusable.dataset, "previousTabindex")) {
+      return;
+    }
+    if (focusable.dataset.previousTabindex === "") {
+      if (focusable.removeAttribute) {
+        focusable.removeAttribute("tabindex");
+      }
+    } else if (focusable.setAttribute) {
+      focusable.setAttribute("tabindex", focusable.dataset.previousTabindex);
+    }
+    delete focusable.dataset.previousTabindex;
   });
 }
 
-function navigate(screen, section = null) {
-  const hash = XturaNavigation.toHash({ screen, section });
-  if (window.location.hash === hash) applyRoute(XturaNavigation.parse(hash));
-  else window.location.hash = hash;
+function setAppContentObscured(obscured) {
+  const content = byId("appContent");
+  if (!content) {
+    return;
+  }
+  if ("inert" in content) {
+    content.inert = obscured;
+  } else {
+    setInertFallback(content, obscured);
+  }
+  if (obscured) {
+    content.setAttribute("aria-hidden", "true");
+  } else {
+    content.removeAttribute("aria-hidden");
+  }
+}
+
+function trapNavigationFocus(event) {
+  if (event.key !== "Tab") {
+    return;
+  }
+  const drawer = byId("navigationDrawer");
+  if (!drawer || drawer.hidden || drawer.getAttribute("aria-hidden") === "true") {
+    return;
+  }
+  const focusables = focusableElements(drawer);
+  if (focusables.length === 0) {
+    return;
+  }
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey) {
+    if (active === first || !drawer.contains(active)) {
+      event.preventDefault();
+      last.focus();
+    }
+    return;
+  }
+  if (active === last || !drawer.contains(active)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function applyRoute(route) {
+  const page = XturaNavigation.pages.includes(route && route.page) ? route.page : "overview";
+  const canonicalHash = XturaNavigation.toHash({ page });
+  if (window.location.hash !== canonicalHash) {
+    window.location.hash = canonicalHash;
+  }
+  state.route = { page };
+  const title = pageTitles[page] || "Xtura";
+  byId("pageTitle").textContent = title;
+  document.title = title;
+  pageIds.forEach((id, index) => {
+    const panel = byId(id);
+    if (panel) {
+      panel.hidden = XturaNavigation.pages[index] !== page;
+    }
+  });
+  XturaNavigation.pages.forEach((name) => {
+    const link = document.querySelector(`[data-page="${name}"]`);
+    if (!link) {
+      return;
+    }
+    if (name === page) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+}
+
+function navigate(page) {
+  const hash = XturaNavigation.toHash({ page });
+  if (window.location.hash === hash) {
+    applyRoute(XturaNavigation.parse(hash));
+    return;
+  }
+  window.location.hash = hash;
+}
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function finishNavigationClose(drawer, backdrop) {
+  if (drawer) {
+    drawer.hidden = true;
+  }
+  if (backdrop) {
+    backdrop.hidden = true;
+  }
+}
+
+function openNavigation() {
+  const drawer = byId("navigationDrawer");
+  const backdrop = byId("navigationBackdrop");
+  const menuButton = byId("menuButton");
+  if (cancelNavigationClose) {
+    cancelNavigationClose();
+  }
+  if (cancelNavigationOpen) {
+    cancelNavigationOpen();
+  }
+  if (drawer) {
+    drawer.hidden = false;
+    drawer.classList.remove("is-open");
+    drawer.setAttribute("aria-hidden", "false");
+  }
+  if (backdrop) {
+    backdrop.hidden = false;
+    backdrop.classList.remove("is-open");
+  }
+  if (drawer) {
+    drawer.offsetWidth;
+  }
+  if (menuButton) {
+    menuButton.setAttribute("aria-expanded", "true");
+  }
+  setAppContentObscured(true);
+  const firstLink = drawer && drawer.querySelector("[data-page]");
+  if (firstLink) {
+    firstLink.focus();
+  }
+  const open = () => {
+    cancelNavigationOpen = null;
+    if (drawer) {
+      drawer.classList.add("is-open");
+    }
+    if (backdrop) {
+      backdrop.classList.add("is-open");
+    }
+  };
+  if (typeof window.requestAnimationFrame !== "function") {
+    const timeout = setTimeout(open, 0);
+    cancelNavigationOpen = () => {
+      clearTimeout(timeout);
+      cancelNavigationOpen = null;
+    };
+    return;
+  }
+  const frame = window.requestAnimationFrame(open);
+  cancelNavigationOpen = () => {
+    window.cancelAnimationFrame(frame);
+    cancelNavigationOpen = null;
+  };
+}
+
+function closeNavigation({ restoreFocus = true } = {}) {
+  const drawer = byId("navigationDrawer");
+  const backdrop = byId("navigationBackdrop");
+  const menuButton = byId("menuButton");
+  if (cancelNavigationClose) {
+    cancelNavigationClose();
+  }
+  if (cancelNavigationOpen) {
+    cancelNavigationOpen();
+  }
+  if (drawer) {
+    drawer.classList.remove("is-open");
+    drawer.setAttribute("aria-hidden", "true");
+  }
+  if (backdrop) {
+    backdrop.classList.remove("is-open");
+  }
+  setAppContentObscured(false);
+  if (menuButton) {
+    menuButton.setAttribute("aria-expanded", "false");
+    if (restoreFocus) {
+      menuButton.focus();
+    }
+  }
+
+  const finish = () => {
+    if (cancelNavigationClose) {
+      cancelNavigationClose();
+    }
+    finishNavigationClose(drawer, backdrop);
+  };
+  if (!drawer || prefersReducedMotion()) {
+    finish();
+    return;
+  }
+  const onTransitionEnd = (event) => {
+    if (event.target === drawer && (!event.propertyName || event.propertyName === "transform")) {
+      finish();
+    }
+  };
+  drawer.addEventListener("transitionend", onTransitionEnd);
+  const timeout = setTimeout(finish, 250);
+  cancelNavigationClose = () => {
+    drawer.removeEventListener("transitionend", onTransitionEnd);
+    clearTimeout(timeout);
+    cancelNavigationClose = null;
+  };
 }
 
 function render() {
@@ -357,18 +589,18 @@ function renderTemperature(doc) {
 
   const subSensors = sensors.length > 1
     ? `<div class="overview-sensor-row">${sensors.slice(1).map((sensor) => `
-        <div class="overview-sub-sensor">
+        <a class="overview-sub-sensor" href="#/heating" data-overview-route="#/heating">
           <span class="overview-sub-sensor-name">${escapeHtml(sensor.name)}</span>
           <div class="overview-sub-sensor-data">
             <strong class="overview-sub-sensor-value">${sensor.temp === undefined || sensor.temp === null ? "-" : `${Number(sensor.temp).toFixed(1)}C`}</strong>
             <span class="overview-trend-icon${trendKnown(sensor.trend) ? "" : " is-unknown"}" role="img" aria-label="${escapeHtml(trendLabel(sensor.trend))}">${trendSymbol(sensor.trend)}</span>
           </div>
-        </div>`).join("")}
+        </a>`).join("")}
       </div>`
     : "";
 
   body.innerHTML = `
-    <div class="overview-card overview-temperature-card" data-tone="${tone}">
+    <button class="overview-card overview-temperature-card" type="button" data-tone="${tone}" data-overview-route="#/heating">
       <div class="overview-primary-row">
         <div class="overview-primary-left">
           <div class="overview-primary-line">
@@ -380,7 +612,7 @@ function renderTemperature(doc) {
         <canvas class="overview-temperature-chart" aria-hidden="true"></canvas>
       </div>
       ${subSensors}
-    </div>`;
+    </button>`;
   drawTemperatureChart(body.querySelector(".overview-temperature-chart"), primary.history);
 }
 
@@ -1406,18 +1638,38 @@ function connectEvents() {
   });
 }
 
+function handleOverviewRoute(event) {
+  const target = event.target && typeof event.target.closest === "function"
+    ? event.target.closest("[data-overview-route]")
+    : event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.overviewRoute
+      ? event.currentTarget
+      : null;
+  if (!target) return;
+  event.preventDefault();
+  const route = XturaNavigation.parse(target.dataset.overviewRoute);
+  navigate(route.page);
+}
+
 function bindActions() {
   document.querySelectorAll("[data-overview-route]").forEach((card) => {
-    card.addEventListener("click", () => {
-      const route = XturaNavigation.parse(card.dataset.overviewRoute);
-      navigate(route.screen, route.section);
+    card.addEventListener("click", handleOverviewRoute);
+  });
+  byId("temperatureBody").addEventListener("click", handleOverviewRoute);
+  document.querySelectorAll("[data-page]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      navigate(link.dataset.page);
+      closeNavigation();
     });
   });
-  document.querySelectorAll("[data-screen]").forEach((button) => {
-    button.addEventListener("click", () => navigate(button.dataset.screen, state.sections[button.dataset.screen] || null));
-  });
-  document.querySelectorAll("select[data-section-group]").forEach((select) => {
-    select.addEventListener("change", () => navigate(select.dataset.sectionGroup, select.value));
+  byId("menuButton").addEventListener("click", openNavigation);
+  byId("closeMenuButton").addEventListener("click", () => closeNavigation());
+  byId("navigationBackdrop").addEventListener("click", () => closeNavigation());
+  document.addEventListener("keydown", (event) => {
+    trapNavigationFocus(event);
+    if (event.key === "Escape" && !byId("navigationDrawer").hidden) {
+      closeNavigation();
+    }
   });
   byId("flashLights").addEventListener("click", async () => {
     try {
