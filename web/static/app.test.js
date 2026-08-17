@@ -248,13 +248,15 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
     renderOverviewSettings: context.module.exports.renderOverviewSettings,
     renderOverview: context.module.exports.renderOverview,
     renderTemperature: context.module.exports.renderTemperature,
+    temperatureChartDomain: context.module.exports.temperatureChartDomain,
+    temperatureChartHourBoundaries: context.module.exports.temperatureChartHourBoundaries,
     trendLabel: context.module.exports.trendLabel,
     getTrendState: context.module.exports.getTrendState,
     renderTrendControl: context.module.exports.renderTrendControl,
@@ -585,4 +587,18 @@ test("trend state maps the four states", () => {
   assert.equal(JSON.stringify(getTrendState("steady")), JSON.stringify({ up: false, flat: true, down: false }));
   assert.equal(JSON.stringify(getTrendState("unavailable")), JSON.stringify({ up: false, flat: false, down: false }));
   assert.equal(JSON.stringify(getTrendState(undefined)), JSON.stringify({ up: false, flat: false, down: false }));
+});
+
+test("temperature chart domain contains rounded axis bounds", () => {
+  const { temperatureChartDomain } = loadApp({ groupedElements: [] });
+  assert.equal(JSON.stringify(temperatureChartDomain([21, 22])), JSON.stringify({ minTemp: 21, maxTemp: 22, yBottom: 20, yTop: 25, ySpan: 5 }));
+});
+
+test("temperature chart hour boundaries cross midnight", () => {
+  const { temperatureChartHourBoundaries } = loadApp({ groupedElements: [] });
+  const start = new Date("2026-08-17T23:30:00").getTime();
+  const end = new Date("2026-08-18T01:30:00").getTime();
+  const boundaries = temperatureChartHourBoundaries([start, end]);
+  assert.equal(JSON.stringify(boundaries.map(({ label }) => label)), JSON.stringify(["00:00", "01:00"]));
+  assert.ok(boundaries.every(({ ms }) => ms > start && ms < end));
 });

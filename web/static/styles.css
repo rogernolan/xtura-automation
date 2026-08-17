@@ -271,15 +271,16 @@ h1 {
 .overview-temperature-card[data-tone="unavailable"] { background: radial-gradient(circle at center, rgba(104, 112, 124, .18) 0%, rgba(104, 112, 124, 0) 140%), var(--surface); }
 .overview-card-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 850; }
 .overview-temperature-card { min-height: 0; }
-.overview-temperature-value { display: block; font-size: clamp(2.4rem, 11vw, 4.2rem); line-height: .95; letter-spacing: -.06em; font-variant-numeric: tabular-nums; text-align: right; width: 3.5ch; }
+.overview-temperature-value { display: block; font-size: clamp(2.4rem, 11vw, 4.2rem); line-height: .95; letter-spacing: -.06em; font-variant-numeric: tabular-nums; text-align: right; }
+.overview-temperature-value:not(.is-unavailable) { width: 3.5ch; }
 .overview-value { display: block; font-size: clamp(1.7rem, 7vw, 2.5rem); line-height: 1; margin: 8px 0 0; }
 .overview-trend { margin: 0; color: var(--muted); font-size: 12px; font-weight: 700; }
 .overview-primary-row { display: flex; align-items: center; gap: 16px; }
 .overview-primary-left { display: grid; gap: 4px; min-width: 0; flex: 0 1 auto; }
 .overview-primary-line { display: flex; align-items: center; gap: 10px; }
 .overview-humidity { margin: 0; color: var(--muted); font-size: 13px; font-weight: 700; }
-.overview-temperature-group { position: relative; display: inline-block; }
-.overview-temperature-group .overview-trend-control { position: absolute; left: calc(100% + 10px); top: 8px; bottom: 5px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-size: 16px; }
+.overview-temperature-value-group { position: relative; display: inline-block; }
+.overview-temperature-value-group .overview-trend-control { position: absolute; left: calc(100% + 10px); top: 8px; bottom: 5px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-size: 16px; }
 .overview-sensor-group { position: relative; display: inline-block; }
 .overview-sensor-group .overview-trend-control { position: absolute; left: calc(100% + 8px); top: 4px; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between; font-size: 10px; }
 .overview-sensor-group .overview-trend-glyph + .overview-trend-glyph { margin-top: -3px; }

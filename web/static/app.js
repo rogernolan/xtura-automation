@@ -608,8 +608,8 @@ function renderTemperature(doc) {
       <div class="overview-primary-row">
         <div class="overview-primary-left">
           <div class="overview-primary-line">
-            <span class="overview-temperature-group">
-              <strong class="overview-temperature-value">${formatTemperature(primary.temp)}</strong>
+            <span class="overview-temperature-value-group">
+              <strong class="overview-temperature-value${primary.temp === undefined || primary.temp === null ? " is-unavailable" : ""}">${formatTemperature(primary.temp)}</strong>
               ${renderTrendControl(primary.trend)}
             </span>
           </div>
@@ -620,6 +620,28 @@ function renderTemperature(doc) {
       ${subSensors}
     </button>`;
   drawTemperatureChart(body.querySelector(".overview-temperature-chart"), primary.history);
+}
+
+function temperatureChartDomain(temps) {
+  const minTemp = Math.min.apply(null, temps);
+  const maxTemp = Math.max.apply(null, temps);
+  const yBottom = Math.floor(minTemp / 5) * 5;
+  const yTop = Math.ceil(maxTemp / 5) * 5;
+  return { minTemp, maxTemp, yBottom, yTop, ySpan: (yTop - yBottom) || 1 };
+}
+
+function temperatureChartHourBoundaries(times) {
+  const boundaries = [];
+  const start = new Date(times[0]);
+  for (let offset = 1; offset < 3; offset += 1) {
+    const boundaryTime = new Date(start);
+    boundaryTime.setHours(start.getHours() + offset, 0, 0, 0);
+    const boundaryMs = boundaryTime.getTime();
+    if (boundaryMs > times[0] && boundaryMs < times[times.length - 1]) {
+      boundaries.push({ ms: boundaryMs, label: `${String(boundaryTime.getHours()).padStart(2, "0")}:00` });
+    }
+  }
+  return boundaries;
 }
 
 function drawTemperatureChart(canvas, history) {
@@ -637,9 +659,7 @@ function drawTemperatureChart(canvas, history) {
   ctx.clearRect(0, 0, cssWidth, cssHeight);
   const times = points.map((point) => new Date(point.t).getTime());
   const temps = points.map((point) => point.temp);
-  const minTemp = Math.min.apply(null, temps);
-  const maxTemp = Math.max.apply(null, temps);
-  const tempSpan = (maxTemp - minTemp) || 1;
+  const { yBottom, yTop, ySpan } = temperatureChartDomain(temps);
   const timeSpan = (times[times.length - 1] - times[0]) || 1;
   const pad = { left: 36, top: 4, right: 4, bottom: 16 };
   const chartWidth = cssWidth - pad.left - pad.right;
@@ -648,15 +668,13 @@ function drawTemperatureChart(canvas, history) {
   const axisColor = "rgba(0, 0, 0, 0.22)";
   const axisFont = "10px -apple-system, BlinkMacSystemFont, sans-serif";
 
-  const yTop = Math.ceil(maxTemp / 5) * 5;
-  const yBottom = Math.floor(minTemp / 5) * 5;
   const yMid = (yTop + yBottom) / 2;
   const yValues = [yTop, yMid, yBottom];
   ctx.font = axisFont;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
   yValues.forEach((yVal) => {
-    const y = pad.top + (1 - (yVal - minTemp) / tempSpan) * chartHeight;
+    const y = pad.top + (1 - (yVal - yBottom) / ySpan) * chartHeight;
     ctx.strokeStyle = axisColor;
     ctx.lineWidth = 0.5;
     ctx.beginPath();
@@ -667,20 +685,7 @@ function drawTemperatureChart(canvas, history) {
     ctx.fillText(`${Math.round(yVal)}`, pad.left - 4, y);
   });
 
-  const startHour = new Date(times[0]).getHours();
-  const endHour = new Date(times[times.length - 1]).getHours();
-  const hourBoundaries = [];
-  for (let h = startHour + 1; h < startHour + 3; h++) {
-    const hMod = h % 24;
-    if (hMod <= endHour || (endHour < startHour && hMod >= startHour)) {
-      const boundaryTime = new Date(times[0]);
-      boundaryTime.setHours(hMod, 0, 0, 0);
-      const bMs = boundaryTime.getTime();
-      if (bMs > times[0] && bMs < times[times.length - 1]) {
-        hourBoundaries.push({ ms: bMs, label: `${String(hMod).padStart(2, "0")}:00` });
-      }
-    }
-  }
+  const hourBoundaries = temperatureChartHourBoundaries(times);
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   hourBoundaries.forEach(({ ms, label }) => {
@@ -698,7 +703,7 @@ function drawTemperatureChart(canvas, history) {
   ctx.beginPath();
   points.forEach((point, index) => {
     const x = pad.left + ((new Date(point.t).getTime() - times[0]) / timeSpan) * chartWidth;
-    const y = pad.top + (1 - (point.temp - minTemp) / tempSpan) * chartHeight;
+    const y = pad.top + (1 - (point.temp - yBottom) / ySpan) * chartHeight;
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
