@@ -11,6 +11,14 @@ function assertPanelOwnsIds(html, panelId, ids) {
   }
 }
 
+function assertPanelOwnsDataTargets(html, panelId, targets) {
+  const match = html.match(new RegExp(`<section id="${panelId}"[^>]*>[\\s\\S]*?<\\/section>`));
+  assert.ok(match, `missing panel ${panelId}`);
+  for (const target of targets) {
+    assert.match(match[0], new RegExp(`data-target="${target}"`), `${panelId} should contain data-target="${target}"`);
+  }
+}
+
 test("exposes the canonical page list", () => {
   assert.deepEqual(navigation.pages, ["overview", "heating", "water", "lighting", "location", "system", "tools", "settings"]);
 });
@@ -74,6 +82,7 @@ test("overview markup uses page panels and drawer navigation", () => {
     "scheduleSlots",
     "saveSchedule",
   ]);
+  assertPanelOwnsDataTargets(html, "heatingPanel", ["5", "18", "21"]);
   assertPanelOwnsIds(html, "waterPanel", [
     "waterState",
     "openGreyValve",
