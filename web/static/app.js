@@ -259,6 +259,7 @@ const focusableSelector = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(", ");
 let cancelNavigationClose = null;
+let cancelNavigationOpen = null;
 
 function focusableElements(container) {
   if (!container || typeof container.querySelectorAll !== "function") {
@@ -322,7 +323,7 @@ function trapNavigationFocus(event) {
     return;
   }
   const drawer = byId("navigationDrawer");
-  if (!drawer || drawer.hidden) {
+  if (!drawer || drawer.hidden || drawer.getAttribute("aria-hidden") === "true") {
     return;
   }
   const focusables = focusableElements(drawer);
@@ -404,14 +405,17 @@ function openNavigation() {
   if (cancelNavigationClose) {
     cancelNavigationClose();
   }
+  if (cancelNavigationOpen) {
+    cancelNavigationOpen();
+  }
   if (drawer) {
     drawer.hidden = false;
-    drawer.classList.add("is-open");
+    drawer.classList.remove("is-open");
     drawer.setAttribute("aria-hidden", "false");
   }
   if (backdrop) {
     backdrop.hidden = false;
-    backdrop.classList.add("is-open");
+    backdrop.classList.remove("is-open");
   }
   if (menuButton) {
     menuButton.setAttribute("aria-expanded", "true");
@@ -421,12 +425,37 @@ function openNavigation() {
   if (firstLink) {
     firstLink.focus();
   }
+  const open = () => {
+    cancelNavigationOpen = null;
+    if (drawer) {
+      drawer.classList.add("is-open");
+    }
+    if (backdrop) {
+      backdrop.classList.add("is-open");
+    }
+  };
+  if (typeof window.requestAnimationFrame !== "function") {
+    const timeout = setTimeout(open, 0);
+    cancelNavigationOpen = () => {
+      clearTimeout(timeout);
+      cancelNavigationOpen = null;
+    };
+    return;
+  }
+  const frame = window.requestAnimationFrame(open);
+  cancelNavigationOpen = () => {
+    window.cancelAnimationFrame(frame);
+    cancelNavigationOpen = null;
+  };
 }
 
 function closeNavigation({ restoreFocus = true } = {}) {
   const drawer = byId("navigationDrawer");
   const backdrop = byId("navigationBackdrop");
   const menuButton = byId("menuButton");
+  if (cancelNavigationOpen) {
+    cancelNavigationOpen();
+  }
   if (drawer) {
     drawer.classList.remove("is-open");
     drawer.setAttribute("aria-hidden", "true");

@@ -201,6 +201,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     element.ownerDocument = document;
   }
 
+  const animationFrames = [];
   const windowListeners = new Map();
   const window = {
     location: { hash },
@@ -218,6 +219,13 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
       return 1;
     },
     clearInterval() {},
+    requestAnimationFrame(callback) {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    },
+    cancelAnimationFrame(frame) {
+      animationFrames[frame - 1] = null;
+    },
   };
   const context = {
     console,
@@ -249,6 +257,12 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     document,
     window,
     elements,
+    runAnimationFrames() {
+      while (animationFrames.length > 0) {
+        const callback = animationFrames.shift();
+        if (callback) callback();
+      }
+    },
   };
 }
 
@@ -308,10 +322,11 @@ test("applyRoute rewrites legacy hashes to the canonical overview route", () => 
 });
 
 test("navigation controls open and close the drawer with focus management", () => {
-  const { bindActions, document, elements } = loadApp();
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
   bindActions();
 
   elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
   assert.equal(elements.navigationDrawer.hidden, false);
   assert.equal(elements.navigationBackdrop.hidden, false);
   assert.equal(elements.navigationDrawer.classList.contains("is-open"), true);
@@ -350,6 +365,23 @@ test("navigation controls open and close the drawer with focus management", () =
   assert.equal(document.activeElement, elements.menuButton);
 });
 
+test("navigation drawer applies its open state after a rendered closed frame", () => {
+  const { bindActions, elements, runAnimationFrames } = loadApp();
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), false);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), false);
+
+  runAnimationFrames();
+
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), true);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), true);
+});
+
 test("reduced motion closes the drawer immediately", () => {
   const { bindActions, elements } = loadApp({ reducedMotion: true });
   bindActions();
@@ -364,10 +396,11 @@ test("reduced motion closes the drawer immediately", () => {
 });
 
 test("navigation drawer keeps Tab and Shift+Tab focus inside drawer controls", () => {
-  const { bindActions, document, elements } = loadApp();
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
   bindActions();
 
   elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
   elements.settingsLink.focus();
   const tabEvent = { type: "keydown", key: "Tab" };
   document.dispatchEvent(tabEvent);
@@ -381,6 +414,23 @@ test("navigation drawer keeps Tab and Shift+Tab focus inside drawer controls", (
 
   assert.equal(shiftTabEvent.defaultPrevented, true);
   assert.equal(document.activeElement, elements.settingsLink);
+});
+
+test("closing navigation drawer does not trap Tab in aria-hidden content", () => {
+  const { bindActions, document, elements, runAnimationFrames } = loadApp();
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  runAnimationFrames();
+  elements.closeMenuButton.dispatchEvent({ type: "click" });
+
+  const tabEvent = { type: "keydown", key: "Tab" };
+  document.dispatchEvent(tabEvent);
+
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationDrawer.getAttribute("aria-hidden"), "true");
+  assert.equal(tabEvent.defaultPrevented, undefined);
+  assert.equal(document.activeElement, elements.menuButton);
 });
 
 test("page links navigate and close the drawer", () => {
