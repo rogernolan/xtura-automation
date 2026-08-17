@@ -39,23 +39,28 @@
 
           <section class="overview-group overview-power-group" aria-labelledby="powerGroupTitle">
             <h2 id="powerGroupTitle" class="overview-group-title">Power</h2>
-            <div class="overview-card-grid overview-power-grid">
-              <button id="batterySocCard" class="overview-card" type="button" data-overview-route="#/system">
+            <div class="overview-power-layout">
+              <button id="batterySocCard" class="overview-card overview-charging-card" type="button" data-overview-route="#/more/settings">
                 <div class="overview-card-heading"><span>Battery</span><span id="batteryState" class="state-text">Loading</span></div>
-                <strong id="batterySoc" class="overview-value">--</strong>
-                <p class="detail-text">State of charge</p>
+                <div class="overview-charging-row">
+                  <strong id="batterySoc" class="overview-value">--</strong>
+                  <strong id="batteryCurrent" class="overview-charging-current">--</strong>
+                </div>
+                <div class="supply-bar" aria-hidden="true"><span id="batteryBar"></span></div>
+                <p id="timeToFull" class="detail-text">Time to full: N/A</p>
               </button>
-              <button id="batteryCurrentCard" class="overview-card" type="button" data-overview-route="#/system">
-                <div class="overview-card-heading"><span>Charge current</span><span id="batteryCurrentState" class="state-text">Loading</span></div>
-                <strong id="batteryCurrent" class="overview-value">--</strong>
-                <p id="batteryDetail" class="detail-text">Waiting for battery.</p>
+              <button id="gasCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/more/settings">
+                <div class="overview-card-heading"><span>Gas</span><span class="state-text">N/A</span></div>
+                <strong class="overview-value">--</strong>
+                <div class="supply-bar is-unavailable" aria-hidden="true"><span></span></div>
+                <p class="detail-text">Mopeka not configured</p>
               </button>
             </div>
           </section>
 
           <section class="overview-group overview-supplies-group" aria-labelledby="suppliesGroupTitle">
             <h2 id="suppliesGroupTitle" class="overview-group-title">Supplies</h2>
-            <div class="overview-card-grid overview-supplies-grid">
+            <div class="overview-supplies-grid">
               <button id="freshWaterCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/water">
                 <div class="overview-card-heading"><span>Fresh water</span><span id="freshWaterState" class="state-text"></span></div>
                 <strong id="freshWater" class="overview-value">--</strong>
@@ -67,12 +72,6 @@
                 <strong id="greyWater" class="overview-value">--</strong>
                 <div class="supply-bar" aria-hidden="true"><span id="greyWaterBar"></span></div>
                 <p class="detail-text">Garmin percentage</p>
-              </button>
-              <button id="gasCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/settings">
-                <div class="overview-card-heading"><span>Gas</span><span class="state-text">Unavailable</span></div>
-                <strong class="overview-value">--</strong>
-                <div class="supply-bar is-unavailable" aria-hidden="true"><span></span></div>
-                <p class="detail-text">Mopeka not configured</p>
               </button>
             </div>
           </section>

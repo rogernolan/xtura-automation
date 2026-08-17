@@ -65,9 +65,9 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(html, /class="overview-group overview-supplies-group"/);
   assert.match(html, /id="temperatureBody"/);
   assert.match(html, /data-overview-route="#\/water"/);
-  assert.match(html, /data-overview-route="#\/system"/);
-  assert.match(html, /data-overview-route="#\/settings"/);
-  assert.match(html, /id="batteryCurrentState"/);
+  assert.match(html, /data-overview-route="#\/more\/settings"/);
+  assert.match(html, /data-overview-route="#\/more\/settings"/);
+  assert.match(html, /id="batteryCurrent"/);
   assertPanelOwnsIds(html, "heatingPanel", [
     "modeOn",
     "modeSchedule",
@@ -140,6 +140,9 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*radial-gradient\(/);
   assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*var\(--surface\)/);
   assert.match(styles, /\.overview-group-title \{[^}]*color: var\(--text\)/);
+  assert.match(styles, /\.overview-temperature-card \{[^}]*width: 100%;[^}]*min-width: 0;/);
+  assert.match(styles, /\.overview-sensor-row \{[^}]*display: flex;[^}]*flex-wrap: nowrap;/);
+  assert.match(styles, /\.overview-sub-sensor \{[^}]*min-width: 0;[^}]*flex: 1 1 0;/);
   assert.match(styles, /background-image: linear-gradient\(rgba\(231, 226, 216, 0\.6/);
   assert.match(styles, /\.navigation-drawer \{[^}]*transform: translateX\(-16px\)/);
   assert.match(styles, /\.navigation-drawer a\[aria-current="page"\]:hover \{[^}]*background: var\(--accent-pressed\)[^}]*color: #ffffff/);
