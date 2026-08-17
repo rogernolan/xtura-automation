@@ -42,6 +42,17 @@ func Decode(elements []AD) (Payload, bool) {
 	}
 }
 
+// DecodeOutdoorMFR decodes an outdoor sensor from manufacturer data alone.
+// It should only be called for MACs previously confirmed as outdoor (0x77)
+// via service-data advertisements. Battery is unknown.
+func DecodeOutdoorMFR(elements []AD) (Payload, bool) {
+	mfr, ok := manufacturerData(elements, switchBotCompanyID)
+	if !ok || len(mfr) < 11 {
+		return Payload{}, false
+	}
+	return decodeOutdoorMFR(mfr), true
+}
+
 // decodeMeter decodes WoSensorTH (Meter). Layout of the 0xFD3D service data
 // payload, confirmed against OpenWonderLabs meter.md:
 //
@@ -107,4 +118,20 @@ func decodeOutdoor(elements []AD, serviceData []byte) (Payload, bool) {
 	payload.HasTemp = true
 	payload.Humidity = &humidity
 	return payload, true
+}
+
+// decodeOutdoorMFR decodes an outdoor sensor from manufacturer data alone,
+// when the service-data advertisement hasn't arrived yet. The mfr slice must
+// already have the 2-byte company id stripped. Battery is unknown.
+func decodeOutdoorMFR(mfr []byte) Payload {
+	payload := Payload{DevType: devTypeOutdoor}
+	temp := float64(mfr[8]&0x0f)*0.1 + float64(mfr[9]&0x7f)
+	if mfr[9]&0x80 == 0 {
+		temp = -temp
+	}
+	humidity := float64(mfr[10] & 0x7f)
+	payload.Temp = temp
+	payload.HasTemp = true
+	payload.Humidity = &humidity
+	return payload
 }

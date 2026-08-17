@@ -68,6 +68,11 @@ func (a *Adapter) scanLoop(ctx context.Context, device string) error {
 		}
 	}()
 
+	// Disable any pre-existing LE scan (e.g. left active by bluetoothd)
+	// before setting parameters; the HCI spec requires scanning to be
+	// off when LE Set Scan Parameters is issued.
+	_ = hciCommand(fd, opcode(ogfLETCommands, ocfLESetScanEnable), []byte{0x00, 0x00})
+
 	scanParams := []byte{
 		scanPassive,
 		byte(scanInterval & 0xff), byte(scanInterval >> 8),

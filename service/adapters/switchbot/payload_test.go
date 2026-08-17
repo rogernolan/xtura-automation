@@ -136,6 +136,42 @@ func TestDecodeOutdoorBatteryOnly(t *testing.T) {
 	}
 }
 
+func TestDecodeOutdoorFromManufacturerDataOnly(t *testing.T) {
+	// Outdoor sensor advertising only manufacturer data (no 0xFD3D service
+	// data). This happens when the device alternates advertisements.
+	// Temp 30.4C, humidity 44%: mfr payload (company id stripped) =
+	// e65583c66424300f 04 9e 2c
+	elements := []AD{
+		manufacturerElement(0x69, 0x09, 0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x30, 0x0f, 0x04, 0x9e, 0x2c),
+	}
+	payload, ok := DecodeOutdoorMFR(elements)
+	if !ok {
+		t.Fatal("expected decode ok for MFR-only outdoor sensor")
+	}
+	if payload.DevType != 0x77 {
+		t.Fatalf("dev type: got %#x", payload.DevType)
+	}
+	if payload.Temp != 30.4 {
+		t.Fatalf("temp: got %v", payload.Temp)
+	}
+	if payload.Humidity == nil || *payload.Humidity != 44 {
+		t.Fatalf("humidity: got %v", payload.Humidity)
+	}
+	if payload.Battery != nil {
+		t.Fatalf("battery should be nil for MFR-only, got %v", payload.Battery)
+	}
+}
+
+func TestDecodeOutdoorMFRRejectsShortPayload(t *testing.T) {
+	elements := []AD{
+		manufacturerElement(0x69, 0x09, 0xe6, 0x55),
+	}
+	_, ok := DecodeOutdoorMFR(elements)
+	if ok {
+		t.Fatal("expected short MFR payload to be rejected")
+	}
+}
+
 func TestDecodeIgnoresUnknownDevice(t *testing.T) {
 	_, ok := Decode([]AD{serviceDataElement(0x01, 0x00, 0x00)})
 	if ok {

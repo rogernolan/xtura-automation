@@ -52,10 +52,11 @@ type Adapter struct {
 	logger *log.Logger
 	now    func() time.Time
 
-	mu       sync.RWMutex
-	settings sensors.Settings
-	seen     map[string]SeenDevice
-	lastErr  string
+	mu            sync.RWMutex
+	settings      sensors.Settings
+	seen          map[string]SeenDevice
+	knownOutdoor  map[string]bool
+	lastErr       string
 }
 
 // New creates an adapter. It does not start scanning until Run is called.
@@ -67,11 +68,12 @@ func New(cfg Config) *Adapter {
 		cfg.Logger = log.Default()
 	}
 	return &Adapter{
-		cfg:      cfg,
-		logger:   cfg.Logger,
-		now:      cfg.Now,
-		settings: cfg.Settings,
-		seen:     make(map[string]SeenDevice),
+		cfg:          cfg,
+		logger:       cfg.Logger,
+		now:          cfg.Now,
+		settings:     cfg.Settings,
+		seen:         make(map[string]SeenDevice),
+		knownOutdoor: make(map[string]bool),
 	}
 }
 
@@ -162,10 +164,26 @@ func (a *Adapter) handleReport(report AdvertisingReport) {
 		return
 	}
 	payload, ok := Decode(elements)
-	if !ok {
+	if ok {
+		a.mu.Lock()
+		if payload.DevType == devTypeOutdoor {
+			a.knownOutdoor[report.MAC] = true
+		}
+		a.mu.Unlock()
+		a.applyReading(report.MAC, report.RSSI, payload)
 		return
 	}
-	a.applyReading(report.MAC, report.RSSI, payload)
+	// When the outdoor sensor alternates to a manufacturer-data-only
+	// advertisement (no 0xFD3D service data), decode it only if we have
+	// previously confirmed this MAC as an outdoor sensor via service data.
+	a.mu.RLock()
+	confirmed := a.knownOutdoor[report.MAC]
+	a.mu.RUnlock()
+	if confirmed {
+		if payload, ok = DecodeOutdoorMFR(elements); ok {
+			a.applyReading(report.MAC, report.RSSI, payload)
+		}
+	}
 }
 
 // applyReading records a seen device and fires the reading callback for a
