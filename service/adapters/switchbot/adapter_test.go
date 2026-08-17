@@ -131,3 +131,66 @@ func TestSettingsUpdateTakesEffectImmediately(t *testing.T) {
 		t.Fatalf("expected reading after Configure, got %#v", readings)
 	}
 }
+
+func TestHandleEventOutdoorMFROnlyAfterServiceData(t *testing.T) {
+	now := time.Date(2026, 8, 17, 15, 0, 0, 0, time.UTC)
+	var readings []Reading
+	adapter := New(Config{
+		Settings: sensorsSettingsWith("Main", "e6:55:83:c6:64:24", true),
+		Now:      func() time.Time { return now },
+		OnReading: func(reading Reading) {
+			readings = append(readings, reading)
+		},
+	})
+
+	// Step 1: service-data advertisement identifies the MAC as outdoor (0x77).
+	sdAd := adBytes(
+		serviceDataElement(0x77, 0x00, 0x41),
+		manufacturerElement(0x69, 0x09, 0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x9d, 0x0f, 0x05, 0x06, 0x23, 0x00),
+	)
+	sdEvent := advReportEvent([]byte{0x24, 0x64, 0xc6, 0x83, 0x55, 0xe6}, sdAd, 0xd0)
+	adapter.handleEvent(sdEvent)
+	if len(readings) != 1 {
+		t.Fatalf("expected 1 reading from service-data ad, got %d", len(readings))
+	}
+
+	// Step 2: manufacturer-data-only advertisement for the same MAC.
+	// Temp 30.4C, humidity 44%.
+	mfrAd := adBytes(
+		manufacturerElement(0x69, 0x09, 0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x30, 0x0f, 0x04, 0x9e, 0x2c),
+	)
+	mfrEvent := advReportEvent([]byte{0x24, 0x64, 0xc6, 0x83, 0x55, 0xe6}, mfrAd, 0xc8)
+	adapter.handleEvent(mfrEvent)
+	if len(readings) != 2 {
+		t.Fatalf("expected 2 readings after MFR-only ad, got %d", len(readings))
+	}
+	if readings[1].Temp != 30.4 {
+		t.Fatalf("MFR-only reading temp: got %v", readings[1].Temp)
+	}
+	if readings[1].Humidity == nil || *readings[1].Humidity != 44 {
+		t.Fatalf("MFR-only reading humidity: got %v", readings[1].Humidity)
+	}
+}
+
+func TestHandleEventOutdoorMFROnlyWithoutServiceData(t *testing.T) {
+	var readings []Reading
+	adapter := New(Config{
+		Settings: sensorsSettingsWith("Main", "e6:55:83:c6:64:24", true),
+		OnReading: func(reading Reading) {
+			readings = append(readings, reading)
+		},
+	})
+
+	// MFR-only ad without a prior service-data ad for this MAC must be ignored.
+	mfrAd := adBytes(
+		manufacturerElement(0x69, 0x09, 0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x30, 0x0f, 0x04, 0x9e, 0x2c),
+	)
+	event := advReportEvent([]byte{0x24, 0x64, 0xc6, 0x83, 0x55, 0xe6}, mfrAd, 0xc8)
+	adapter.handleEvent(event)
+	if len(readings) != 0 {
+		t.Fatalf("expected no readings from unconfirmed MFR-only ad, got %d", len(readings))
+	}
+	if len(adapter.SeenDevices()) != 0 {
+		t.Fatalf("expected no seen devices from unconfirmed MFR-only ad")
+	}
+}
