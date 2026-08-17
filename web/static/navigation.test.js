@@ -3,23 +3,26 @@ const test = require("node:test");
 const fs = require("node:fs");
 const navigation = require("./navigation.js");
 
-test("parses defaults and nested routes", () => {
-  assert.deepEqual(navigation.parse("#/overview"), { screen: "overview", section: null });
-  assert.deepEqual(navigation.parse("#/controls"), { screen: "controls", section: "heating" });
-  assert.deepEqual(navigation.parse("#/controls/water"), { screen: "controls", section: "water" });
-  assert.deepEqual(navigation.parse("#/more/tools"), { screen: "more", section: "tools" });
-  assert.deepEqual(navigation.parse("#/more/settings"), { screen: "more", section: "settings" });
+test("exposes the canonical page list", () => {
+  assert.deepEqual(navigation.pages, ["overview", "heating", "water", "lighting", "location", "system", "tools", "settings"]);
 });
 
-test("falls back for unavailable routes", () => {
-  assert.deepEqual(navigation.parse("#/controls/energy"), { screen: "overview", section: null });
-  assert.deepEqual(navigation.parse("#/unknown"), { screen: "overview", section: null });
+test("parses every canonical page", () => {
+  for (const page of navigation.pages) {
+    assert.deepEqual(navigation.parse(`#/${page}`), { page });
+  }
 });
 
-test("writes canonical hashes", () => {
-  assert.equal(navigation.toHash({ screen: "location", section: null }), "#/location");
-  assert.equal(navigation.toHash({ screen: "controls", section: "lighting" }), "#/controls/lighting");
-  assert.equal(navigation.toHash({ screen: "more", section: "settings" }), "#/more/settings");
+test("falls back for legacy, nested, and unknown routes", () => {
+  for (const hash of ["", "#", "#/controls/heating", "#/more/tools", "#/unknown", "#/heating/extra"]) {
+    assert.deepEqual(navigation.parse(hash), { page: "overview" });
+  }
+});
+
+test("writes canonical page hashes", () => {
+  assert.equal(navigation.toHash({ page: "heating" }), "#/heating");
+  assert.equal(navigation.toHash({ page: "overview" }), "#/overview");
+  assert.equal(navigation.toHash({ page: "not-a-page" }), "#/overview");
 });
 
 test("overview markup follows the approved grouped layout and deep links", () => {
