@@ -181,16 +181,16 @@ func TestHandleEventOutdoorMFROnlyWithoutServiceData(t *testing.T) {
 		},
 	})
 
-	// MFR-only ad without a prior service-data ad for this MAC must be ignored.
+	// MFR-only ad without a prior service-data ad still contains a full reading.
 	mfrAd := adBytes(
 		manufacturerElement(0x69, 0x09, 0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x30, 0x0f, 0x04, 0x9e, 0x2c),
 	)
 	event := advReportEvent([]byte{0x24, 0x64, 0xc6, 0x83, 0x55, 0xe6}, mfrAd, 0xc8)
 	adapter.handleEvent(event)
-	if len(readings) != 0 {
-		t.Fatalf("expected no readings from unconfirmed MFR-only ad, got %d", len(readings))
+	if len(readings) != 1 {
+		t.Fatalf("expected one reading from MFR-only ad, got %d", len(readings))
 	}
-	if len(adapter.SeenDevices()) != 0 {
-		t.Fatalf("expected no seen devices from unconfirmed MFR-only ad")
+	if len(adapter.SeenDevices()) != 1 {
+		t.Fatalf("expected one seen device from MFR-only ad")
 	}
 }

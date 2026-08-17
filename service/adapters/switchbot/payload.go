@@ -30,7 +30,11 @@ func devTypeOf(serviceData []byte) byte {
 func Decode(elements []AD) (Payload, bool) {
 	serviceData, ok := serviceData16(elements, switchBotServiceUUID)
 	if !ok {
-		return Payload{}, false
+		mfr, hasManufacturerData := manufacturerData(elements, switchBotCompanyID)
+		if !hasManufacturerData {
+			return Payload{}, false
+		}
+		return decodeManufacturerOnly(mfr)
 	}
 	switch devTypeOf(serviceData) {
 	case devTypeMeter, devTypeMeterAdd:
@@ -40,6 +44,16 @@ func Decode(elements []AD) (Payload, bool) {
 	default:
 		return Payload{}, false
 	}
+}
+
+func decodeManufacturerOnly(mfr []byte) (Payload, bool) {
+	if len(mfr) < 11 {
+		return Payload{}, false
+	}
+	payload := Payload{DevType: devTypeOutdoor}
+	battery := int(mfr[6] & 0x7f)
+	payload.Battery = &battery
+	return decodeManufacturerTemperature(payload, mfr)
 }
 
 // DecodeOutdoorMFR decodes an outdoor sensor from manufacturer data alone.
@@ -108,6 +122,13 @@ func decodeOutdoor(elements []AD, serviceData []byte) (Payload, bool) {
 	// offsets [10],[11],[12] (on the full payload) become [8],[9],[10].
 	if !ok || len(mfr) < 11 {
 		return payload, true
+	}
+	return decodeManufacturerTemperature(payload, mfr)
+}
+
+func decodeManufacturerTemperature(payload Payload, mfr []byte) (Payload, bool) {
+	if len(mfr) < 11 {
+		return payload, false
 	}
 	temp := float64(mfr[8]&0x0f)*0.1 + float64(mfr[9]&0x7f)
 	if mfr[9]&0x80 == 0 {
