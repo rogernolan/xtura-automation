@@ -29,10 +29,18 @@ test("overview markup uses page panels and drawer navigation", () => {
   const html = fs.readFileSync(require("node:path").join(__dirname, "index.html"), "utf8");
   for (const page of navigation.pages) {
     assert.match(html, new RegExp(`id="${page}Panel"`));
-    assert.match(html, new RegExp(`data-page="${page}"`));
   }
   assert.match(html, /id="menuButton"[^>]*aria-expanded="false"/);
+  assert.match(html, /id="navigationBackdrop"/);
   assert.match(html, /id="navigationDrawer"/);
+  assert.match(html, /data-page="overview" href="#\/overview"/);
+  assert.match(html, /data-page="heating" href="#\/heating"/);
+  assert.match(html, /data-page="water" href="#\/water"/);
+  assert.match(html, /data-page="lighting" href="#\/lighting"/);
+  assert.match(html, /data-page="location" href="#\/location"/);
+  assert.match(html, /data-page="system" href="#\/system"/);
+  assert.match(html, /data-page="tools" href="#\/tools"/);
+  assert.match(html, /data-page="settings" href="#\/settings"/);
   assert.doesNotMatch(html, /data-section-group=/);
   assert.doesNotMatch(html, /class="primary-nav/);
   assert.match(html, /class="overview-group overview-temperature-group"/);

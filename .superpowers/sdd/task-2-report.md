@@ -75,3 +75,41 @@ node --test web/static/navigation.test.js web/static/app.test.js
 ## Concerns
 
 - `web/static/app.test.js` still contains assertions for the removed controls/more dropdown model, so the static suite is not fully green until Task 3 updates route binding and test expectations.
+
+## Review fix evidence
+
+Addressed the Task 2 review findings in `web/static/navigation.test.js` by tightening the markup assertions to:
+
+- pair each drawer link `data-page` with its exact canonical `href`
+- assert `navigationBackdrop` exists
+- assert the exact Overview card ID to `data-overview-route` mappings:
+  - `aldeCard` -> `#/heating`
+  - `freshWaterCard` -> `#/water`
+  - `greyWaterCard` -> `#/water`
+  - `batterySocCard` -> `#/system`
+  - `batteryCurrentCard` -> `#/system`
+  - `gasCard` -> `#/settings`
+
+Command:
+
+```bash
+node --test web/static/navigation.test.js
+```
+
+Output:
+
+```text
+✔ exposes the canonical page list (0.73325ms)
+✔ parses every canonical page (0.182833ms)
+✔ falls back for legacy, nested, and unknown routes (0.099167ms)
+✔ writes canonical page hashes (0.0915ms)
+✔ overview markup uses page panels and drawer navigation (1.18325ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60.585875
+```
