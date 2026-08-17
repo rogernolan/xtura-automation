@@ -61,3 +61,23 @@ Accessibility behavior was retained: ARIA expanded/hidden state, inert and `aria
 
 - `docs/superpowers/plans/2026-08-17-navigation-drawer-polish.md` was already untracked and remains excluded from this fix commit.
 - `scripts/sim/run-sim.sh` was not changed.
+
+## Task 1 remaining drawer review fix (2026-08-17)
+
+### Changed files
+
+- `web/static/app.js`
+  - Forces a drawer layout read after the drawer and backdrop are unhidden and reset to their closed classes, before the deferred `is-open` state is applied.
+- `web/static/app.test.js`
+  - Records the drawer `offsetWidth` read and verifies it observes the closed state before the animation frame applies `is-open`.
+
+### Tests
+
+- `npm test`: 24 passed, 0 failed.
+- `npm run lint`: passed.
+- `git diff --check`: passed.
+
+### Concerns
+
+- `docs/superpowers/plans/2026-08-17-navigation-drawer-polish.md` remains pre-existing and untracked, excluded from this fix commit.
+- `scripts/sim/run-sim.sh` was not changed, and the simulator was not run or restarted.

@@ -417,6 +417,9 @@ function openNavigation() {
     backdrop.hidden = false;
     backdrop.classList.remove("is-open");
   }
+  if (drawer) {
+    drawer.offsetWidth;
+  }
   if (menuButton) {
     menuButton.setAttribute("aria-expanded", "true");
   }

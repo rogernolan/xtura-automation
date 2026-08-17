@@ -140,6 +140,13 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
+  const drawerLayoutReads = [];
+  Object.defineProperty(elements.navigationDrawer, "offsetWidth", {
+    get() {
+      drawerLayoutReads.push(elements.navigationDrawer.classList.contains("is-open"));
+      return 320;
+    },
+  });
   elements.menuButton.setAttribute("aria-expanded", "false");
   elements.navigationBackdrop.hidden = true;
   elements.navigationDrawer.hidden = true;
@@ -257,6 +264,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     document,
     window,
     elements,
+    drawerLayoutReads,
     runAnimationFrames() {
       while (animationFrames.length > 0) {
         const callback = animationFrames.shift();
@@ -366,7 +374,7 @@ test("navigation controls open and close the drawer with focus management", () =
 });
 
 test("navigation drawer applies its open state after a rendered closed frame", () => {
-  const { bindActions, elements, runAnimationFrames } = loadApp();
+  const { bindActions, drawerLayoutReads, elements, runAnimationFrames } = loadApp();
   bindActions();
 
   elements.menuButton.dispatchEvent({ type: "click" });
@@ -375,6 +383,7 @@ test("navigation drawer applies its open state after a rendered closed frame", (
   assert.equal(elements.navigationBackdrop.hidden, false);
   assert.equal(elements.navigationDrawer.classList.contains("is-open"), false);
   assert.equal(elements.navigationBackdrop.classList.contains("is-open"), false);
+  assert.deepEqual(drawerLayoutReads, [false]);
 
   runAnimationFrames();
 
