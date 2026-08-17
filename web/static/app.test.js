@@ -248,7 +248,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, trendSymbol, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
@@ -256,7 +256,8 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     renderOverview: context.module.exports.renderOverview,
     renderTemperature: context.module.exports.renderTemperature,
     trendLabel: context.module.exports.trendLabel,
-    trendSymbol: context.module.exports.trendSymbol,
+    getTrendState: context.module.exports.getTrendState,
+    renderTrendControl: context.module.exports.renderTrendControl,
     overviewTemperatureTone: context.module.exports.overviewTemperatureTone,
     overviewCurrentState: context.module.exports.overviewCurrentState,
     overviewSupplyState: context.module.exports.overviewSupplyState,
@@ -514,11 +515,10 @@ test("renders the primary temperature card and trend", () => {
   };
   renderTemperature(state.overview);
   const html = elements.temperatureBody.innerHTML;
-  assert.match(html, /21\.4C/);
-  assert.match(html, /data-overview-route="#\/heating"/);
+  assert.match(html, /21\.4/);
   assert.match(html, /Humidity 55%/);
   assert.match(html, /data-tone="warm"/);
-  assert.match(html, /↑/);
+  assert.match(html, /overview-trend-up is-active/);
   assert.match(html, /overview-primary-row/);
   assert.match(html, /overview-temperature-chart/);
 });
@@ -541,11 +541,11 @@ test("renders other sensors inside the big card and '-' when missing", () => {
   assert.match(html, /overview-sensor-row/);
   assert.match(html, /overview-sub-sensor/);
   assert.match(html, /Outside/);
-  assert.match(html, /12\.3C/);
-  assert.match(html, /↓/);
+  assert.match(html, /12\.3/);
+  assert.match(html, /overview-trend-down is-active/);
   assert.match(html, /Alde/);
   assert.match(html, />-</);
-  assert.match(html, /\?/);
+  assert.match(html, /overview-trend-control/);
 });
 
 test("does not render the inner sensor row for a single sensor", () => {
@@ -559,7 +559,7 @@ test("does not render the inner sensor row for a single sensor", () => {
   };
   renderTemperature(state.overview);
   const html = elements.temperatureBody.innerHTML;
-  assert.match(html, /21\.0C/);
+  assert.match(html, /21\.0/);
   assert.doesNotMatch(html, /overview-sensor-row/);
 });
 
@@ -578,11 +578,11 @@ test("trend label maps every trend value", () => {
   assert.equal(trendLabel(undefined), "Trend unavailable");
 });
 
-test("trend symbol maps the four states", () => {
-  const { trendSymbol } = loadApp({ groupedElements: [] });
-  assert.equal(trendSymbol("rising"), "↑");
-  assert.equal(trendSymbol("falling"), "↓");
-  assert.equal(trendSymbol("steady"), "–");
-  assert.equal(trendSymbol("unavailable"), "?");
-  assert.equal(trendSymbol(undefined), "?");
+test("trend state maps the four states", () => {
+  const { getTrendState } = loadApp({ groupedElements: [] });
+  assert.equal(JSON.stringify(getTrendState("rising")), JSON.stringify({ up: true, flat: false, down: false }));
+  assert.equal(JSON.stringify(getTrendState("falling")), JSON.stringify({ up: false, flat: false, down: true }));
+  assert.equal(JSON.stringify(getTrendState("steady")), JSON.stringify({ up: false, flat: true, down: false }));
+  assert.equal(JSON.stringify(getTrendState("unavailable")), JSON.stringify({ up: false, flat: false, down: false }));
+  assert.equal(JSON.stringify(getTrendState(undefined)), JSON.stringify({ up: false, flat: false, down: false }));
 });
