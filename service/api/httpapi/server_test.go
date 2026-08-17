@@ -938,7 +938,7 @@ func TestHandlerServesWebIndex(t *testing.T) {
 	if body := rr.Body.String(); strings.Contains(body, `id="buildInfo"`) {
 		t.Fatalf("index body must not contain build footer: %s", body)
 	}
-	for _, want := range []string{`href="/static/styles.css?v=dev"`, `src="/static/app.js?v=dev"`} {
+	for _, want := range []string{`href="/static/styles.css?v=dev"`, `src="/static/navigation.js?v=dev"`, `src="/static/app.js?v=dev"`} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Fatalf("index body did not contain versioned asset %q: %s", want, rr.Body.String())
 		}

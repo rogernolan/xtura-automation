@@ -21,6 +21,9 @@ class ElementStub {
     this.attributes = new Map(Object.entries(options.attributes || {}));
     this.classList = { toggle() {} };
     this.style = {};
+    this.children = options.children || [];
+    this.focusables = options.focusables || [];
+    this.inert = false;
   }
 
   querySelector() {
@@ -66,11 +69,32 @@ class ElementStub {
     this.attributes.delete(name);
   }
 
+  hasAttribute(name) {
+    return this.attributes.has(name);
+  }
+
   querySelector(selector) {
     if (selector === "[data-page]") {
       return this.firstPageLink || null;
     }
     return null;
+  }
+
+  querySelectorAll(selector) {
+    if (selector === "[data-page]") {
+      return this.pageLinks || [];
+    }
+    if (this.focusables.length > 0) {
+      return this.focusables;
+    }
+    return [];
+  }
+
+  contains(node) {
+    if (node === this) {
+      return true;
+    }
+    return this.children.some((child) => child === node || child.contains(node));
   }
 }
 
@@ -88,6 +112,7 @@ function dispatchWithListeners(target, listeners, event) {
 function loadApp({ hash = "#/overview" } = {}) {
   const ids = [
     "statusMessage", "connectionStatus", "pageTitle",
+    "appContent",
     "menuButton", "closeMenuButton", "navigationBackdrop", "navigationDrawer",
     "overviewPanel", "heatingPanel", "waterPanel", "lightingPanel", "locationPanel", "systemPanel", "toolsPanel", "settingsPanel",
     "flashLights", "flashCount",
@@ -112,7 +137,12 @@ function loadApp({ hash = "#/overview" } = {}) {
     elements[id] = link;
     return link;
   });
+  elements.navigationDrawer.pageLinks = pageLinks;
+  elements.navigationDrawer.focusables = [elements.closeMenuButton, ...pageLinks];
+  elements.navigationDrawer.children = [elements.closeMenuButton, ...pageLinks];
   elements.navigationDrawer.firstPageLink = pageLinks[0];
+  elements.appContent.focusables = [elements.menuButton];
+  elements.appContent.children = [elements.menuButton];
 
   elements.aldeCard = new ElementStub("aldeCard", {
     dataset: { overviewRoute: "#/heating" },
@@ -268,21 +298,53 @@ test("navigation controls open and close the drawer with focus management", () =
   assert.equal(elements.navigationDrawer.hidden, false);
   assert.equal(elements.navigationBackdrop.hidden, false);
   assert.equal(elements.menuButton.getAttribute("aria-expanded"), "true");
+  assert.equal(elements.appContent.inert, true);
+  assert.equal(elements.appContent.getAttribute("aria-hidden"), "true");
   assert.equal(document.activeElement, elements.overviewLink);
 
   document.dispatchEvent({ type: "keydown", key: "Escape" });
   assert.equal(elements.navigationDrawer.hidden, true);
   assert.equal(elements.navigationBackdrop.hidden, true);
   assert.equal(elements.menuButton.getAttribute("aria-expanded"), "false");
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(elements.appContent.getAttribute("aria-hidden"), null);
   assert.equal(document.activeElement, elements.menuButton);
 
   elements.menuButton.dispatchEvent({ type: "click" });
   elements.navigationBackdrop.dispatchEvent({ type: "click" });
   assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(document.activeElement, elements.menuButton);
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  elements.closeMenuButton.dispatchEvent({ type: "click" });
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(document.activeElement, elements.menuButton);
+});
+
+test("navigation drawer keeps Tab and Shift+Tab focus inside drawer controls", () => {
+  const { bindActions, document, elements } = loadApp();
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  elements.settingsLink.focus();
+  const tabEvent = { type: "keydown", key: "Tab" };
+  document.dispatchEvent(tabEvent);
+
+  assert.equal(tabEvent.defaultPrevented, true);
+  assert.equal(document.activeElement, elements.closeMenuButton);
+
+  elements.closeMenuButton.focus();
+  const shiftTabEvent = { type: "keydown", key: "Tab", shiftKey: true };
+  document.dispatchEvent(shiftTabEvent);
+
+  assert.equal(shiftTabEvent.defaultPrevented, true);
+  assert.equal(document.activeElement, elements.settingsLink);
 });
 
 test("page links navigate and close the drawer", () => {
-  const { bindActions, window, elements } = loadApp({ hash: "#/overview" });
+  const { bindActions, document, window, elements } = loadApp({ hash: "#/overview" });
   bindActions();
 
   elements.menuButton.dispatchEvent({ type: "click" });
@@ -293,6 +355,8 @@ test("page links navigate and close the drawer", () => {
   assert.equal(window.location.hash, "#/heating");
   assert.equal(elements.navigationDrawer.hidden, true);
   assert.equal(elements.navigationBackdrop.hidden, true);
+  assert.equal(elements.appContent.inert, false);
+  assert.equal(document.activeElement, elements.menuButton);
 });
 
 test("overview temperature cards deep link to heating", () => {

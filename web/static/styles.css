@@ -72,6 +72,11 @@ button:disabled {
   align-content: start;
 }
 
+#appContent {
+  display: grid;
+  gap: 14px;
+}
+
 .app-header {
   display: flex;
   align-items: flex-start;

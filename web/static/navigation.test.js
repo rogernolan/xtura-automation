@@ -3,6 +3,14 @@ const test = require("node:test");
 const fs = require("node:fs");
 const navigation = require("./navigation.js");
 
+function assertPanelOwnsIds(html, panelId, ids) {
+  const match = html.match(new RegExp(`<section id="${panelId}"[^>]*>[\\s\\S]*?<\\/section>`));
+  assert.ok(match, `missing panel ${panelId}`);
+  for (const id of ids) {
+    assert.match(match[0], new RegExp(`id="${id}"`), `${panelId} should contain ${id}`);
+  }
+}
+
 test("exposes the canonical page list", () => {
   assert.deepEqual(navigation.pages, ["overview", "heating", "water", "lighting", "location", "system", "tools", "settings"]);
 });
@@ -30,6 +38,7 @@ test("overview markup uses page panels and drawer navigation", () => {
   for (const page of navigation.pages) {
     assert.match(html, new RegExp(`id="${page}Panel"`));
   }
+  assert.match(html, /id="appContent"/);
   assert.match(html, /id="menuButton"[^>]*aria-expanded="false"/);
   assert.match(html, /id="navigationBackdrop"/);
   assert.match(html, /id="navigationDrawer"/);
@@ -53,6 +62,70 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(html, /data-overview-route="#\/settings"/);
   assert.match(html, /id="overviewTrend"[^>]*>Trend unavailable</);
   assert.match(html, /id="batteryCurrentState"/);
+  assertPanelOwnsIds(html, "heatingPanel", [
+    "modeOn",
+    "modeSchedule",
+    "modeOff",
+    "targetDown",
+    "targetUp",
+    "boostButton",
+    "cancelBoostButton",
+    "scheduleForm",
+    "scheduleSlots",
+    "saveSchedule",
+  ]);
+  assertPanelOwnsIds(html, "waterPanel", [
+    "waterState",
+    "openGreyValve",
+    "closeGreyValve",
+    "greyScheduleTime",
+    "greyScheduleDuration",
+    "greyScheduleButton",
+    "greyScheduleMessage",
+    "waterDetail",
+  ]);
+  assertPanelOwnsIds(html, "lightingPanel", [
+    "lightsState",
+    "flashCount",
+    "flashLights",
+    "lightsDetail",
+  ]);
+  assertPanelOwnsIds(html, "locationPanel", [
+    "trackingPanel",
+    "trackingState",
+    "trackingEngineOnly",
+    "trackingManualControls",
+    "trackingStartButton",
+    "trackingStopButton",
+    "trackingInterval",
+    "trackingDetail",
+    "trackList",
+  ]);
+  assertPanelOwnsIds(html, "systemPanel", [
+    "piStatusPanel",
+    "piPowerState",
+    "piStats",
+    "piDetail",
+    "deploymentInfo",
+  ]);
+  assertPanelOwnsIds(html, "toolsPanel", [
+    "recordingPanel",
+    "recordingState",
+    "recordingWaitFor",
+    "recordingDuration",
+    "recordingButton",
+    "recordingDetail",
+  ]);
+  assertPanelOwnsIds(html, "settingsPanel", [
+    "overviewSettingsForm",
+    "overviewSettingsState",
+    "comfortCold",
+    "comfortComfort",
+    "comfortWarm",
+    "comfortHot",
+    "batteryCapacity",
+    "gasCapacity",
+  ]);
   const styles = fs.readFileSync(require("node:path").join(__dirname, "styles.css"), "utf8");
   for (const tone of ["cold", "comfortable", "warm", "hot"]) {
     assert.match(styles, new RegExp(`overview-temperature-card\\[data-tone=\\\"${tone}\\\"\\]`));

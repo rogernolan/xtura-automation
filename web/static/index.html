@@ -10,12 +10,6 @@
   <body>
     <main id="app" class="app-shell" aria-live="polite">
       <section class="control-surface">
-        <header class="app-header">
-          <button id="menuButton" class="menu-button" type="button" aria-label="Open navigation" aria-controls="navigationDrawer" aria-expanded="false">☰</button>
-          <h1 id="pageTitle">Overview</h1>
-          <span id="connectionStatus" class="connection-pill">Connecting</span>
-        </header>
-
         <div id="navigationBackdrop" class="navigation-backdrop" hidden></div>
         <aside id="navigationDrawer" class="navigation-drawer" aria-label="Site navigation" aria-hidden="true" hidden>
           <div class="navigation-drawer-heading"><h2>Pages</h2><button id="closeMenuButton" type="button" aria-label="Close navigation">×</button></div>
@@ -30,6 +24,12 @@
             <a data-page="settings" href="#/settings">Settings</a>
           </nav>
         </aside>
+        <div id="appContent">
+        <header class="app-header">
+          <button id="menuButton" class="menu-button" type="button" aria-label="Open navigation" aria-controls="navigationDrawer" aria-expanded="false">☰</button>
+          <h1 id="pageTitle">Overview</h1>
+          <span id="connectionStatus" class="connection-pill">Connecting</span>
+        </header>
 
         <section id="overviewPanel" class="page-panel overview-layout">
           <section class="overview-group overview-temperature-group" aria-labelledby="temperatureGroupTitle">
@@ -252,7 +252,7 @@
         </section>
 
         <p id="statusMessage" class="status-message">Loading controls.</p>
-
+        </div>
       </section>
     </main>
     <script src="/static/navigation.js" defer></script>

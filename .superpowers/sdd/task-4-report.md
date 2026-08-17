@@ -10,13 +10,13 @@ Updated `web/static/styles.css` to style the mobile page shell and navigation dr
 
 ## Verification
 
-- `rtk npm test`  
+- `rtk npm test`
   Result: passed, 14/14 tests green.
-- `rtk npm run lint`  
+- `rtk npm run lint`
   Result: passed, no lint errors.
-- Browser inspection on `http://127.0.0.1/` at `390x844`  
+- Browser inspection on `http://127.0.0.1/` at `390x844`
   Result: navigation drawer opened, backdrop appeared, active link styled, and focus moved into the drawer.
-- Browser inspection on `http://127.0.0.1/` at `1280x900`  
+- Browser inspection on `http://127.0.0.1/` at `1280x900`
   Result: drawer rendered at the expected fixed width and remained usable at desktop size.
 
 ## Self-Review

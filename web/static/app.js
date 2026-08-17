@@ -250,6 +250,99 @@ const pageTitles = {
   settings: "Settings",
 };
 const pageIds = XturaNavigation.pages.map((page) => `${page}Panel`);
+const focusableSelector = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
+function focusableElements(container) {
+  if (!container || typeof container.querySelectorAll !== "function") {
+    return [];
+  }
+  return Array.from(container.querySelectorAll(focusableSelector)).filter((element) => (
+    !element.hidden
+    && !element.disabled
+    && (!element.getAttribute || element.getAttribute("aria-hidden") !== "true")
+  ));
+}
+
+function setInertFallback(element, obscured) {
+  focusableElements(element).forEach((focusable) => {
+    if (obscured) {
+      if (!focusable.dataset) {
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(focusable.dataset, "previousTabindex")) {
+        const previous = focusable.getAttribute && focusable.getAttribute("tabindex");
+        focusable.dataset.previousTabindex = previous === null ? "" : previous;
+      }
+      if (focusable.setAttribute) {
+        focusable.setAttribute("tabindex", "-1");
+      }
+      return;
+    }
+    if (!focusable.dataset || !Object.prototype.hasOwnProperty.call(focusable.dataset, "previousTabindex")) {
+      return;
+    }
+    if (focusable.dataset.previousTabindex === "") {
+      if (focusable.removeAttribute) {
+        focusable.removeAttribute("tabindex");
+      }
+    } else if (focusable.setAttribute) {
+      focusable.setAttribute("tabindex", focusable.dataset.previousTabindex);
+    }
+    delete focusable.dataset.previousTabindex;
+  });
+}
+
+function setAppContentObscured(obscured) {
+  const content = byId("appContent");
+  if (!content) {
+    return;
+  }
+  if ("inert" in content) {
+    content.inert = obscured;
+  } else {
+    setInertFallback(content, obscured);
+  }
+  if (obscured) {
+    content.setAttribute("aria-hidden", "true");
+  } else {
+    content.removeAttribute("aria-hidden");
+  }
+}
+
+function trapNavigationFocus(event) {
+  if (event.key !== "Tab") {
+    return;
+  }
+  const drawer = byId("navigationDrawer");
+  if (!drawer || drawer.hidden) {
+    return;
+  }
+  const focusables = focusableElements(drawer);
+  if (focusables.length === 0) {
+    return;
+  }
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey) {
+    if (active === first || !drawer.contains(active)) {
+      event.preventDefault();
+      last.focus();
+    }
+    return;
+  }
+  if (active === last || !drawer.contains(active)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 
 function applyRoute(route) {
   const page = XturaNavigation.pages.includes(route && route.page) ? route.page : "overview";
@@ -303,6 +396,7 @@ function openNavigation() {
   if (menuButton) {
     menuButton.setAttribute("aria-expanded", "true");
   }
+  setAppContentObscured(true);
   const firstLink = drawer && drawer.querySelector("[data-page]");
   if (firstLink) {
     firstLink.focus();
@@ -320,6 +414,7 @@ function closeNavigation({ restoreFocus = true } = {}) {
   if (backdrop) {
     backdrop.hidden = true;
   }
+  setAppContentObscured(false);
   if (menuButton) {
     menuButton.setAttribute("aria-expanded", "false");
     if (restoreFocus) {
@@ -1483,6 +1578,7 @@ function bindActions() {
   byId("closeMenuButton").addEventListener("click", () => closeNavigation());
   byId("navigationBackdrop").addEventListener("click", () => closeNavigation());
   document.addEventListener("keydown", (event) => {
+    trapNavigationFocus(event);
     if (event.key === "Escape" && !byId("navigationDrawer").hidden) {
       closeNavigation();
     }
