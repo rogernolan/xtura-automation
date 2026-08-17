@@ -258,6 +258,7 @@ const focusableSelector = [
   "textarea:not([disabled])",
   "[tabindex]:not([tabindex='-1'])",
 ].join(", ");
+let cancelNavigationClose = null;
 
 function focusableElements(container) {
   if (!container || typeof container.querySelectorAll !== "function") {
@@ -382,16 +383,35 @@ function navigate(page) {
   window.location.hash = hash;
 }
 
+function prefersReducedMotion() {
+  return typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function finishNavigationClose(drawer, backdrop) {
+  if (drawer) {
+    drawer.hidden = true;
+  }
+  if (backdrop) {
+    backdrop.hidden = true;
+  }
+}
+
 function openNavigation() {
   const drawer = byId("navigationDrawer");
   const backdrop = byId("navigationBackdrop");
   const menuButton = byId("menuButton");
+  if (cancelNavigationClose) {
+    cancelNavigationClose();
+  }
   if (drawer) {
     drawer.hidden = false;
+    drawer.classList.add("is-open");
     drawer.setAttribute("aria-hidden", "false");
   }
   if (backdrop) {
     backdrop.hidden = false;
+    backdrop.classList.add("is-open");
   }
   if (menuButton) {
     menuButton.setAttribute("aria-expanded", "true");
@@ -408,11 +428,11 @@ function closeNavigation({ restoreFocus = true } = {}) {
   const backdrop = byId("navigationBackdrop");
   const menuButton = byId("menuButton");
   if (drawer) {
-    drawer.hidden = true;
+    drawer.classList.remove("is-open");
     drawer.setAttribute("aria-hidden", "true");
   }
   if (backdrop) {
-    backdrop.hidden = true;
+    backdrop.classList.remove("is-open");
   }
   setAppContentObscured(false);
   if (menuButton) {
@@ -421,6 +441,29 @@ function closeNavigation({ restoreFocus = true } = {}) {
       menuButton.focus();
     }
   }
+
+  const finish = () => {
+    if (cancelNavigationClose) {
+      cancelNavigationClose();
+    }
+    finishNavigationClose(drawer, backdrop);
+  };
+  if (!drawer || prefersReducedMotion()) {
+    finish();
+    return;
+  }
+  const onTransitionEnd = (event) => {
+    if (event.target === drawer && (!event.propertyName || event.propertyName === "transform")) {
+      finish();
+    }
+  };
+  drawer.addEventListener("transitionend", onTransitionEnd);
+  const timeout = setTimeout(finish, 250);
+  cancelNavigationClose = () => {
+    drawer.removeEventListener("transitionend", onTransitionEnd);
+    clearTimeout(timeout);
+    cancelNavigationClose = null;
+  };
 }
 
 function render() {

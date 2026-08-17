@@ -131,7 +131,13 @@ h1 {
   position: fixed;
   inset: 0;
   z-index: 19;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(37, 42, 50, 0.28);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.navigation-backdrop.is-open {
+  opacity: 1;
 }
 
 .navigation-drawer {
@@ -140,11 +146,23 @@ h1 {
   z-index: 20;
   width: min(84vw, 320px);
   padding: 1rem;
-  background: rgba(31, 35, 34, 0.98);
-  transform: translateX(0);
-  box-shadow: 0 18px 45px rgba(28, 32, 38, 0.28);
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 16px 16px 0;
+  background: var(--surface);
+  color: var(--text);
+  opacity: 0;
+  transform: translateX(-100%);
+  transition: opacity 180ms ease, transform 220ms ease;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.navigation-drawer.is-open {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .navigation-drawer[hidden],
@@ -161,16 +179,16 @@ h1 {
 }
 
 .navigation-drawer-heading h2 {
-  color: #ffffff;
+  color: var(--text);
 }
 
 .navigation-drawer-heading button {
   min-width: 44px;
   min-height: 44px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: rgba(255, 255, 255, 0.54);
+  color: var(--text);
   font-size: 24px;
   line-height: 1;
 }
@@ -185,25 +203,32 @@ h1 {
   min-height: 44px;
   padding: 0.75rem;
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.44);
   text-decoration: none;
   font-weight: 800;
 }
 
 .navigation-drawer a[aria-current="page"] {
-  background: rgba(31, 95, 212, 0.46);
+  background: var(--accent);
   color: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
 .navigation-drawer a:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(31, 95, 212, 0.12);
 }
 
 .navigation-drawer a:focus-visible {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: rgba(31, 95, 212, 0.16);
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navigation-drawer,
+  .navigation-backdrop {
+    transition-duration: 0ms;
+  }
 }
 
 .page-panel {

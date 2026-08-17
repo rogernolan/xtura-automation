@@ -19,7 +19,18 @@ class ElementStub {
     this.parentNode = null;
     this.ownerDocument = null;
     this.attributes = new Map(Object.entries(options.attributes || {}));
-    this.classList = { toggle() {} };
+    const classes = new Set();
+    this.classList = {
+      add: (...names) => names.forEach((name) => classes.add(name)),
+      remove: (...names) => names.forEach((name) => classes.delete(name)),
+      contains: (name) => classes.has(name),
+      toggle: (name, force) => {
+        const next = force === undefined ? !classes.has(name) : force;
+        if (next) classes.add(name);
+        else classes.delete(name);
+        return next;
+      },
+    };
     this.style = {};
     this.children = options.children || [];
     this.focusables = options.focusables || [];
@@ -35,6 +46,11 @@ class ElementStub {
       this.listeners.set(type, []);
     }
     this.listeners.get(type).push(listener);
+  }
+
+  removeEventListener(type, listener) {
+    const listeners = this.listeners.get(type) || [];
+    this.listeners.set(type, listeners.filter((registered) => registered !== listener));
   }
 
   dispatchEvent(event) {
@@ -109,7 +125,7 @@ function dispatchWithListeners(target, listeners, event) {
   }
 }
 
-function loadApp({ hash = "#/overview" } = {}) {
+function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
   const ids = [
     "statusMessage", "connectionStatus", "pageTitle",
     "appContent",
@@ -188,6 +204,7 @@ function loadApp({ hash = "#/overview" } = {}) {
   const windowListeners = new Map();
   const window = {
     location: { hash },
+    matchMedia: () => ({ matches: reducedMotion }),
     addEventListener(type, listener) {
       if (!windowListeners.has(type)) {
         windowListeners.set(type, []);
@@ -297,30 +314,53 @@ test("navigation controls open and close the drawer with focus management", () =
   elements.menuButton.dispatchEvent({ type: "click" });
   assert.equal(elements.navigationDrawer.hidden, false);
   assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), true);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), true);
   assert.equal(elements.menuButton.getAttribute("aria-expanded"), "true");
   assert.equal(elements.appContent.inert, true);
   assert.equal(elements.appContent.getAttribute("aria-hidden"), "true");
   assert.equal(document.activeElement, elements.overviewLink);
 
   document.dispatchEvent({ type: "keydown", key: "Escape" });
-  assert.equal(elements.navigationDrawer.hidden, true);
-  assert.equal(elements.navigationBackdrop.hidden, true);
+  assert.equal(elements.navigationDrawer.hidden, false);
+  assert.equal(elements.navigationBackdrop.hidden, false);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), false);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), false);
   assert.equal(elements.menuButton.getAttribute("aria-expanded"), "false");
   assert.equal(elements.appContent.inert, false);
   assert.equal(elements.appContent.getAttribute("aria-hidden"), null);
   assert.equal(document.activeElement, elements.menuButton);
 
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.navigationBackdrop.hidden, true);
+
   elements.menuButton.dispatchEvent({ type: "click" });
   elements.navigationBackdrop.dispatchEvent({ type: "click" });
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
   assert.equal(elements.navigationDrawer.hidden, true);
   assert.equal(elements.appContent.inert, false);
   assert.equal(document.activeElement, elements.menuButton);
 
   elements.menuButton.dispatchEvent({ type: "click" });
   elements.closeMenuButton.dispatchEvent({ type: "click" });
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
   assert.equal(elements.navigationDrawer.hidden, true);
   assert.equal(elements.appContent.inert, false);
   assert.equal(document.activeElement, elements.menuButton);
+});
+
+test("reduced motion closes the drawer immediately", () => {
+  const { bindActions, elements } = loadApp({ reducedMotion: true });
+  bindActions();
+
+  elements.menuButton.dispatchEvent({ type: "click" });
+  elements.closeMenuButton.dispatchEvent({ type: "click" });
+
+  assert.equal(elements.navigationDrawer.hidden, true);
+  assert.equal(elements.navigationBackdrop.hidden, true);
+  assert.equal(elements.navigationDrawer.classList.contains("is-open"), false);
+  assert.equal(elements.navigationBackdrop.classList.contains("is-open"), false);
 });
 
 test("navigation drawer keeps Tab and Shift+Tab focus inside drawer controls", () => {
@@ -350,6 +390,7 @@ test("page links navigate and close the drawer", () => {
   elements.menuButton.dispatchEvent({ type: "click" });
   const event = { type: "click" };
   elements.heatingLink.dispatchEvent(event);
+  elements.navigationDrawer.dispatchEvent({ type: "transitionend", propertyName: "transform" });
 
   assert.equal(event.defaultPrevented, true);
   assert.equal(window.location.hash, "#/heating");
