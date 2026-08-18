@@ -58,7 +58,7 @@ func (a *App) overviewGas() overview.Gas {
 		return overview.Gas{Status: "stale"}
 	}
 
-	tankCapacity := cfg.Mopeka.TankCapacityLitres
+	tankCapacity := cfg.Overview.GasTankCapacityLitres
 	fillHeightMm := cfg.Mopeka.TankFillHeightMm
 
 	if fillHeightMm == 0 {
