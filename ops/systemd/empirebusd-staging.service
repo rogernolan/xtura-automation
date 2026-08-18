@@ -9,6 +9,7 @@ User=xtura
 Group=xtura
 WorkingDirectory=/opt/xtura-staging/current
 ExecStart=/opt/xtura-staging/current/empirebusd -config /var/lib/xtura-staging/config.yaml
+Environment=XTURA_SIM_SWITCHBOT=1
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

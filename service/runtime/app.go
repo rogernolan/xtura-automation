@@ -292,6 +292,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	}
 	go app.startSwitchbotScan()
 	go app.startSwitchbotSim(ctx)
+	go app.startMopekaSim(ctx)
 	go app.sensorCompactLoop(ctx)
 	go app.publishStateLoop(ctx)
 	if cfg.Location.Enabled {
