@@ -73,7 +73,6 @@ func expireOverviewDocument(doc *overview.Document) {
 	doc.FreshWaterPercent = nil
 	doc.GreyWaterPercent = nil
 	doc.Battery = overview.Battery{Status: "stale"}
-	doc.Gas = overview.Gas{Status: "stale"}
 }
 
 func (a *App) overviewConfig() config.OverviewConfig {

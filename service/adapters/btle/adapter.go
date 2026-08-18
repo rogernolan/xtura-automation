@@ -93,6 +93,15 @@ func (a *Adapter) Settings() sensors.Settings {
 	return a.settings
 }
 
+// ScanningEnabled reports whether the HCI scan should run — either because
+// SwitchBot sensors are configured or because Mopeka MACs are registered.
+func (a *Adapter) ScanningEnabled() bool {
+	if a.Settings().Enabled {
+		return true
+	}
+	return len(a.cfg.MopekaMacs) > 0
+}
+
 // SeenDevices returns the devices observed so far, most recently seen first.
 func (a *Adapter) SeenDevices() []SeenDevice {
 	a.mu.RLock()
@@ -121,7 +130,7 @@ func (a *Adapter) setLastError(err error) {
 // Run scans until ctx is cancelled, reconnecting after transient failures. It
 // returns immediately when scanning is disabled.
 func (a *Adapter) Run(ctx context.Context) {
-	if !a.Settings().Enabled {
+	if !a.ScanningEnabled() {
 		a.logger.Printf("btle scan disabled; skipping")
 		return
 	}

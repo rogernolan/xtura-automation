@@ -307,7 +307,7 @@ func (a *App) SensorSettings() sensors.Settings {
 func (a *App) startSwitchbotScan() {
 	a.switchbotMu.Lock()
 	defer a.switchbotMu.Unlock()
-	if a.switchbot == nil || a.switchbotCancel != nil || !a.switchbot.Settings().Enabled {
+	if a.switchbot == nil || a.switchbotCancel != nil || !a.switchbot.ScanningEnabled() {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -329,7 +329,7 @@ func (a *App) stopSwitchbotScan() {
 // scanning is enabled it restarts the scan so a changed hci_device (or the
 // initial enable) is picked up; when disabled it stops the scan.
 func (a *App) restartSwitchbotIfNeeded() {
-	enabled := a.switchbot != nil && a.switchbot.Settings().Enabled
+	enabled := a.switchbot != nil && a.switchbot.ScanningEnabled()
 	a.switchbotMu.Lock()
 	defer a.switchbotMu.Unlock()
 	if !enabled {

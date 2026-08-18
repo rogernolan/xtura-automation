@@ -39,6 +39,11 @@ func (a *App) handleMopekaReading(reading btle.MopekaReading) {
 }
 
 func (a *App) overviewGas() overview.Gas {
+	// Snapshot config first to avoid deadlock: always acquire a.mu before mopeka.mu.
+	a.mu.RLock()
+	cfg := a.rawConfig
+	a.mu.RUnlock()
+
 	if a.mopeka == nil {
 		return overview.Gas{Status: "mopeka_not_configured"}
 	}
@@ -53,10 +58,8 @@ func (a *App) overviewGas() overview.Gas {
 		return overview.Gas{Status: "stale"}
 	}
 
-	a.mu.RLock()
-	tankCapacity := a.rawConfig.Overview.GasTankCapacityLitres
-	fillHeightMm := a.rawConfig.Mopeka.TankFillHeightMm
-	a.mu.RUnlock()
+	tankCapacity := cfg.Mopeka.TankCapacityLitres
+	fillHeightMm := cfg.Mopeka.TankFillHeightMm
 
 	if fillHeightMm == 0 {
 		fillHeightMm = 290
