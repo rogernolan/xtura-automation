@@ -54,6 +54,23 @@ func setState(app *App, id, name, source string, temp float64) {
 	}
 }
 
+func TestRecordSensorReadingPreservesBatteryWhenReadingOmitsIt(t *testing.T) {
+	app, _ := newSensorApp(t, sensors.Settings{Enabled: true})
+	id := sensors.NormalizeMAC(testMACMain)
+	battery := 65
+	at := app.now()
+
+	app.recordSensorReading(id, "Main", "switchbot", 20.0, nil, &battery, at)
+	app.recordSensorReading(id, "Main", "switchbot", 20.5, nil, nil, at.Add(time.Minute))
+
+	app.mu.RLock()
+	state := app.sensorStates[id]
+	app.mu.RUnlock()
+	if state == nil || state.battery == nil || *state.battery != 65 {
+		t.Fatalf("battery should remain 65 after a reading without battery, got %#v", state)
+	}
+}
+
 func TestTemperatureDisabledShowsOnlyAlde(t *testing.T) {
 	settings := sensors.Settings{Enabled: false}
 	app, store := newSensorApp(t, settings)

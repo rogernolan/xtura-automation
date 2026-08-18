@@ -76,6 +76,9 @@ func (a *App) recordSensorReading(id, name, source string, temp float64, hum *fl
 	state.source = source
 	state.temp = &temp
 	state.humidity = hum
+	if battery == nil {
+		battery = state.battery
+	}
 	state.battery = battery
 	seen := at
 	state.lastSeen = &seen

@@ -121,6 +121,36 @@ func TestDecodeOutdoorFromManufacturerData(t *testing.T) {
 	}
 }
 
+func TestDecodeManufacturerOnlySwitchBotReadings(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		data []byte
+		mac  string
+		temp float64
+		hum  float64
+	}{
+		{name: "main", data: []byte{0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x4a, 0x0f, 0x03, 0x9a, 0x31}, mac: "e6:55:83:c6:64:24", temp: 26.3, hum: 49},
+		{name: "outside", data: []byte{0xeb, 0x6b, 0x00, 0xc6, 0x06, 0x69, 0x30, 0x02, 0x03, 0x96, 0x42}, mac: "eb:6b:00:c6:06:69", temp: 22.3, hum: 66},
+		{name: "hold", data: []byte{0xeb, 0x6b, 0x04, 0x06, 0x14, 0x2a, 0x21, 0x0e, 0x04, 0x9a, 0x36}, mac: "eb:6b:04:06:14:2a", temp: 26.4, hum: 54},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			payload, ok := DecodeOutdoorMFR([]AD{manufacturerElement(append([]byte{0x69, 0x09}, test.data...)...)}, test.mac)
+			if !ok || !payload.HasTemp {
+				t.Fatalf("expected temperature payload, got %#v, ok=%t", payload, ok)
+			}
+			if payload.Temp != test.temp {
+				t.Fatalf("temp: got %v, want %v", payload.Temp, test.temp)
+			}
+			if payload.Humidity == nil || *payload.Humidity != test.hum {
+				t.Fatalf("humidity: got %v, want %v", payload.Humidity, test.hum)
+			}
+			if payload.Battery != nil {
+				t.Fatalf("battery should be unknown for MFR-only, got %v", *payload.Battery)
+			}
+		})
+	}
+}
+
 func TestDecodeOutdoorBatteryOnly(t *testing.T) {
 	// WoSensorTHO alternates advertisements: battery may arrive without a
 	// manufacturer data payload. Decode must still identify the device.
@@ -144,7 +174,7 @@ func TestDecodeOutdoorFromManufacturerDataOnly(t *testing.T) {
 	elements := []AD{
 		manufacturerElement(0x69, 0x09, 0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x30, 0x0f, 0x04, 0x9e, 0x2c),
 	}
-	payload, ok := DecodeOutdoorMFR(elements)
+	payload, ok := DecodeOutdoorMFR(elements, "e6:55:83:c6:64:24")
 	if !ok {
 		t.Fatal("expected decode ok for MFR-only outdoor sensor")
 	}
@@ -166,9 +196,19 @@ func TestDecodeOutdoorMFRRejectsShortPayload(t *testing.T) {
 	elements := []AD{
 		manufacturerElement(0x69, 0x09, 0xe6, 0x55),
 	}
-	_, ok := DecodeOutdoorMFR(elements)
+	_, ok := DecodeOutdoorMFR(elements, "e6:55:83:c6:64:24")
 	if ok {
 		t.Fatal("expected short MFR payload to be rejected")
+	}
+}
+
+func TestDecodeOutdoorMFRRejectsMismatchedEmbeddedMAC(t *testing.T) {
+	elements := []AD{
+		manufacturerElement(0x69, 0x09, 0xe6, 0x55, 0x83, 0xc6, 0x64, 0x24, 0x30, 0x0f, 0x04, 0x9e, 0x2c),
+	}
+	_, ok := DecodeOutdoorMFR(elements, "eb:6b:00:c6:06:69")
+	if ok {
+		t.Fatal("expected MFR payload with mismatched embedded MAC to be rejected")
 	}
 }
 

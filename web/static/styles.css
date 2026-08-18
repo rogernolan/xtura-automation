@@ -307,8 +307,6 @@ h1 {
 .supply-bar.is-unavailable span { background: var(--muted); opacity: .35; }
 .settings-form { display: grid; gap: .8rem; }
 .settings-form label { display: grid; gap: .3rem; }
-@media (max-width: 560px) { .overview-power-layout, .overview-supplies-grid { grid-template-columns: 1fr; } }
-
 .panel-heading {
   display: flex;
   align-items: baseline;
