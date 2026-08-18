@@ -570,6 +570,13 @@ function formatTemperature(value) {
   return value === undefined || value === null ? "N/A" : `${Number(value).toFixed(1)}`;
 }
 
+function formatBatteryCurrent(value) {
+  const current = Number(value);
+  if (!Number.isFinite(current)) return "--";
+  const sign = current >= 0 ? "+" : "";
+  return `${sign}${Math.abs(current) >= 100 ? current.toFixed(0) : current.toFixed(1)}A`;
+}
+
 function temperatureThresholds() {
   return state.overviewSettings && state.overviewSettings.comfort_thresholds;
 }
@@ -719,7 +726,7 @@ function renderOverview() {
   const stale = doc.status === "stale";
   renderTemperature(doc);
   if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
-  if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? `${Number(doc.battery.current_a) >= 0 ? "+" : ""}${Number(doc.battery.current_a).toFixed(1)}A` : "--";
+  if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? formatBatteryCurrent(doc.battery.current_a) : "--";
   if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : doc.battery.status === "stale" ? "Stale" : "N/A") : "N/A";
   if (byId("timeToFull")) byId("timeToFull").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Time to full: ${Number(doc.battery.eta_hours).toFixed(1)}h` : "Time to full: N/A";
   if (byId("batteryBar")) { const pct = doc.battery && doc.battery.state_of_charge_percent; byId("batteryBar").style.width = pct === undefined || pct === null ? "0%" : `${Math.max(0, Math.min(100, Number(pct)))}%`; }

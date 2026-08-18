@@ -248,7 +248,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
@@ -263,6 +263,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     overviewTemperatureTone: context.module.exports.overviewTemperatureTone,
     overviewCurrentState: context.module.exports.overviewCurrentState,
     overviewSupplyState: context.module.exports.overviewSupplyState,
+    formatBatteryCurrent: context.module.exports.formatBatteryCurrent,
     state: context.module.exports.state,
     document,
     window,
@@ -302,6 +303,13 @@ test("charge current status reflects telemetry freshness", () => {
   assert.equal(overviewCurrentState({ status: "available", battery: { current_a: 2 } }), "live");
   assert.equal(overviewCurrentState({ status: "available", battery: {} }), "N/A");
   assert.equal(overviewCurrentState({ status: "stale", battery: {} }), "stale");
+});
+
+test("formats battery current to fit the 99.9A display slot", () => {
+  const { formatBatteryCurrent } = loadApp();
+  assert.equal(formatBatteryCurrent(99.9), "+99.9A");
+  assert.equal(formatBatteryCurrent(250), "+250A");
+  assert.equal(formatBatteryCurrent(-125), "-125A");
 });
 
 test("healthy supplies leave their status label blank", () => {

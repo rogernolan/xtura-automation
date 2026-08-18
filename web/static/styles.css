@@ -262,8 +262,9 @@ h1 {
 .overview-card-grid { display: grid; gap: 10px; }
 .overview-power-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .overview-charging-card { padding: 15px; }
-.overview-charging-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.overview-charging-current { display: block; font-size: clamp(1.7rem, 7vw, 2.5rem); line-height: 1; margin: 8px 0 0; color: var(--muted); }
+.overview-charging-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+.overview-charging-row .overview-value { min-width: 0; flex: 1 1 auto; }
+.overview-charging-current { display: block; width: 6ch; flex: 0 0 6ch; font-size: clamp(1.1rem, 4vw, 1.15rem); line-height: 1; margin: 8px 0 0; color: var(--muted); text-align: right; }
 .overview-supplies-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .overview-card { display: grid; align-content: start; gap: 9px; min-width: 0; padding: 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; box-shadow: var(--shadow); }
 .overview-card:hover, .overview-card:focus-visible { border-color: var(--accent); outline: 3px solid rgba(31, 95, 212, .18); }
@@ -279,7 +280,7 @@ h1 {
 .overview-value { display: block; font-size: clamp(1.7rem, 7vw, 2.5rem); line-height: 1; margin: 8px 0 0; }
 .overview-trend { margin: 0; color: var(--muted); font-size: 12px; font-weight: 700; }
 .overview-primary-row { display: flex; align-items: center; gap: 16px; }
-.overview-primary-left { display: grid; gap: 4px; min-width: 0; flex: 0 1 auto; }
+.overview-primary-left { display: grid; gap: 4px; min-width: 0; flex: 0 1 auto; text-align: right; }
 .overview-primary-line { display: flex; align-items: center; gap: 10px; }
 .overview-humidity { margin: 0; color: var(--muted); font-size: 13px; font-weight: 700; }
 .overview-temperature-value-group { position: relative; display: inline-block; }
