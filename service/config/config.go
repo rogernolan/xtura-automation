@@ -20,7 +20,8 @@ type Config struct {
 	Tracking   TrackingConfig   `yaml:"tracking,omitempty"`
 	Recording  RecordingConfig  `yaml:"recording,omitempty"`
 	Overview   OverviewConfig   `yaml:"overview,omitempty"`
-	Switchbot  SwitchbotConfig  `yaml:"switchbot,omitempty"`
+	Switchbot  BtleConfig       `yaml:"switchbot,omitempty"`
+	Mopeka     MopekaConfig     `yaml:"mopeka,omitempty"`
 	Automation AutomationConfig `yaml:"automation"`
 	API        APIConfig        `yaml:"api"`
 }
@@ -88,20 +89,28 @@ type TrackingConfig struct {
 	Dir            string        `yaml:"dir,omitempty"`
 }
 
-// SwitchbotConfig configures the BLE temperature sensor scanning. It is
+// BtleConfig configures the BLE temperature sensor scanning. It is
 // disabled by default so the service behaves exactly as before until sensors
 // are configured and verified.
-type SwitchbotConfig struct {
-	Enabled   bool                    `yaml:"enabled,omitempty"`
-	HCIDevice string                  `yaml:"hci_device,omitempty"`
-	Sensors   []SwitchbotSensorConfig `yaml:"sensors,omitempty"`
+type BtleConfig struct {
+	Enabled   bool                `yaml:"enabled,omitempty"`
+	HCIDevice string              `yaml:"hci_device,omitempty"`
+	Sensors   []BtleSensorConfig  `yaml:"sensors,omitempty"`
 }
 
-// SwitchbotSensorConfig is one configured BLE thermometer.
-type SwitchbotSensorConfig struct {
+// BtleSensorConfig is one configured BLE thermometer.
+type BtleSensorConfig struct {
 	Name    string `yaml:"name"`
 	MAC     string `yaml:"mac"`
 	Primary bool   `yaml:"primary,omitempty"`
+}
+
+// MopekaConfig configures the Mopeka Pro Check LPG tank level sensor.
+type MopekaConfig struct {
+	Enabled            bool    `yaml:"enabled"`
+	MAC                string  `yaml:"mac"`
+	TankCapacityLitres float64 `yaml:"tank_capacity_litres"`
+	TankFillHeightMm   float64 `yaml:"tank_fill_height_mm"`
 }
 
 // RecordingConfig controls the on-demand WebSocket traffic recording directory.
@@ -158,6 +167,7 @@ type NormalizedConfig struct {
 	Recording  NormalizedRecording
 	Overview   OverviewConfig
 	Switchbot  sensors.Settings
+	Mopeka     MopekaConfig
 	API        APIConfig
 	Automation NormalizedAutomation
 }
@@ -316,8 +326,19 @@ func (c Config) Validate() error {
 		problems = append(problems, "tracking requires location.enabled")
 	}
 	if c.Switchbot.Enabled || c.Switchbot.HCIDevice != "" || len(c.Switchbot.Sensors) > 0 {
-		if err := normalizeSwitchbot(c.Switchbot).Validate(); err != nil {
+		if err := normalizeBtle(c.Switchbot).Validate(); err != nil {
 			problems = append(problems, err.Error())
+		}
+	}
+	if c.Mopeka.Enabled {
+		if strings.TrimSpace(c.Mopeka.MAC) == "" {
+			problems = append(problems, "mopeka.mac is required when mopeka is enabled")
+		}
+		if c.Mopeka.TankCapacityLitres <= 0 {
+			problems = append(problems, "mopeka.tank_capacity_litres must be greater than zero")
+		}
+		if c.Mopeka.TankFillHeightMm <= 0 {
+			problems = append(problems, "mopeka.tank_fill_height_mm must be greater than zero")
 		}
 	}
 	if len(c.Automation.HeatingPrograms) == 0 {
@@ -377,7 +398,8 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		Tracking:  normalizeTracking(c.Tracking),
 		Recording: normalizeRecording(c.Recording),
 		Overview:  normalizeOverview(c.Overview),
-		Switchbot: normalizeSwitchbot(c.Switchbot),
+		Switchbot: normalizeBtle(c.Switchbot),
+		Mopeka:    normalizeMopeka(c.Mopeka),
 		API:       c.API,
 		Automation: NormalizedAutomation{
 			Location:        loc,
@@ -483,7 +505,7 @@ func normalizeHost(in HostConfig) NormalizedHost {
 	return out
 }
 
-func normalizeSwitchbot(in SwitchbotConfig) sensors.Settings {
+func normalizeBtle(in BtleConfig) sensors.Settings {
 	out := sensors.Settings{
 		Enabled:   in.Enabled,
 		HCIDevice: strings.TrimSpace(in.HCIDevice),
@@ -497,6 +519,15 @@ func normalizeSwitchbot(in SwitchbotConfig) sensors.Settings {
 			MAC:     strings.TrimSpace(sensor.MAC),
 			Primary: sensor.Primary,
 		})
+	}
+	return out
+}
+
+func normalizeMopeka(in MopekaConfig) MopekaConfig {
+	out := in
+	out.MAC = strings.TrimSpace(out.MAC)
+	if out.TankFillHeightMm == 0 && out.Enabled {
+		out.TankFillHeightMm = 290
 	}
 	return out
 }

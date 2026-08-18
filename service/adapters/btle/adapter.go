@@ -1,9 +1,10 @@
-package switchbot
+package btle
 
 import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // ErrUnsupported is returned when BLE scanning is unavailable on the platform.
-var ErrUnsupported = errors.New("switchbot BLE scanning is not supported on this platform")
+var ErrUnsupported = errors.New("btle BLE scanning is not supported on this platform")
 
 // scanRetryInterval is the backoff between failed scan sessions.
 const scanRetryInterval = 5 * time.Second
@@ -36,12 +37,14 @@ type SeenDevice struct {
 	RSSI     int       `json:"rssi"`
 }
 
-// Config configures the switchbot adapter.
+// Config configures the BLE adapter.
 type Config struct {
-	Settings  sensors.Settings
-	Logger    *log.Logger
-	OnReading func(Reading)
-	Now       func() time.Time
+	Settings   sensors.Settings
+	Logger     *log.Logger
+	OnReading  func(Reading)
+	OnMopeka   func(MopekaReading)
+	MopekaMacs []string
+	Now        func() time.Time
 }
 
 // Adapter runs the BLE scan and matches advertisements against configured
@@ -119,21 +122,21 @@ func (a *Adapter) setLastError(err error) {
 // returns immediately when scanning is disabled.
 func (a *Adapter) Run(ctx context.Context) {
 	if !a.Settings().Enabled {
-		a.logger.Printf("switchbot scan disabled; skipping")
+		a.logger.Printf("btle scan disabled; skipping")
 		return
 	}
 	device := a.Settings().HCIDevice
 	if device == "" {
 		device = "hci0"
 	}
-	a.logger.Printf("switchbot scan starting: device=%s", device)
+	a.logger.Printf("btle scan starting: device=%s", device)
 	for {
 		if err := a.scanLoop(ctx, device); err != nil {
 			if ctx.Err() != nil {
 				return
 			}
 			a.setLastError(err)
-			a.logger.Printf("switchbot scan error: %v", err)
+			a.logger.Printf("btle scan error: %v", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -170,6 +173,16 @@ func (a *Adapter) handleReport(report AdvertisingReport) {
 	}
 	if ok {
 		a.applyReading(report.MAC, report.RSSI, payload)
+		return
+	}
+	// Try Mopeka — check manufacturer data for company ID 0x0059.
+	if a.cfg.OnMopeka != nil && a.isMopekaMAC(report.MAC) {
+		mfrData := mfrDataFull(elements)
+		if len(mfrData) >= 2 && mfrData[0] == 0x59 && mfrData[1] == 0x00 {
+			if reading, decErr := DecodeMopeka(mfrData, report.RSSI, report.MAC); decErr == nil && reading != nil {
+				a.cfg.OnMopeka(*reading)
+			}
+		}
 	}
 }
 
@@ -207,6 +220,34 @@ func (a *Adapter) applyReading(mac string, rssi int, payload Payload) {
 // scanning is unavailable; it is a no-op for unconfigured MACs.
 func (a *Adapter) FeedReading(mac string, payload Payload, rssi int) {
 	a.applyReading(mac, rssi, payload)
+}
+
+// FeedMopeka delivers a decoded Mopeka reading exactly as if it had been
+// observed by the scan. It is used by the staging/simulation path.
+func (a *Adapter) FeedMopeka(reading MopekaReading) {
+	if a.cfg.OnMopeka != nil {
+		a.cfg.OnMopeka(reading)
+	}
+}
+
+func (a *Adapter) isMopekaMAC(mac string) bool {
+	for _, m := range a.cfg.MopekaMacs {
+		if strings.EqualFold(m, mac) {
+			return true
+		}
+	}
+	return false
+}
+
+// mfrDataFull returns the full manufacturer-specific data (including the
+// company ID prefix) from the parsed AD elements, or nil if none is present.
+func mfrDataFull(elements []AD) []byte {
+	for _, el := range elements {
+		if el.Type == adTypeManufacturer {
+			return el.Data
+		}
+	}
+	return nil
 }
 
 // Discover returns the devices observed by the scan. When scanning is already

@@ -73,5 +73,12 @@ type TemperaturePoint struct {
 }
 
 type Gas struct {
-	Status string `json:"status"`
+	Status         string     `json:"status"`
+	LevelPercent   *float64   `json:"level_percent,omitempty"`
+	LevelLitres    *float64   `json:"level_litres,omitempty"`
+	CapacityLitres *float64   `json:"capacity_litres,omitempty"`
+	BatteryPercent *float64   `json:"battery_percent,omitempty"`
+	TempC          *float64   `json:"temp_c,omitempty"`
+	Quality        *int       `json:"quality,omitempty"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }

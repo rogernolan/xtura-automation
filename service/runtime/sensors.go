@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"empirebus-tests/service/adapters/switchbot"
+	"empirebus-tests/service/adapters/btle"
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/config"
 	"empirebus-tests/service/domains/overview"
@@ -96,7 +96,7 @@ func (a *App) recordSensorReading(id, name, source string, temp float64, hum *fl
 }
 
 // handleSensorReading is the switchbot adapter callback.
-func (a *App) handleSensorReading(reading switchbot.Reading) {
+func (a *App) handleSensorReading(reading btle.Reading) {
 	a.mu.RLock()
 	settings := a.sensorSettings
 	a.mu.RUnlock()
@@ -388,7 +388,7 @@ func (a *App) switchbotSimTick() {
 			humidity = 100
 		}
 		battery := int(95 - (now.Unix()/3600)%6)
-		a.switchbot.FeedReading(sensor.MAC, switchbot.Payload{
+		a.switchbot.FeedReading(sensor.MAC, btle.Payload{
 			DevType:  0x77,
 			Temp:     temp,
 			HasTemp:  true,
@@ -437,12 +437,12 @@ func (a *App) UpdateSensorSettings(_ context.Context, settings sensors.Settings)
 	if strings.TrimSpace(path) == "" {
 		return sensors.Settings{}, fmt.Errorf("config path is not configured")
 	}
-	next.Switchbot = config.SwitchbotConfig{
+	next.Switchbot = config.BtleConfig{
 		Enabled:   settings.Enabled,
 		HCIDevice: strings.TrimSpace(settings.HCIDevice),
 	}
 	for _, sensor := range settings.Sensors {
-		next.Switchbot.Sensors = append(next.Switchbot.Sensors, config.SwitchbotSensorConfig{
+		next.Switchbot.Sensors = append(next.Switchbot.Sensors, config.BtleSensorConfig{
 			Name:    strings.TrimSpace(sensor.Name),
 			MAC:     strings.TrimSpace(sensor.MAC),
 			Primary: sensor.Primary,
@@ -473,7 +473,7 @@ func (a *App) UpdateSensorSettings(_ context.Context, settings sensors.Settings)
 
 // SensorDiscover returns the SwitchBot devices observed by the scan. When
 // scanning is disabled it runs a temporary discovery scan.
-func (a *App) SensorDiscover(ctx context.Context) ([]switchbot.SeenDevice, error) {
+func (a *App) SensorDiscover(ctx context.Context) ([]btle.SeenDevice, error) {
 	if a.switchbot == nil {
 		return nil, fmt.Errorf("switchbot is not configured")
 	}

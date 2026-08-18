@@ -44,7 +44,7 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 		FreshWaterPercent: telemetry.FreshWaterPercent,
 		GreyWaterPercent:  telemetry.GreyWaterPercent,
 		UpdatedAt:         telemetry.UpdatedAt,
-		Gas:               overview.Gas{Status: "mopeka_not_configured"},
+		Gas:               a.overviewGas(),
 		Battery:           overview.Battery{StateOfChargePercent: telemetry.BatteryStateOfChargePercent, CurrentA: telemetry.BatteryCurrentA, Status: "unavailable"},
 		Temperature:       a.temperatureDocument(telemetry),
 	}
@@ -73,6 +73,7 @@ func expireOverviewDocument(doc *overview.Document) {
 	doc.FreshWaterPercent = nil
 	doc.GreyWaterPercent = nil
 	doc.Battery = overview.Battery{Status: "stale"}
+	doc.Gas = overview.Gas{Status: "stale"}
 }
 
 func (a *App) overviewConfig() config.OverviewConfig {

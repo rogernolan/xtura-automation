@@ -1,6 +1,6 @@
 //go:build !linux
 
-package switchbot
+package btle
 
 import "context"
 

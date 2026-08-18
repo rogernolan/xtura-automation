@@ -732,6 +732,24 @@ function renderOverview() {
     const status = byId(`${kind}WaterState`);
     if (status) status.textContent = overviewSupplyState(value, stale ? "stale" : doc.status);
   });
+  if (byId("gasPercent")) byId("gasPercent").textContent = overviewPercent(doc.gas && doc.gas.level_percent);
+  if (byId("gasBar")) {
+    const pct = doc.gas && doc.gas.level_percent;
+    byId("gasBar").style.width = pct === undefined || pct === null ? "0%" : `${Math.max(0, Math.min(100, Number(pct)))}%`;
+  }
+  if (byId("gasState")) byId("gasState").textContent = doc.gas ? doc.gas.status : "N/A";
+  if (byId("gasDetail")) {
+    const g = doc.gas;
+    if (g && g.level_litres !== undefined && g.capacity_litres !== undefined) {
+      byId("gasDetail").textContent = `${Number(g.level_litres).toFixed(1)}L / ${Number(g.capacity_litres).toFixed(0)}L`;
+    } else if (g && g.status === "mopeka_not_configured") {
+      byId("gasDetail").textContent = "Mopeka not configured";
+    } else if (g && g.status === "stale") {
+      byId("gasDetail").textContent = "Sensor stale";
+    } else {
+      byId("gasDetail").textContent = "N/A";
+    }
+  }
 }
 
 function renderOverviewSettings() {

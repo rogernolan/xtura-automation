@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"empirebus-tests/service/adapters/switchbot"
+	"empirebus-tests/service/adapters/btle"
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/buildinfo"
 	"empirebus-tests/service/config"
@@ -65,7 +65,7 @@ type Application interface {
 	UpdateOverviewSettings(context.Context, overview.Settings) (overview.Settings, error)
 	SensorSettings() sensors.Settings
 	UpdateSensorSettings(context.Context, sensors.Settings) (sensors.Settings, error)
-	SensorDiscover(context.Context) ([]switchbot.SeenDevice, error)
+	SensorDiscover(context.Context) ([]btle.SeenDevice, error)
 	SensorHistory(string, int) ([]sensors.Sample, error)
 	UpdateTrackingSettings(context.Context, tracking.Settings) (tracking.Settings, error)
 	TrackingState() tracking.State

@@ -19,6 +19,12 @@ switchbot:
     - name: Display
       mac: "AA:BB:CC:DD:EE:03"
 
+mopeka:
+  enabled: true
+  mac: "F6:42:96:C8:38:AA"
+  tank_capacity_litres: 22
+  tank_fill_height_mm: 290
+
 automation:
   timezone: Europe/London
   heating_programs:

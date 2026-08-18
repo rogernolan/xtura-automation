@@ -50,10 +50,10 @@
                 <p id="timeToFull" class="detail-text">Time to full: N/A</p>
               </button>
               <button id="gasCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/more/settings">
-                <div class="overview-card-heading"><span>Gas</span><span class="state-text">N/A</span></div>
-                <strong class="overview-value">--</strong>
-                <div class="supply-bar is-unavailable" aria-hidden="true"><span></span></div>
-                <p class="detail-text">Mopeka not configured</p>
+                <div class="overview-card-heading"><span>Gas</span><span id="gasState" class="state-text">N/A</span></div>
+                <strong id="gasPercent" class="overview-value">--</strong>
+                <div class="supply-bar" aria-hidden="true"><span id="gasBar"></span></div>
+                <p id="gasDetail" class="detail-text">Mopeka not configured</p>
               </button>
             </div>
           </section>

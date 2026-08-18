@@ -1,6 +1,6 @@
 //go:build linux
 
-package switchbot
+package btle
 
 import (
 	"context"
@@ -87,7 +87,7 @@ func (a *Adapter) scanLoop(ctx context.Context, device string) error {
 		return err
 	}
 
-	a.logger.Printf("switchbot scan active: hci%d", devID)
+	a.logger.Printf("btle scan active: hci%d", devID)
 	buffer := make([]byte, 4096)
 	for {
 		n, err := unix.Read(fd, buffer)
