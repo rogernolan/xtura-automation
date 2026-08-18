@@ -61,6 +61,21 @@ func TestOverviewGasUsesPersistedOverviewCapacity(t *testing.T) {
 	}
 }
 
+func TestOverviewGasFallsBackToMopekaCapacityWhenOverviewUnset(t *testing.T) {
+	now := time.Now().UTC()
+	app := &App{
+		rawConfig: config.Config{
+			Mopeka: config.MopekaConfig{TankCapacityLitres: 22, TankFillHeightMm: 200},
+		},
+		mopeka: &mopekaState{distanceMm: 100, lastSeen: now, hasReading: true},
+	}
+
+	gas := app.overviewGas()
+	if gas.CapacityLitres == nil || *gas.CapacityLitres != 22 {
+		t.Fatalf("expected Mopeka fallback capacity 22L, got %#v", gas.CapacityLitres)
+	}
+}
+
 func TestUpdateOverviewSettingsPersistsAllSettings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.yaml")
 	initial := config.Config{
