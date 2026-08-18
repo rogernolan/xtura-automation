@@ -1,4 +1,4 @@
-package switchbot
+package btle
 
 import (
 	"testing"

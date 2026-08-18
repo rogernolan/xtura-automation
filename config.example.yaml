@@ -50,7 +50,7 @@ tracking:
 
 overview:
   usable_battery_capacity_ah: 100
-  # Optional Mopeka capacity; Garmin gas telemetry is not inferred.
+  # Total capacity of the LPG tanks (e.g. 2x Gaslow 11L = 22).
   gas_tank_capacity_litres: 0
   comfort_thresholds: [10, 18, 24, 30]
 
@@ -71,6 +71,17 @@ switchbot:
   #     mac: d6:66:69:92:95:43
   #   - name: Display
   #     mac: e7:77:7a:a3:a6:54
+
+mopeka:
+  # Mopeka Pro Check LPG tank level sensor (BLE, company ID 0x0059).
+  # The MAC must match the sensor's BLE address. tank_capacity_litres is the
+  # total volume of all connected tanks; tank_fill_height_mm is the internal
+  # liquid height used to convert the ultrasonic reading to a percentage
+  # (Gaslow 11L default: 290mm).
+  enabled: false
+  # mac: "F6:42:96:C8:38:AA"
+  # tank_capacity_litres: 22
+  # tank_fill_height_mm: 290
 
 host:
   # How often the Pi status pane samples host metrics. Zero uses the 5s default.

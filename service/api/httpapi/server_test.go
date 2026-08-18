@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"empirebus-tests/service/api/events"
-	"empirebus-tests/service/adapters/switchbot"
+	"empirebus-tests/service/adapters/btle"
 	"empirebus-tests/service/buildinfo"
 	"empirebus-tests/service/config"
 	domainheating "empirebus-tests/service/domains/heating"
@@ -63,7 +63,7 @@ type fakeApp struct {
 	updateOverviewErr  error
 	sensorSettings     sensors.Settings
 	updateSensorErr    error
-	discoverDevices    []switchbot.SeenDevice
+	discoverDevices    []btle.SeenDevice
 	discoverErr        error
 	history            []sensors.Sample
 	historyErr         error
@@ -198,7 +198,7 @@ func (f fakeApp) UpdateSensorSettings(_ context.Context, settings sensors.Settin
 	return settings, nil
 }
 
-func (f fakeApp) SensorDiscover(_ context.Context) ([]switchbot.SeenDevice, error) {
+func (f fakeApp) SensorDiscover(_ context.Context) ([]btle.SeenDevice, error) {
 	return f.discoverDevices, f.discoverErr
 }
 

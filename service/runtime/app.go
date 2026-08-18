@@ -16,7 +16,7 @@ import (
 	"empirebus-tests/heating"
 	"empirebus-tests/service/adapters/garmin"
 	"empirebus-tests/service/adapters/geotimezone"
-	"empirebus-tests/service/adapters/switchbot"
+	"empirebus-tests/service/adapters/btle"
 	"empirebus-tests/service/adapters/teltonika"
 	"empirebus-tests/service/adapters/tzfresolver"
 	"empirebus-tests/service/api/events"
@@ -95,7 +95,8 @@ type App struct {
 	sleep                 func(time.Duration)
 	now                   func() time.Time
 	sensorsStore          *history.Store
-	switchbot             *switchbot.Adapter
+	switchbot             *btle.Adapter
+	mopeka                *mopekaState
 
 	mu                 sync.RWMutex
 	configMu           sync.Mutex
@@ -258,11 +259,18 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		schedulerWake:         make(chan struct{}, 1),
 		waterSchedulerWake:    make(chan struct{}, 1),
 	}
-	app.switchbot = switchbot.New(switchbot.Config{
+	app.switchbot = btle.New(btle.Config{
 		Settings:  cfg.Switchbot,
 		Logger:    logger,
 		Now:       time.Now,
 		OnReading: app.handleSensorReading,
+		OnMopeka:  app.handleMopekaReading,
+		MopekaMacs: func() []string {
+			if cfg.Mopeka.Enabled && cfg.Mopeka.MAC != "" {
+				return []string{cfg.Mopeka.MAC}
+			}
+			return nil
+		}(),
 	})
 	go func() {
 		<-ctx.Done()
@@ -284,6 +292,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	}
 	go app.startSwitchbotScan()
 	go app.startSwitchbotSim(ctx)
+	go app.startMopekaSim(ctx)
 	go app.sensorCompactLoop(ctx)
 	go app.publishStateLoop(ctx)
 	if cfg.Location.Enabled {
