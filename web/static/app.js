@@ -192,6 +192,7 @@ const state = {
   scheduleRenderSignature: "",
   requestInFlight: false,
   countdownRefresh: null,
+  lastSeenRefresh: null,
 };
 
 function byId(id) {
@@ -513,6 +514,7 @@ function render() {
   renderTracking();
   renderPiStatus();
   syncCountdownRefresh();
+  syncLastSeenRefresh();
 }
 
 function overviewPercent(value) { return value === null || value === undefined ? "N/A" : `${Number(value).toFixed(0)}%`; }
@@ -1387,6 +1389,16 @@ function syncCountdownRefresh() {
   if (!hasActiveBoost && !hasTimedRecording && state.countdownRefresh !== null) {
     window.clearInterval(state.countdownRefresh);
     state.countdownRefresh = null;
+  }
+}
+
+function syncLastSeenRefresh() {
+  // Re-render overview periodically to update "Last seen" indicators
+  // when readings cross the stale threshold
+  if (state.lastSeenRefresh === null) {
+    state.lastSeenRefresh = window.setInterval(() => {
+      renderOverview();
+    }, 60000); // Every minute
   }
 }
 

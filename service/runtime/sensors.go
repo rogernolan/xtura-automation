@@ -216,7 +216,8 @@ func (a *App) temperatureSensorEntry(id, name, source string, state *sensorState
 		Trend:  string(sensors.TrendUnavailable),
 	}
 	aldeStale := source == "garmin" && aldeTelemetryStale(telemetry, now)
-	if state != nil && !aldeStale {
+	// Always populate from sensor state if available (preserves last known values)
+	if state != nil {
 		if state.temp != nil {
 			temp := *state.temp
 			entry.Temp = &temp
@@ -234,6 +235,7 @@ func (a *App) temperatureSensorEntry(id, name, source string, state *sensorState
 			entry.LastSeen = &seen
 		}
 	}
+	// Override with fresh telemetry values if not stale
 	if source == "garmin" && !aldeStale && telemetry.AldeTemperatureC != nil {
 		temp := *telemetry.AldeTemperatureC
 		entry.Temp = &temp
@@ -255,7 +257,8 @@ func (a *App) temperaturePrimary(id string, state *sensorState, fallbackTemp *fl
 		History: []overview.TemperaturePoint{},
 	}
 	stale := id == sensors.AldeID && aldeStale
-	if state != nil && !stale {
+	// Always populate from sensor state if available (preserves last known values)
+	if state != nil {
 		if state.temp != nil {
 			temp := *state.temp
 			primary.Temp = &temp
@@ -265,6 +268,7 @@ func (a *App) temperaturePrimary(id string, state *sensorState, fallbackTemp *fl
 			primary.Humidity = &humidity
 		}
 	}
+	// Override with fresh telemetry values if not stale
 	if primary.Temp == nil && fallbackTemp != nil && !stale {
 		temp := *fallbackTemp
 		primary.Temp = &temp
