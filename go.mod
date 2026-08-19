@@ -11,9 +11,12 @@ require (
 )
 
 require (
+	github.com/SherClockHolmes/webpush-go v1.4.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/paulmach/orb v0.13.0 // indirect
 	github.com/ringsaturn/tzf-dist v0.0.2026-b-fix1 // indirect
 	github.com/tidwall/geoindex v1.7.0 // indirect
 	github.com/tidwall/rtree v1.10.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

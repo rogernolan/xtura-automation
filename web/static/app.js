@@ -3,6 +3,10 @@ class XturaApi {
   async getOverview() { return this.request("/v1/overview"); }
   async getOverviewSettings() { return this.request("/v1/overview/settings"); }
   async updateOverviewSettings(settings) { return this.request("/v1/overview/settings", { method: "PUT", body: settings }); }
+  async getNotificationSettings() { return this.request("/v1/notifications/settings"); }
+  async updateNotificationSettings(settings) { return this.request("/v1/notifications/settings", { method: "PUT", body: settings }); }
+  async notificationCapabilities() { return this.request("/v1/notifications/capabilities"); }
+  async registerSubscription(subscription) { return this.request("/v1/notifications/subscription", { method: "POST", body: subscription }); }
   async getLightsState() {
     return this.request("/v1/lights/state");
   }
@@ -187,6 +191,9 @@ const state = {
   overview: null,
   overviewSettings: null,
   overviewSettingsDirty: false,
+  notificationSettings: null,
+  notificationSubscription: false,
+  editingNotificationID: null,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -505,6 +512,7 @@ function closeNavigation({ restoreFocus = true } = {}) {
 function render() {
   renderOverview();
   renderOverviewSettings();
+  renderNotifications();
   renderLights();
   renderWater();
   renderHeating();
@@ -803,6 +811,27 @@ function renderOverviewSettings() {
   ["comfortCold", "comfortComfort", "comfortWarm", "comfortHot"].forEach((id, index) => { if (byId(id)) byId(id).value = values[index] ?? ""; });
   if (byId("batteryCapacity")) byId("batteryCapacity").value = settings.usable_battery_capacity_ah ?? "";
   if (byId("gasCapacity")) byId("gasCapacity").value = settings.gas_tank_capacity_litres ?? "";
+}
+
+function renderNotifications() {
+  const settings = state.notificationSettings;
+  const select = byId("notificationSensor");
+  if (!settings || !select) return;
+  const sensors = state.overview?.temperature?.sensors || [];
+  select.innerHTML = sensors.map((sensor) => `<option value="${sensor.id}">${sensor.name}</option>`).join("");
+  byId("notificationState").textContent = state.notificationSubscription ? "Enabled" : "Not enabled";
+  const list = byId("notificationAlerts");
+  list.replaceChildren();
+  if (!(settings.alerts || []).length) { list.textContent = "No alerts configured."; return; }
+  for (const alert of settings.alerts) {
+    const row = document.createElement("div");
+    row.className = "notification-row";
+    const label = document.createElement("span");
+    label.textContent = `${alert.name}: ${alert.sensor_id} ${alert.low_celsius ?? ""}–${alert.high_celsius ?? ""}C (${alert.mode || "crossing"})`;
+    row.append(label);
+    for (const action of ["edit", "remove"]) { const button = document.createElement("button"); button.type = "button"; button.dataset.notificationAction = action; button.dataset.notificationID = alert.id; button.textContent = action[0].toUpperCase() + action.slice(1); row.append(button); }
+    list.append(row);
+  }
 }
 
 function renderBuild() {
@@ -1702,7 +1731,7 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus, overview, overviewSettings] = await Promise.all([
+  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus, overview, overviewSettings, notificationSettings] = await Promise.all([
     api.getLightsState(),
     api.getWaterState(),
     api.getHeatingMode(),
@@ -1715,6 +1744,7 @@ async function loadInitialState() {
     api.getPiStatus(),
     api.getOverview(),
     api.getOverviewSettings(),
+    api.getNotificationSettings(),
   ]);
   state.lights = lights;
   state.water = water;
@@ -1728,6 +1758,7 @@ async function loadInitialState() {
   state.piStatus = piStatus;
   state.overview = overview;
   state.overviewSettings = overviewSettings;
+  state.notificationSettings = notificationSettings;
   setStatus("Loaded");
   render();
 }
@@ -1975,6 +2006,12 @@ function bindActions() {
     } catch (_) { return; }
   });
   if (settingsForm) settingsForm.addEventListener("input", () => { state.overviewSettingsDirty = true; });
+  const notificationForm = byId("notificationForm");
+  if (notificationForm) notificationForm.addEventListener("submit", async (event) => { event.preventDefault(); const high = byId("notificationHigh").value; const low = byId("notificationLow").value; const next = { id: state.editingNotificationID || crypto.randomUUID(), name: byId("notificationName").value, sensor_id: byId("notificationSensor").value, high_celsius: high === "" ? undefined : Number(high), low_celsius: low === "" ? undefined : Number(low), mode: byId("notificationMode").value }; const alerts = state.editingNotificationID ? (state.notificationSettings.alerts || []).map((alert) => alert.id === state.editingNotificationID ? next : alert) : [...(state.notificationSettings?.alerts || []), next]; try { state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts }), "Saving notifications"); state.editingNotificationID = null; renderNotifications(); notificationForm.reset(); } catch (_) {} });
+  const notificationList = byId("notificationAlerts");
+  if (notificationList) notificationList.addEventListener("click", async (event) => { const button = event.target.closest("button[data-notification-action]"); if (!button) return; const id = button.dataset.notificationID; const alert = (state.notificationSettings.alerts || []).find((item) => item.id === id); if (!alert) return; if (button.dataset.notificationAction === "edit") { state.editingNotificationID = id; byId("notificationName").value = alert.name; byId("notificationSensor").value = alert.sensor_id; byId("notificationHigh").value = alert.high_celsius ?? ""; byId("notificationLow").value = alert.low_celsius ?? ""; byId("notificationMode").value = alert.mode || "crossing"; return; } state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts: state.notificationSettings.alerts.filter((item) => item.id !== id) }), "Removing notification"); renderNotifications(); });
+  const subscribe = byId("notificationSubscribe");
+  if (subscribe) subscribe.addEventListener("click", async () => { try { const registration = await navigator.serviceWorker.register("/sw.js"); const permission = await Notification.requestPermission(); if (permission !== "granted") throw new Error("Browser notification permission was not granted"); const capabilities = await api.notificationCapabilities(); const encoded = capabilities.public_key.replace(/-/g, "+").replace(/_/g, "/"); const key = Uint8Array.from(atob(encoded + "=".repeat((4 - encoded.length % 4) % 4)), (c) => c.charCodeAt(0)); const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); await api.registerSubscription(subscription.toJSON()); state.notificationSubscription = true; renderNotifications(); } catch (error) { setStatus(error.message, "error"); } });
 }
 
 function flashCount() {

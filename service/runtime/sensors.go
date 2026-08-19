@@ -93,6 +93,7 @@ func (a *App) recordSensorReading(id, name, source string, temp float64, hum *fl
 			a.logger.Printf("sensor history append: %v", err)
 		}
 	}
+	a.evaluateNotifications(id, name, temp, at)
 }
 
 // handleSensorReading is the switchbot adapter callback.
@@ -124,11 +125,11 @@ func (a *App) observeAldeTelemetry() {
 	if telemetry.AldeTemperatureC == nil {
 		return
 	}
-	temp := *telemetry.AldeTemperatureC
-	at := a.now().UTC()
-	if telemetry.UpdatedAt != nil && telemetry.UpdatedAt.After(at.Add(-sensorDedupeWindow)) {
-		at = telemetry.UpdatedAt.UTC()
+	if telemetry.UpdatedAt == nil || a.now().UTC().Sub(telemetry.UpdatedAt.UTC()) > overviewStaleAfter {
+		return
 	}
+	temp := *telemetry.AldeTemperatureC
+	at := telemetry.UpdatedAt.UTC()
 	a.recordSensorReading(sensors.AldeID, "Alde", "garmin", temp, nil, nil, at)
 }
 

@@ -16,7 +16,8 @@ recording:
   dir: /var/lib/xtura-staging/recordings
 
 api:
-  listen: 0.0.0.0:8080
+  # Tailscale Serve is the only external HTTPS entry point.
+  listen: 127.0.0.1:8080
 
 automation:
   timezone: Europe/London

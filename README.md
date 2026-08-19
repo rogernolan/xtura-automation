@@ -4,7 +4,7 @@ A small go service to monitor a garmin empire bus event stream and convert it to
 
 the system is designed to run on a raspberry pi and is tested (and to be fair) developed for a EuraMobil stura. Eventual target is a pi zero2w.
 
-The service assumes it can reach the Garmin SERV/WDU web socket. On the EuraMobil the SERV connects over the motorhome's internal Ethernet at `172.16.11.7`: the web UI is at `http://172.16.11.7:8888/` and the web socket at `ws://172.16.11.7:8888/ws`. The SERV no longer exposes WiFi (its bootstrap message reports `hasWifi:false`), so connect the Pi to that Ethernet network rather than expecting a SERV WiFi network. The IP may move if the internal network reassigns it, and the Origin header is not required (the SERV only rejects a wrong one). I run the whole thing over Tailscale but thats not a requirement.
+The service assumes it can reach the Garmin SERV/WDU web socket. On the EuraMobil the SERV connects over the motorhome's internal Ethernet at `172.16.11.7`: the web UI is at `http://172.16.11.7:8888/` and the web socket at `ws://172.16.11.7:8888/ws`. The SERV no longer exposes WiFi (its bootstrap message reports `hasWifi:false`), so connect the Pi to that Ethernet network rather than expecting a SERV WiFi network. The IP may move if the internal network reassigns it, and the Origin header is not required (the SERV only rejects a wrong one). Xtura is served to clients through Tailscale HTTPS; the Go API binds only to loopback and is not exposed as plain HTTP.
 
 ## Go Heating Client
 
@@ -73,6 +73,14 @@ The sample config includes:
 - optional RUTX50-backed GPS location polling and timezone updates
 
 Current HTTP endpoints:
+
+Temperature notifications are configured under More > Settings. Each alert can
+target Alde or a configured SwitchBot sensor, with high/low limits and either a
+crossing notification or a five-minute repeat. A configured alert also sends a
+single offline notification when its sensor has not produced a valid reading
+for more than 30 minutes; the offline state re-arms when the sensor reports
+again. Browser push requires enabling notifications from the Settings page and
+accessing Xtura over the Tailscale HTTPS hostname.
 
 - `GET /v1/health`
 - `GET /v1/build`
@@ -232,6 +240,7 @@ production but runs on its own port, config, and systemd unit:
   `/opt/xtura-staging/current`
 - writable service config at `/var/lib/xtura-staging/config.yaml`
 - `empirebusd-staging.service`, HTTP on `:8080`
+- Tailscale Serve exposes production HTTPS on port 443 to the production loopback backend and staging HTTPS on port 8443 to the staging loopback backend.
 
 Setup once on the Pi (mirrors production):
 
@@ -249,8 +258,10 @@ ENVIRONMENT=staging ./scripts/deploy/deploy-on-pi.sh            # on the Pi
 ENVIRONMENT=staging ./scripts/deploy/run-deploy-from-mac.sh <sha>   # from the Mac
 ```
 
-Verify with `curl http://127.0.0.1:8080/v1/health` (or open
-`http://jones-pi:8080/`). To promote a verified build to production, deploy the
+Verify the backend locally with `curl http://127.0.0.1:8080/v1/health`; clients
+should use the Tailscale HTTPS hostname rather than the loopback HTTP port. The
+Pi deploy script configures `tailscale serve` automatically and fails if the
+Tailscale CLI is unavailable. To promote a verified build to production, deploy the
 same SHA with the default environment.
 
 **Staging talks to the real SERV.** Commands issued from the staging UI affect

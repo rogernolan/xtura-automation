@@ -9,21 +9,23 @@ import (
 
 	domainheating "empirebus-tests/service/domains/heating"
 	"empirebus-tests/service/domains/sensors"
+	"empirebus-tests/service/notifications"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Garmin     GarminConfig     `yaml:"garmin"`
-	Host       HostConfig       `yaml:"host,omitempty"`
-	Location   LocationConfig   `yaml:"location,omitempty"`
-	Tracking   TrackingConfig   `yaml:"tracking,omitempty"`
-	Recording  RecordingConfig  `yaml:"recording,omitempty"`
-	Overview   OverviewConfig   `yaml:"overview,omitempty"`
-	Switchbot  BtleConfig       `yaml:"switchbot,omitempty"`
-	Mopeka     MopekaConfig     `yaml:"mopeka,omitempty"`
-	Automation AutomationConfig `yaml:"automation"`
-	API        APIConfig        `yaml:"api"`
+	Garmin        GarminConfig        `yaml:"garmin"`
+	Host          HostConfig          `yaml:"host,omitempty"`
+	Location      LocationConfig      `yaml:"location,omitempty"`
+	Tracking      TrackingConfig      `yaml:"tracking,omitempty"`
+	Recording     RecordingConfig     `yaml:"recording,omitempty"`
+	Overview      OverviewConfig      `yaml:"overview,omitempty"`
+	Switchbot     BtleConfig          `yaml:"switchbot,omitempty"`
+	Mopeka        MopekaConfig        `yaml:"mopeka,omitempty"`
+	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
+	Automation    AutomationConfig    `yaml:"automation"`
+	API           APIConfig           `yaml:"api"`
 }
 
 type OverviewConfig struct {
@@ -93,9 +95,9 @@ type TrackingConfig struct {
 // disabled by default so the service behaves exactly as before until sensors
 // are configured and verified.
 type BtleConfig struct {
-	Enabled   bool                `yaml:"enabled,omitempty"`
-	HCIDevice string              `yaml:"hci_device,omitempty"`
-	Sensors   []BtleSensorConfig  `yaml:"sensors,omitempty"`
+	Enabled   bool               `yaml:"enabled,omitempty"`
+	HCIDevice string             `yaml:"hci_device,omitempty"`
+	Sensors   []BtleSensorConfig `yaml:"sensors,omitempty"`
 }
 
 // BtleSensorConfig is one configured BLE thermometer.
@@ -111,6 +113,13 @@ type MopekaConfig struct {
 	MAC                string  `yaml:"mac"`
 	TankCapacityLitres float64 `yaml:"tank_capacity_litres"`
 	TankFillHeightMm   float64 `yaml:"tank_fill_height_mm"`
+}
+
+type NotificationsConfig struct {
+	VAPIDPublicKey  string                `yaml:"vapid_public_key,omitempty"`
+	VAPIDPrivateKey string                `yaml:"vapid_private_key,omitempty"`
+	Subject         string                `yaml:"subject,omitempty"`
+	Alerts          []notifications.Alert `yaml:"alerts,omitempty"`
 }
 
 // RecordingConfig controls the on-demand WebSocket traffic recording directory.
@@ -160,16 +169,17 @@ type HeatingSchedulePeriodDocument struct {
 }
 
 type NormalizedConfig struct {
-	Garmin     GarminConfig
-	Host       NormalizedHost
-	Location   NormalizedLocation
-	Tracking   NormalizedTracking
-	Recording  NormalizedRecording
-	Overview   OverviewConfig
-	Switchbot  sensors.Settings
-	Mopeka     MopekaConfig
-	API        APIConfig
-	Automation NormalizedAutomation
+	Garmin        GarminConfig
+	Host          NormalizedHost
+	Location      NormalizedLocation
+	Tracking      NormalizedTracking
+	Recording     NormalizedRecording
+	Overview      OverviewConfig
+	Switchbot     sensors.Settings
+	Mopeka        MopekaConfig
+	Notifications NotificationsConfig
+	API           APIConfig
+	Automation    NormalizedAutomation
 }
 
 // NormalizedHost is the resolved host metric sampler config.
@@ -341,6 +351,13 @@ func (c Config) Validate() error {
 			problems = append(problems, "mopeka.tank_fill_height_mm must be greater than zero")
 		}
 	}
+	knownSensors := map[string]struct{}{sensors.AldeID: {}}
+	for _, sensor := range c.Switchbot.Sensors {
+		knownSensors[sensors.NormalizeMAC(sensor.MAC)] = struct{}{}
+	}
+	if err := (notifications.Settings{Alerts: c.Notifications.Alerts}).Validate(knownSensors); err != nil {
+		problems = append(problems, err.Error())
+	}
 	if len(c.Automation.HeatingPrograms) == 0 {
 		problems = append(problems, "automation.heating_programs must contain at least one program")
 	}
@@ -392,15 +409,16 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		return NormalizedConfig{}, err
 	}
 	out := NormalizedConfig{
-		Garmin:    c.Garmin,
-		Host:      normalizeHost(c.Host),
-		Location:  normalizeLocation(c.Location),
-		Tracking:  normalizeTracking(c.Tracking),
-		Recording: normalizeRecording(c.Recording),
-		Overview:  normalizeOverview(c.Overview),
-		Switchbot: normalizeBtle(c.Switchbot),
-		Mopeka:    normalizeMopeka(c.Mopeka),
-		API:       c.API,
+		Garmin:        c.Garmin,
+		Host:          normalizeHost(c.Host),
+		Location:      normalizeLocation(c.Location),
+		Tracking:      normalizeTracking(c.Tracking),
+		Recording:     normalizeRecording(c.Recording),
+		Overview:      normalizeOverview(c.Overview),
+		Switchbot:     normalizeBtle(c.Switchbot),
+		Mopeka:        normalizeMopeka(c.Mopeka),
+		Notifications: c.Notifications,
+		API:           c.API,
 		Automation: NormalizedAutomation{
 			Location:        loc,
 			HeatingPrograms: make([]domainheating.HeatingProgram, 0, len(c.Automation.HeatingPrograms)),

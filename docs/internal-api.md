@@ -1,6 +1,6 @@
 # Internal HTTP API
 
-Derived from current Go code only. Public authentication, authorization, and TLS behavior are intentionally not implemented in code; the service is designed for a Tailscale-restricted deployment and binds whatever `api.listen` config says.
+Derived from current Go code only. Public authentication and authorization are intentionally not implemented in code; the service is designed for a Tailscale-restricted deployment, with Tailscale Serve providing HTTPS and the Go backend bound to loopback.
 
 ## Router
 
@@ -37,6 +37,9 @@ Derived from current Go code only. Public authentication, authorization, and TLS
 | `/v1/sensors/settings` | PUT | `handleSensorSettings` | `UpdateSensorSettings(ctx,settings)` | `sensors.Settings` | `400` decode/validation, `502`, `405` | unknown |
 | `/v1/sensors/discover` | GET | `handleSensorDiscover` | `SensorDiscover(ctx)` | `[]switchbot.SeenDevice` | `502`, `405` | unknown |
 | `/v1/sensors/history/{id}` | GET | `handleSensorHistory` | `SensorHistory(id,720)` | `[]sensors.Sample` | `500`, `405` | unknown |
+| `/v1/notifications/settings` | GET/PUT | `handleNotificationSettings` | `NotificationSettings()` / `UpdateNotificationSettings(ctx,settings)` | `notifications.Settings` | `400` decode/validation, `502`, `405` | unknown |
+| `/v1/notifications/capabilities` | GET | `handleNotificationCapabilities` | `NotificationCapabilities()` | public VAPID key | `405` | unknown |
+| `/v1/notifications/subscription` | POST/DELETE | `handleNotificationSubscription` | `RegisterPushSubscription(sub)` / `RemovePushSubscription(endpoint)` | `204` | `400`, `502`, `405` | unknown |
 | `/v1/tracks` | GET | `handleTracks` | `TrackList()` | `[]tracking.FileInfo` | `500`, `405` | `TestTracksRoutes` |
 | `/v1/tracks/{name}` | GET | `handleTrack` | `TrackRead(name)` | Raw GeoJSON track file | `400` invalid name, `404` missing, `500`, `405` | `TestTracksRoutes`, `TestTrackRouteRejectsTraversalName` |
 | `/v1/tracks/{name}` | DELETE | `handleTrack` | `TrackDelete(name)` | `204` | `400` invalid name, `404` missing, `500`, `405` | `TestTracksRoutes`, `TestTrackDeleteRejectsTraversalName` |

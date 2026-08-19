@@ -8,15 +8,16 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"empirebus-tests/heating"
+	"empirebus-tests/service/adapters/btle"
 	"empirebus-tests/service/adapters/garmin"
 	"empirebus-tests/service/adapters/geotimezone"
-	"empirebus-tests/service/adapters/btle"
 	"empirebus-tests/service/adapters/teltonika"
 	"empirebus-tests/service/adapters/tzfresolver"
 	"empirebus-tests/service/api/events"
@@ -30,6 +31,7 @@ import (
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/history"
 	"empirebus-tests/service/host"
+	"empirebus-tests/service/notifications"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/tracking"
 )
@@ -97,6 +99,9 @@ type App struct {
 	sensorsStore          *history.Store
 	switchbot             *btle.Adapter
 	mopeka                *mopekaState
+	notificationEvaluator *notifications.Evaluator
+	notificationSender    *notifications.Sender
+	notificationSubs      *notifications.SubscriptionStore
 
 	mu                 sync.RWMutex
 	configMu           sync.Mutex
@@ -256,8 +261,15 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		sensorStates:          make(map[string]*sensorState),
 		lastHistory:           make(map[string]sensorStamp),
 		sensorSettings:        cfg.Switchbot,
+		notificationEvaluator: notifications.NewEvaluator(notifications.Settings{Alerts: cfg.Notifications.Alerts}),
+		notificationSender:    notifications.NewSender(notifications.PushConfig{PublicKey: cfg.Notifications.VAPIDPublicKey, PrivateKey: cfg.Notifications.VAPIDPrivateKey, Subject: cfg.Notifications.Subject}, nil),
 		schedulerWake:         make(chan struct{}, 1),
 		waterSchedulerWake:    make(chan struct{}, 1),
+	}
+	if store, err := notifications.LoadSubscriptionStore(filepath.Join(filepath.Dir(configPath), "notifications-subscriptions.json")); err != nil {
+		logger.Printf("notifications subscriptions: %v", err)
+	} else {
+		app.notificationSubs = store
 	}
 	app.switchbot = btle.New(btle.Config{
 		Settings:  cfg.Switchbot,
@@ -832,6 +844,7 @@ func (a *App) publishStateLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.observeAldeTelemetry()
+			a.evaluateOfflineNotifications()
 			currentOverview := a.Overview()
 			if !reflect.DeepEqual(currentOverview, lastOverview) {
 				lastOverview = currentOverview

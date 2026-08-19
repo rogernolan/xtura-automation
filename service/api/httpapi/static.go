@@ -23,6 +23,20 @@ func registerStaticRoutes(mux *http.ServeMux) {
 		w.Header().Set("Cache-Control", "no-cache")
 		fileServer.ServeHTTP(w, r)
 	})))
+	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		data, err := fs.ReadFile(staticFS, "sw.js")
+		if err != nil {
+			http.Error(w, "load service worker", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(data)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)

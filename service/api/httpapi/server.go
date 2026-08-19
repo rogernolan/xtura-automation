@@ -22,6 +22,7 @@ import (
 	"empirebus-tests/service/domains/sensors"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/host"
+	"empirebus-tests/service/notifications"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 	"empirebus-tests/service/tracking"
@@ -67,6 +68,11 @@ type Application interface {
 	UpdateSensorSettings(context.Context, sensors.Settings) (sensors.Settings, error)
 	SensorDiscover(context.Context) ([]btle.SeenDevice, error)
 	SensorHistory(string, int) ([]sensors.Sample, error)
+	NotificationSettings() notifications.Settings
+	UpdateNotificationSettings(context.Context, notifications.Settings) (notifications.Settings, error)
+	NotificationCapabilities() map[string]string
+	RegisterPushSubscription(notifications.Subscription) error
+	RemovePushSubscription(string) error
 	UpdateTrackingSettings(context.Context, tracking.Settings) (tracking.Settings, error)
 	TrackingState() tracking.State
 	StartTracking(context.Context) (tracking.State, error)
@@ -117,6 +123,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/sensors/settings", s.handleSensorSettings)
 	mux.HandleFunc("/v1/sensors/discover", s.handleSensorDiscover)
 	mux.HandleFunc("/v1/sensors/history/{id}", s.handleSensorHistory)
+	mux.HandleFunc("/v1/notifications/settings", s.handleNotificationSettings)
+	mux.HandleFunc("/v1/notifications/capabilities", s.handleNotificationCapabilities)
+	mux.HandleFunc("/v1/notifications/subscription", s.handleNotificationSubscription)
 	mux.HandleFunc("/v1/tracks", s.handleTracks)
 	mux.HandleFunc("/v1/tracks/{name}", s.handleTrack)
 	mux.HandleFunc("/v1/events", s.handleEvents)
@@ -163,6 +172,62 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.app.Health())
+}
+
+func (s *Server) handleNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.app.NotificationSettings())
+	case http.MethodPut:
+		var settings notifications.Settings
+		if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		updated, err := s.app.UpdateNotificationSettings(r.Context(), settings)
+		if err != nil {
+			writeValidationError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+	default:
+		methodNotAllowed(w)
+	}
+}
+func (s *Server) handleNotificationCapabilities(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.NotificationCapabilities())
+}
+func (s *Server) handleNotificationSubscription(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		var sub notifications.Subscription
+		if err := json.NewDecoder(r.Body).Decode(&sub); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		if err := s.app.RegisterPushSubscription(sub); err != nil {
+			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusNoContent, nil)
+	case http.MethodDelete:
+		endpoint := r.URL.Query().Get("endpoint")
+		if endpoint == "" {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("endpoint is required"))
+			return
+		}
+		if err := s.app.RemovePushSubscription(endpoint); err != nil {
+			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusNoContent, nil)
+	default:
+		methodNotAllowed(w)
+	}
 }
 
 func (s *Server) handleBuild(w http.ResponseWriter, r *http.Request) {
