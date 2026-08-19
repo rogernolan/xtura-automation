@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/SherClockHolmes/webpush-go"
 )
@@ -27,9 +28,17 @@ type Sender struct {
 	client *http.Client
 }
 
+type PushError struct {
+	StatusCode int
+	Status     string
+	Terminal   bool
+}
+
+func (e *PushError) Error() string { return fmt.Sprintf("push endpoint returned %s", e.Status) }
+
 func NewSender(config PushConfig, client *http.Client) *Sender {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: 15 * time.Second}
 	}
 	return &Sender{config: config, client: client}
 }
@@ -48,7 +57,7 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, notification Notifi
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("push endpoint returned %s", resp.Status)
+		return &PushError{StatusCode: resp.StatusCode, Status: resp.Status, Terminal: resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone}
 	}
 	return nil
 }

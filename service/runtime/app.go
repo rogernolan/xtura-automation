@@ -844,6 +844,7 @@ func (a *App) publishStateLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.observeAldeTelemetry()
+			a.evaluateOfflineNotifications()
 			currentOverview := a.Overview()
 			if !reflect.DeepEqual(currentOverview, lastOverview) {
 				lastOverview = currentOverview

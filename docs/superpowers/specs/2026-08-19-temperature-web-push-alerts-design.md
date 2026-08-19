@@ -25,6 +25,10 @@ again every five minutes while that side remains violated. High and low sides
 have independent runtime state. A missing, stale, or invalid reading does not
 trigger or re-arm an alert.
 
+If a sensor targeted by an alert produces no valid reading for more than 30
+minutes, that alert sends one offline notification. The offline state re-arms
+when the sensor produces a valid reading again.
+
 The sensor picker includes Alde and configured SwitchBot sensors. Unknown or
 removed sensors make the settings update invalid rather than silently changing
 the alert target.

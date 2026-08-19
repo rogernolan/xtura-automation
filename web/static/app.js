@@ -193,6 +193,7 @@ const state = {
   overviewSettingsDirty: false,
   notificationSettings: null,
   notificationSubscription: false,
+  editingNotificationID: null,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -782,7 +783,18 @@ function renderNotifications() {
   const sensors = state.overview?.temperature?.sensors || [];
   select.innerHTML = sensors.map((sensor) => `<option value="${sensor.id}">${sensor.name}</option>`).join("");
   byId("notificationState").textContent = state.notificationSubscription ? "Enabled" : "Not enabled";
-  byId("notificationAlerts").textContent = (settings.alerts || []).map((alert) => `${alert.name}: ${alert.sensor_id} ${alert.low_celsius ?? ""}–${alert.high_celsius ?? ""}C (${alert.mode || "crossing"})`).join("\n") || "No alerts configured.";
+  const list = byId("notificationAlerts");
+  list.replaceChildren();
+  if (!(settings.alerts || []).length) { list.textContent = "No alerts configured."; return; }
+  for (const alert of settings.alerts) {
+    const row = document.createElement("div");
+    row.className = "notification-row";
+    const label = document.createElement("span");
+    label.textContent = `${alert.name}: ${alert.sensor_id} ${alert.low_celsius ?? ""}–${alert.high_celsius ?? ""}C (${alert.mode || "crossing"})`;
+    row.append(label);
+    for (const action of ["edit", "remove"]) { const button = document.createElement("button"); button.type = "button"; button.dataset.notificationAction = action; button.dataset.notificationID = alert.id; button.textContent = action[0].toUpperCase() + action.slice(1); row.append(button); }
+    list.append(row);
+  }
 }
 
 function renderBuild() {
@@ -1948,7 +1960,9 @@ function bindActions() {
   });
   if (settingsForm) settingsForm.addEventListener("input", () => { state.overviewSettingsDirty = true; });
   const notificationForm = byId("notificationForm");
-  if (notificationForm) notificationForm.addEventListener("submit", async (event) => { event.preventDefault(); const high = byId("notificationHigh").value; const low = byId("notificationLow").value; const alerts = [...(state.notificationSettings?.alerts || []), { id: crypto.randomUUID(), name: byId("notificationName").value, sensor_id: byId("notificationSensor").value, high_celsius: high === "" ? undefined : Number(high), low_celsius: low === "" ? undefined : Number(low), mode: byId("notificationMode").value }]; try { state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts }), "Saving notifications"); renderNotifications(); notificationForm.reset(); } catch (_) {} });
+  if (notificationForm) notificationForm.addEventListener("submit", async (event) => { event.preventDefault(); const high = byId("notificationHigh").value; const low = byId("notificationLow").value; const next = { id: state.editingNotificationID || crypto.randomUUID(), name: byId("notificationName").value, sensor_id: byId("notificationSensor").value, high_celsius: high === "" ? undefined : Number(high), low_celsius: low === "" ? undefined : Number(low), mode: byId("notificationMode").value }; const alerts = state.editingNotificationID ? (state.notificationSettings.alerts || []).map((alert) => alert.id === state.editingNotificationID ? next : alert) : [...(state.notificationSettings?.alerts || []), next]; try { state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts }), "Saving notifications"); state.editingNotificationID = null; renderNotifications(); notificationForm.reset(); } catch (_) {} });
+  const notificationList = byId("notificationAlerts");
+  if (notificationList) notificationList.addEventListener("click", async (event) => { const button = event.target.closest("button[data-notification-action]"); if (!button) return; const id = button.dataset.notificationID; const alert = (state.notificationSettings.alerts || []).find((item) => item.id === id); if (!alert) return; if (button.dataset.notificationAction === "edit") { state.editingNotificationID = id; byId("notificationName").value = alert.name; byId("notificationSensor").value = alert.sensor_id; byId("notificationHigh").value = alert.high_celsius ?? ""; byId("notificationLow").value = alert.low_celsius ?? ""; byId("notificationMode").value = alert.mode || "crossing"; return; } state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts: state.notificationSettings.alerts.filter((item) => item.id !== id) }), "Removing notification"); renderNotifications(); });
   const subscribe = byId("notificationSubscribe");
   if (subscribe) subscribe.addEventListener("click", async () => { try { const registration = await navigator.serviceWorker.register("/sw.js"); const permission = await Notification.requestPermission(); if (permission !== "granted") throw new Error("Browser notification permission was not granted"); const capabilities = await api.notificationCapabilities(); const encoded = capabilities.public_key.replace(/-/g, "+").replace(/_/g, "/"); const key = Uint8Array.from(atob(encoded + "=".repeat((4 - encoded.length % 4) % 4)), (c) => c.charCodeAt(0)); const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); await api.registerSubscription(subscription.toJSON()); state.notificationSubscription = true; renderNotifications(); } catch (error) { setStatus(error.message, "error"); } });
 }

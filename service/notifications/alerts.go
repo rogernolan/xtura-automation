@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -75,8 +76,8 @@ type Notification struct {
 	SensorID     string    `json:"sensor_id"`
 	SensorName   string    `json:"sensor_name"`
 	Side         string    `json:"side"`
-	TemperatureC float64   `json:"temperature_c"`
-	LimitCelsius float64   `json:"limit_celsius"`
+	TemperatureC *float64  `json:"temperature_c,omitempty"`
+	LimitCelsius *float64  `json:"limit_celsius,omitempty"`
 	At           time.Time `json:"at"`
 }
 
@@ -85,22 +86,41 @@ type sideState struct {
 	lastSent time.Time
 }
 type Evaluator struct {
+	mu       sync.Mutex
 	settings Settings
 	state    map[string]map[string]sideState
+	lastSeen map[string]time.Time
 }
 
 func NewEvaluator(settings Settings) *Evaluator {
-	return &Evaluator{settings: settings, state: make(map[string]map[string]sideState)}
+	return &Evaluator{settings: settings, state: make(map[string]map[string]sideState), lastSeen: make(map[string]time.Time)}
 }
 
 func (e *Evaluator) Configure(settings Settings) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.settings = settings
 	e.state = make(map[string]map[string]sideState)
+	e.lastSeen = make(map[string]time.Time)
 }
 
 func (e *Evaluator) Evaluate(sensorID, sensorName string, temp float64, at time.Time) []Notification {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.evaluateLocked(sensorID, sensorName, temp, at)
+}
+
+func (e *Evaluator) evaluateLocked(sensorID, sensorName string, temp float64, at time.Time) []Notification {
 	if !finite(temp) {
 		return nil
+	}
+	e.lastSeen[sensorID] = at
+	for _, alert := range e.settings.Alerts {
+		if alert.SensorID == sensorID && e.state[alert.ID] != nil {
+			state := e.state[alert.ID]["offline"]
+			state.violated = false
+			e.state[alert.ID]["offline"] = state
+		}
 	}
 	var out []Notification
 	for _, alert := range e.settings.Alerts {
@@ -136,5 +156,29 @@ func (e *Evaluator) evaluateSide(alert Alert, sensorName string, temp float64, a
 	}
 	state.lastSent = at
 	e.state[alert.ID][side] = state
-	return []Notification{{AlertID: alert.ID, AlertName: alert.Name, SensorID: alert.SensorID, SensorName: sensorName, Side: side, TemperatureC: temp, LimitCelsius: *limit, At: at}}
+	return []Notification{{AlertID: alert.ID, AlertName: alert.Name, SensorID: alert.SensorID, SensorName: sensorName, Side: side, TemperatureC: &temp, LimitCelsius: limit, At: at}}
+}
+
+func (e *Evaluator) CheckOffline(now time.Time, sensorNames map[string]string) []Notification {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var out []Notification
+	for _, alert := range e.settings.Alerts {
+		last, ok := e.lastSeen[alert.SensorID]
+		if !ok || now.Sub(last) <= 30*time.Minute {
+			continue
+		}
+		if e.state[alert.ID] == nil {
+			e.state[alert.ID] = make(map[string]sideState)
+		}
+		state := e.state[alert.ID]["offline"]
+		if state.violated {
+			continue
+		}
+		state.violated = true
+		e.state[alert.ID]["offline"] = state
+		name := sensorNames[alert.SensorID]
+		out = append(out, Notification{AlertID: alert.ID, AlertName: alert.Name, SensorID: alert.SensorID, SensorName: name, Side: "offline", At: now})
+	}
+	return out
 }

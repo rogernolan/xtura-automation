@@ -74,6 +74,14 @@ The sample config includes:
 
 Current HTTP endpoints:
 
+Temperature notifications are configured under More > Settings. Each alert can
+target Alde or a configured SwitchBot sensor, with high/low limits and either a
+crossing notification or a five-minute repeat. A configured alert also sends a
+single offline notification when its sensor has not produced a valid reading
+for more than 30 minutes; the offline state re-arms when the sensor reports
+again. Browser push requires enabling notifications from the Settings page and
+accessing Xtura over the Tailscale HTTPS hostname.
+
 - `GET /v1/health`
 - `GET /v1/build`
 - `GET /v1/location/state`

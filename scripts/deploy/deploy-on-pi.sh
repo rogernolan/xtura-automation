@@ -128,6 +128,18 @@ else
   echo "garmin.ws_url in ${CONFIG_PATH} left unchanged"
 fi
 
+EXPECTED_LISTEN="127.0.0.1:80"
+if [[ "${ENVIRONMENT}" == "staging" ]]; then EXPECTED_LISTEN="127.0.0.1:8080"; fi
+if sudo grep -qE 'listen:[[:space:]]+0\.0\.0\.0:(80|8080)' "${CONFIG_PATH}"; then
+  sudo cp "${CONFIG_PATH}" "${CONFIG_PATH}.bak-loopback"
+  sudo sed -i -E "s/listen:[[:space:]]+0\.0\.0\.0:(80|8080)/listen: ${EXPECTED_LISTEN}/" "${CONFIG_PATH}"
+  echo "Migrated ${CONFIG_PATH} API binding to ${EXPECTED_LISTEN} (backup: ${CONFIG_PATH}.bak-loopback)"
+fi
+if ! sudo grep -q "listen: ${EXPECTED_LISTEN}" "${CONFIG_PATH}"; then
+  echo "error: ${CONFIG_PATH} must bind api.listen to ${EXPECTED_LISTEN} for Tailscale-only HTTPS" >&2
+  exit 1
+fi
+
 echo "==> Enabling ${SERVICE_NAME} on boot"
 sudo systemctl daemon-reload
 sudo systemctl enable "${SERVICE_NAME}.service"

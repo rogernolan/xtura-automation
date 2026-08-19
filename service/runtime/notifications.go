@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -74,11 +75,36 @@ func (a *App) evaluateNotifications(id, name string, temp float64, at time.Time)
 	if a.notificationEvaluator == nil || a.notificationSender == nil || a.notificationSubs == nil {
 		return
 	}
-	for _, n := range a.notificationEvaluator.Evaluate(id, name, temp, at) {
+	a.dispatchNotifications(a.notificationEvaluator.Evaluate(id, name, temp, at))
+}
+
+func (a *App) evaluateOfflineNotifications() {
+	if a.notificationEvaluator == nil || a.notificationSender == nil || a.notificationSubs == nil {
+		return
+	}
+	names := map[string]string{sensors.AldeID: "Alde"}
+	a.mu.RLock()
+	for _, sensor := range a.sensorSettings.Sensors {
+		names[sensor.ID()] = sensor.Name
+	}
+	a.mu.RUnlock()
+	a.dispatchNotifications(a.notificationEvaluator.CheckOffline(a.now().UTC(), names))
+}
+
+func (a *App) dispatchNotifications(items []notifications.Notification) {
+	for _, n := range items {
 		for _, sub := range a.notificationSubs.List() {
-			if err := a.notificationSender.Send(context.Background(), sub, n); err != nil {
-				a.logger.Printf("notification send %s: %v", n.AlertID, err)
-			}
+			go func(sub notifications.Subscription, n notifications.Notification) {
+				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+				defer cancel()
+				if err := a.notificationSender.Send(ctx, sub, n); err != nil {
+					var pushErr *notifications.PushError
+					if errors.As(err, &pushErr) && pushErr.Terminal {
+						_ = a.notificationSubs.Remove(sub.Endpoint)
+					}
+					a.logger.Printf("notification send %s: %v", n.AlertID, err)
+				}
+			}(sub, n)
 		}
 	}
 }

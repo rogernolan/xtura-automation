@@ -57,4 +57,25 @@ func TestSettingsValidate(t *testing.T) {
 	}
 }
 
+func TestEvaluatorReportsOfflineAfterThirtyMinutes(t *testing.T) {
+	now := time.Unix(0, 0)
+	e := NewEvaluator(Settings{Alerts: []Alert{{ID: "a", Name: "Cabin", SensorID: "alde", HighCelsius: ptr(20)}}})
+	names := map[string]string{"alde": "Alde"}
+	e.Evaluate("alde", "Alde", 19, now)
+	if got := e.CheckOffline(now.Add(30*time.Minute), names); len(got) != 0 {
+		t.Fatalf("at timeout notifications = %#v", got)
+	}
+	got := e.CheckOffline(now.Add(30*time.Minute+time.Second), names)
+	if len(got) != 1 || got[0].Side != "offline" {
+		t.Fatalf("offline notifications = %#v", got)
+	}
+	if got := e.CheckOffline(now.Add(31*time.Minute), names); len(got) != 0 {
+		t.Fatalf("offline repeat notifications = %#v", got)
+	}
+	e.Evaluate("alde", "Alde", 19, now.Add(32*time.Minute))
+	if got := e.CheckOffline(now.Add(63*time.Minute), names); len(got) != 1 {
+		t.Fatalf("offline rearm notifications = %#v", got)
+	}
+}
+
 func ptr(v float64) *float64 { return &v }
