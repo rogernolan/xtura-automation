@@ -25,6 +25,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	if generated, err := config.EnsureVAPIDKeys(configPath, cfg); err != nil {
+		log.Fatalf("configure VAPID keys: %v", err)
+	} else if generated {
+		log.Printf("generated and persisted VAPID keys in %s", configPath)
+	}
 	normalized, err := cfg.Normalize()
 	if err != nil {
 		log.Fatalf("normalize config: %v", err)
