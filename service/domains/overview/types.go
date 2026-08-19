@@ -20,10 +20,11 @@ type Settings struct {
 }
 
 type Battery struct {
-	StateOfChargePercent *float64 `json:"state_of_charge_percent,omitempty"`
-	CurrentA             *float64 `json:"current_a,omitempty"`
-	ETAHours             *float64 `json:"eta_hours,omitempty"`
-	Status               string   `json:"status"`
+	StateOfChargePercent *float64  `json:"state_of_charge_percent,omitempty"`
+	CurrentA             *float64  `json:"current_a,omitempty"`
+	ETAHours             *float64  `json:"eta_hours,omitempty"`
+	Status               string    `json:"status"`
+	UpdatedAt            time.Time `json:"updated_at,omitempty"`
 }
 
 type Document struct {

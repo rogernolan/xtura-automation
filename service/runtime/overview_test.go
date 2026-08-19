@@ -36,8 +36,12 @@ func TestOverviewDocumentExpiresOldTelemetry(t *testing.T) {
 	temperature := 20.0
 	app := &App{rawConfig: config.Config{}, now: func() time.Time { return now }}
 	doc := app.overviewDocument(overview.Telemetry{AldeTemperatureC: &temperature, UpdatedAt: &old})
-	if doc.Status != "stale" || doc.AldeTemperatureC != nil {
-		t.Fatalf("expected stale telemetry to be unavailable, got status=%q temperature=%v", doc.Status, doc.AldeTemperatureC)
+	if doc.Status != "stale" {
+		t.Fatalf("expected stale status, got status=%q", doc.Status)
+	}
+	// Keep last known values when stale - frontend shows "Last seen" indicator
+	if doc.AldeTemperatureC == nil || *doc.AldeTemperatureC != temperature {
+		t.Fatalf("expected last known temperature to be preserved, got temperature=%v", doc.AldeTemperatureC)
 	}
 }
 

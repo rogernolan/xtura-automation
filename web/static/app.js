@@ -542,6 +542,32 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+const STALE_AFTER_MS = 5 * 60 * 1000; // 5 minutes
+
+function formatLastSeen(isoTime) {
+  if (!isoTime) return "";
+  const date = new Date(isoTime);
+  if (Number.isNaN(date.getTime())) return "";
+  return `Last seen ${date.toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+}
+
+function sensorLastSeenText(isoTime) {
+  if (!isoTime) return { text: "", hidden: true };
+  const date = new Date(isoTime);
+  if (Number.isNaN(date.getTime())) return { text: "", hidden: true };
+  const age = Date.now() - date.getTime();
+  if (age < STALE_AFTER_MS) return { text: "", hidden: true };
+  return { text: formatLastSeen(isoTime), hidden: false };
+}
+
+function applyLastSeen(elementId, isoTime) {
+  const el = byId(elementId);
+  if (!el) return;
+  const { text, hidden } = sensorLastSeenText(isoTime);
+  el.textContent = text;
+  el.hidden = hidden;
+}
+
 function trendLabel(trend) {
   if (trend === "rising") return "Rising";
   if (trend === "falling") return "Falling";
@@ -592,9 +618,16 @@ function renderTemperature(doc) {
     return;
   }
   const primary = temp.primary || {};
+  const primarySensor = sensors[0] || {};
 
   const tone = overviewTemperatureTone(primary.temp, thresholds);
   const humidityLine = primary.humidity === undefined ? "" : `<p class="overview-humidity">Humidity ${Number(primary.humidity).toFixed(0)}%</p>`;
+
+  const lastSeenTime = primarySensor.last_seen;
+  const lastSeenText = formatLastSeen(lastSeenTime);
+  const lastSeenAge = lastSeenTime ? Date.now() - new Date(lastSeenTime).getTime() : Infinity;
+  const showLastSeen = lastSeenAge >= STALE_AFTER_MS && lastSeenText;
+  const lastSeenLine = showLastSeen ? `<p class="detail-text last-seen-text">${escapeHtml(lastSeenText)}</p>` : "";
 
   const subSensors = sensors.length > 1
     ? `<div class="overview-sensor-row">${sensors.slice(1).map((sensor) => `
@@ -624,6 +657,7 @@ function renderTemperature(doc) {
         </div>
         <canvas class="overview-temperature-chart" aria-hidden="true"></canvas>
       </div>
+      ${lastSeenLine}
       ${subSensors}
     </button>`;
   drawTemperatureChart(body.querySelector(".overview-temperature-chart"), primary.history);
@@ -727,9 +761,10 @@ function renderOverview() {
   renderTemperature(doc);
   if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
   if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? formatBatteryCurrent(doc.battery.current_a) : "--";
-  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : doc.battery.status === "stale" ? "Stale" : "N/A") : "N/A";
+  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : "N/A") : "N/A";
   if (byId("timeToFull")) byId("timeToFull").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Time to full: ${Number(doc.battery.eta_hours).toFixed(1)}h` : "Time to full: N/A";
   if (byId("batteryBar")) { const pct = doc.battery && doc.battery.state_of_charge_percent; byId("batteryBar").style.width = pct === undefined || pct === null ? "0%" : `${Math.max(0, Math.min(100, Number(pct)))}%`; }
+  applyLastSeen("batteryLastSeen", doc.battery && doc.battery.updated_at);
   if (byId("freshWater")) byId("freshWater").textContent = overviewPercent(doc.fresh_water_percent);
   if (byId("greyWater")) byId("greyWater").textContent = overviewPercent(doc.grey_water_percent);
   ["fresh", "grey"].forEach((kind) => {
@@ -738,6 +773,7 @@ function renderOverview() {
     if (bar) bar.style.width = value === undefined ? "0%" : `${Math.max(0, Math.min(100, Number(value)))}%`;
     const status = byId(`${kind}WaterState`);
     if (status) status.textContent = overviewSupplyState(value, stale ? "stale" : doc.status);
+    applyLastSeen(`${kind}WaterLastSeen`, doc.updated_at);
   });
   if (byId("gasPercent")) byId("gasPercent").textContent = overviewPercent(doc.gas && doc.gas.level_percent);
   if (byId("gasBar")) {
@@ -751,12 +787,11 @@ function renderOverview() {
       byId("gasDetail").textContent = `${Number(g.level_litres).toFixed(1)}L / ${Number(g.capacity_litres).toFixed(0)}L`;
     } else if (g && g.status === "mopeka_not_configured") {
       byId("gasDetail").textContent = "Mopeka not configured";
-    } else if (g && g.status === "stale") {
-      byId("gasDetail").textContent = "Sensor stale";
     } else {
       byId("gasDetail").textContent = "N/A";
     }
   }
+  applyLastSeen("gasLastSeen", doc.gas && doc.gas.updated_at);
 }
 
 function renderOverviewSettings() {
