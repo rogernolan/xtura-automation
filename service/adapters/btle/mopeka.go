@@ -52,7 +52,8 @@ func DecodeMopeka(manufacturerData []byte, rssi int, mac string) (*MopekaReading
 	// raw = (byte6 << 8) | byte5; raw_level = raw & 0x3FFF
 	rawLevel := float64(((int(manufacturerData[6])<<8 | int(manufacturerData[5])) & 0x3FFF))
 	rawT := float64(manufacturerData[4] & 0x7F)
-	distMm := rawLevel * (MOPEKA_LPG_COEF[0] + MOPEKA_LPG_COEF[1]*rawT + MOPEKA_LPG_COEF[2]*rawT*rawT)
+	coeff := MOPEKA_LPG_COEF[0] + MOPEKA_LPG_COEF[1]*rawT + MOPEKA_LPG_COEF[2]*rawT*rawT
+	distMm := rawLevel * coeff
 
 	// Quality: byte 6, upper 2 bits.
 	quality := int((manufacturerData[6] >> 6) & 0x03)

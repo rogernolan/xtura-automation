@@ -52,7 +52,7 @@ func Decode(elements []AD) (Payload, bool) {
 // SwitchBot products also use company ID 0x0969.
 func DecodeOutdoorMFR(elements []AD, mac string) (Payload, bool) {
 	mfr, ok := manufacturerData(elements, switchBotCompanyID)
-	if !ok || len(mfr) != 11 || !manufacturerMACMatches(mfr, mac) {
+	if !ok || (len(mfr) != 11 && len(mfr) != 12) || !manufacturerMACMatches(mfr, mac) {
 		return Payload{}, false
 	}
 	return decodeOutdoorMFR(mfr), true
