@@ -15,6 +15,7 @@
 - Repeat notifications occur every five minutes while the same side remains violated.
 - Missing, stale, or invalid readings never trigger or re-arm an alert.
 - Browser push requires HTTPS outside localhost.
+- The Go API remains an internal loopback HTTP backend; direct LAN/Tailscale HTTP access is disabled.
 - Preserve the existing untracked capture file and unrelated worktree changes.
 
 ---
@@ -120,10 +121,14 @@
 - Modify: `config.sim.yaml`
 - Modify: `README.md`
 - Modify: `docs/internal-api.md`
+- Modify: `scripts/deploy/deploy-on-pi.sh`
+- Modify: `scripts/deploy/run-deploy-from-mac.sh`
+- Modify: `ops/systemd/empirebusd.service`
+- Modify: `ops/systemd/empirebusd-staging.service`
 
 - [ ] Add documentation for VAPID configuration, writable subscription state, HTTPS/localhost requirements, and all new API routes.
+- [ ] Configure production and staging backends on loopback-only ports and configure Tailscale Serve to expose only HTTPS hostnames; make deployment idempotent and fail clearly when Tailscale is unavailable.
 - [ ] Run `go test ./...` and `npm test`.
-- [ ] Run `./scripts/sim/run-sim.sh`, verify `/v1/health`, notification settings, service-worker availability, and the Settings UI in the simulator.
+- [ ] Run `./scripts/sim/run-sim.sh`, verify `/v1/health`, notification settings, service-worker availability, and the Settings UI in the simulator; verify the Pi deployment script's Serve commands with a dry-run/test seam.
 - [ ] Run `git diff --check` and review the final diff for unrelated changes.
 - [ ] Commit `docs: document temperature web push alerts`.
-

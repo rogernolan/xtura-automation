@@ -3,6 +3,10 @@ class XturaApi {
   async getOverview() { return this.request("/v1/overview"); }
   async getOverviewSettings() { return this.request("/v1/overview/settings"); }
   async updateOverviewSettings(settings) { return this.request("/v1/overview/settings", { method: "PUT", body: settings }); }
+  async getNotificationSettings() { return this.request("/v1/notifications/settings"); }
+  async updateNotificationSettings(settings) { return this.request("/v1/notifications/settings", { method: "PUT", body: settings }); }
+  async notificationCapabilities() { return this.request("/v1/notifications/capabilities"); }
+  async registerSubscription(subscription) { return this.request("/v1/notifications/subscription", { method: "POST", body: subscription }); }
   async getLightsState() {
     return this.request("/v1/lights/state");
   }
@@ -187,6 +191,8 @@ const state = {
   overview: null,
   overviewSettings: null,
   overviewSettingsDirty: false,
+  notificationSettings: null,
+  notificationSubscription: false,
   schedule: null,
   scheduleEditable: false,
   scheduleRenderSignature: "",
@@ -504,6 +510,7 @@ function closeNavigation({ restoreFocus = true } = {}) {
 function render() {
   renderOverview();
   renderOverviewSettings();
+  renderNotifications();
   renderLights();
   renderWater();
   renderHeating();
@@ -766,6 +773,16 @@ function renderOverviewSettings() {
   ["comfortCold", "comfortComfort", "comfortWarm", "comfortHot"].forEach((id, index) => { if (byId(id)) byId(id).value = values[index] ?? ""; });
   if (byId("batteryCapacity")) byId("batteryCapacity").value = settings.usable_battery_capacity_ah ?? "";
   if (byId("gasCapacity")) byId("gasCapacity").value = settings.gas_tank_capacity_litres ?? "";
+}
+
+function renderNotifications() {
+  const settings = state.notificationSettings;
+  const select = byId("notificationSensor");
+  if (!settings || !select) return;
+  const sensors = state.overview?.temperature?.sensors || [];
+  select.innerHTML = sensors.map((sensor) => `<option value="${sensor.id}">${sensor.name}</option>`).join("");
+  byId("notificationState").textContent = state.notificationSubscription ? "Enabled" : "Not enabled";
+  byId("notificationAlerts").textContent = (settings.alerts || []).map((alert) => `${alert.name}: ${alert.sensor_id} ${alert.low_celsius ?? ""}–${alert.high_celsius ?? ""}C (${alert.mode || "crossing"})`).join("\n") || "No alerts configured.";
 }
 
 function renderBuild() {
@@ -1655,7 +1672,7 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus, overview, overviewSettings] = await Promise.all([
+  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus, overview, overviewSettings, notificationSettings] = await Promise.all([
     api.getLightsState(),
     api.getWaterState(),
     api.getHeatingMode(),
@@ -1668,6 +1685,7 @@ async function loadInitialState() {
     api.getPiStatus(),
     api.getOverview(),
     api.getOverviewSettings(),
+    api.getNotificationSettings(),
   ]);
   state.lights = lights;
   state.water = water;
@@ -1681,6 +1699,7 @@ async function loadInitialState() {
   state.piStatus = piStatus;
   state.overview = overview;
   state.overviewSettings = overviewSettings;
+  state.notificationSettings = notificationSettings;
   setStatus("Loaded");
   render();
 }
@@ -1928,6 +1947,10 @@ function bindActions() {
     } catch (_) { return; }
   });
   if (settingsForm) settingsForm.addEventListener("input", () => { state.overviewSettingsDirty = true; });
+  const notificationForm = byId("notificationForm");
+  if (notificationForm) notificationForm.addEventListener("submit", async (event) => { event.preventDefault(); const high = byId("notificationHigh").value; const low = byId("notificationLow").value; const alerts = [...(state.notificationSettings?.alerts || []), { id: crypto.randomUUID(), name: byId("notificationName").value, sensor_id: byId("notificationSensor").value, high_celsius: high === "" ? undefined : Number(high), low_celsius: low === "" ? undefined : Number(low), mode: byId("notificationMode").value }]; try { state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts }), "Saving notifications"); renderNotifications(); notificationForm.reset(); } catch (_) {} });
+  const subscribe = byId("notificationSubscribe");
+  if (subscribe) subscribe.addEventListener("click", async () => { try { const registration = await navigator.serviceWorker.register("/sw.js"); const permission = await Notification.requestPermission(); if (permission !== "granted") throw new Error("Browser notification permission was not granted"); const capabilities = await api.notificationCapabilities(); const encoded = capabilities.public_key.replace(/-/g, "+").replace(/_/g, "/"); const key = Uint8Array.from(atob(encoded + "=".repeat((4 - encoded.length % 4) % 4)), (c) => c.charCodeAt(0)); const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); await api.registerSubscription(subscription.toJSON()); state.notificationSubscription = true; renderNotifications(); } catch (error) { setStatus(error.message, "error"); } });
 }
 
 function flashCount() {

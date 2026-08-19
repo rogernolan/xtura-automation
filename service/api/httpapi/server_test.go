@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/adapters/btle"
+	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/buildinfo"
 	"empirebus-tests/service/config"
 	domainheating "empirebus-tests/service/domains/heating"
@@ -23,6 +23,7 @@ import (
 	"empirebus-tests/service/domains/sensors"
 	domainwater "empirebus-tests/service/domains/water"
 	"empirebus-tests/service/host"
+	"empirebus-tests/service/notifications"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 	"empirebus-tests/service/tracking"
@@ -84,6 +85,16 @@ func (f fakeApp) EnsurePower(context.Context, string) error {
 func (f fakeApp) SetTargetTemperature(context.Context, float64) error {
 	return f.setTargetErr
 }
+
+func (f fakeApp) NotificationSettings() notifications.Settings { return notifications.Settings{} }
+func (f fakeApp) UpdateNotificationSettings(context.Context, notifications.Settings) (notifications.Settings, error) {
+	return notifications.Settings{}, nil
+}
+func (f fakeApp) NotificationCapabilities() map[string]string {
+	return map[string]string{"public_key": ""}
+}
+func (f fakeApp) RegisterPushSubscription(notifications.Subscription) error { return nil }
+func (f fakeApp) RemovePushSubscription(string) error                       { return nil }
 
 func (f fakeApp) HeatingPrograms(time.Time) []runtime.ProgramStatus {
 	return nil

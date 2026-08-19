@@ -93,6 +93,7 @@ func (a *App) recordSensorReading(id, name, source string, temp float64, hum *fl
 			a.logger.Printf("sensor history append: %v", err)
 		}
 	}
+	a.evaluateNotifications(id, name, temp, at)
 }
 
 // handleSensorReading is the switchbot adapter callback.

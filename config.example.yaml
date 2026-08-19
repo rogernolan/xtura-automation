@@ -83,6 +83,13 @@ mopeka:
   # tank_capacity_litres: 22
   # tank_fill_height_mm: 290
 
+notifications:
+  # Generate a VAPID key pair once and keep the private key secret.
+  # The public key is sent to browsers when they enable push.
+  # vapid_public_key: ""
+  # vapid_private_key: ""
+  # subject: "mailto:you@example.com"
+
 host:
   # How often the Pi status pane samples host metrics. Zero uses the 5s default.
   sample_interval: 5s
@@ -122,4 +129,5 @@ automation:
       # - heat -> off
 
 api:
-  listen: 0.0.0.0:80
+  # Tailscale Serve is the only external HTTPS entry point.
+  listen: 127.0.0.1:80

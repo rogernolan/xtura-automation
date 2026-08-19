@@ -138,6 +138,20 @@ sudo systemctl --no-pager --full status "${SERVICE_NAME}.service"
 echo "==> Recent ${SERVICE_NAME} logs"
 sudo journalctl -u "${SERVICE_NAME}.service" -n 50 --no-pager
 
+if command -v tailscale >/dev/null 2>&1; then
+  if [[ "${ENVIRONMENT}" == "prod" ]]; then
+    echo "==> Configuring Tailscale Serve HTTPS for production"
+    sudo tailscale serve --bg --https=443 "http://127.0.0.1:80"
+  else
+    echo "==> Configuring Tailscale Serve HTTPS for staging"
+    sudo tailscale serve --bg --https=8443 "http://127.0.0.1:8080"
+  fi
+  sudo tailscale serve status
+else
+  echo "error: tailscale is required to expose Xtura over HTTPS" >&2
+  exit 1
+fi
+
 echo "==> Health check"
 HEALTH_OUTPUT="$(mktemp)"
 for attempt in {1..30}; do
