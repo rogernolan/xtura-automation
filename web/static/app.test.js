@@ -5,6 +5,16 @@ const test = require("node:test");
 const vm = require("node:vm");
 const navigation = require("./navigation.js");
 
+test("home screen metadata fixes the icon and installed app name", () => {
+  const html = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
+
+  assert.match(html, /<meta name="application-name" content="Xtura">/);
+  assert.match(html, /<meta name="apple-mobile-web-app-title" content="Xtura">/);
+  assert.match(html, /<link rel="apple-touch-icon" href="\/static\/xtura-home-screen\.png">/);
+  assert.match(html, /<link rel="icon" type="image\/png" href="\/static\/xtura-home-screen\.png">/);
+  assert.doesNotMatch(html, /<link rel="icon" href="data:,">/);
+});
+
 class ElementStub {
   constructor(id, options = {}) {
     this.id = id;
