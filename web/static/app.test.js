@@ -258,7 +258,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
@@ -274,6 +274,8 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     overviewCurrentState: context.module.exports.overviewCurrentState,
     overviewSupplyState: context.module.exports.overviewSupplyState,
     formatBatteryCurrent: context.module.exports.formatBatteryCurrent,
+    formatLastSeen: context.module.exports.formatLastSeen,
+    sensorLastSeenText: context.module.exports.sensorLastSeenText,
     state: context.module.exports.state,
     document,
     window,
@@ -327,6 +329,42 @@ test("healthy supplies leave their status label blank", () => {
   assert.equal(overviewSupplyState(42, "available"), "");
   assert.equal(overviewSupplyState(undefined, "available"), "N/A");
   assert.equal(overviewSupplyState(undefined, "stale"), "Stale");
+});
+
+test("formatLastSeen returns empty string for invalid input", () => {
+  const { formatLastSeen } = loadApp();
+  assert.equal(formatLastSeen(null), "");
+  assert.equal(formatLastSeen(undefined), "");
+  assert.equal(formatLastSeen(""), "");
+  assert.equal(formatLastSeen("invalid-date"), "");
+});
+
+test("formatLastSeen returns formatted string for valid date", () => {
+  const { formatLastSeen } = loadApp();
+  const result = formatLastSeen("2026-08-15T12:30:00Z");
+  assert.match(result, /^Last seen/);
+});
+
+test("sensorLastSeenText returns hidden for recent timestamps", () => {
+  const { sensorLastSeenText } = loadApp();
+  const now = new Date().toISOString();
+  const result = sensorLastSeenText(now);
+  assert.equal(result.hidden, true);
+  assert.equal(result.text, "");
+});
+
+test("sensorLastSeenText returns visible for old timestamps", () => {
+  const { sensorLastSeenText } = loadApp();
+  const oldTime = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10 minutes ago
+  const result = sensorLastSeenText(oldTime);
+  assert.equal(result.hidden, false);
+  assert.match(result.text, /^Last seen/);
+});
+
+test("sensorLastSeenText returns hidden for null/undefined", () => {
+  const { sensorLastSeenText } = loadApp();
+  assert.equal(sensorLastSeenText(null).hidden, true);
+  assert.equal(sensorLastSeenText(undefined).hidden, true);
 });
 
 test("applyRoute shows the selected page and marks its drawer link", () => {

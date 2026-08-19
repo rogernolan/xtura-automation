@@ -20,6 +20,7 @@ type mopekaState struct {
 	quality     int
 	lastSeen    time.Time
 	hasReading  bool
+	lastGas     overview.Gas
 }
 
 func (a *App) handleMopekaReading(reading btle.MopekaReading) {
@@ -55,7 +56,13 @@ func (a *App) overviewGas() overview.Gas {
 	}
 
 	if time.Since(a.mopeka.lastSeen) > mopekaStaleAfter {
-		return overview.Gas{Status: "stale"}
+		// Return last known values with stale status
+		if a.mopeka.lastGas.UpdatedAt.IsZero() {
+			return overview.Gas{Status: "stale"}
+		}
+		stale := a.mopeka.lastGas
+		stale.Status = "stale"
+		return stale
 	}
 
 	tankCapacity := cfg.Overview.GasTankCapacityLitres
@@ -78,7 +85,7 @@ func (a *App) overviewGas() overview.Gas {
 
 	status := "ok"
 
-	return overview.Gas{
+	gas := overview.Gas{
 		Status:         status,
 		LevelPercent:   &pct,
 		LevelLitres:    &litres,
@@ -88,6 +95,9 @@ func (a *App) overviewGas() overview.Gas {
 		Quality:        &a.mopeka.quality,
 		UpdatedAt:      a.mopeka.lastSeen,
 	}
+	// Cache for when we go stale
+	a.mopeka.lastGas = gas
+	return gas
 }
 
 func (a *App) startMopekaSim(ctx context.Context) {

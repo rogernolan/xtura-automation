@@ -45,7 +45,7 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 		GreyWaterPercent:  telemetry.GreyWaterPercent,
 		UpdatedAt:         telemetry.UpdatedAt,
 		Gas:               a.overviewGas(),
-		Battery:           overview.Battery{StateOfChargePercent: telemetry.BatteryStateOfChargePercent, CurrentA: telemetry.BatteryCurrentA, Status: "unavailable"},
+		Battery:           overview.Battery{StateOfChargePercent: telemetry.BatteryStateOfChargePercent, CurrentA: telemetry.BatteryCurrentA, Status: "unavailable", UpdatedAt: telemetry.UpdatedAt},
 		Temperature:       a.temperatureDocument(telemetry),
 	}
 	if telemetry.BatteryCurrentA != nil {
@@ -69,10 +69,6 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 
 func expireOverviewDocument(doc *overview.Document) {
 	doc.Status = "stale"
-	doc.AldeTemperatureC = nil
-	doc.FreshWaterPercent = nil
-	doc.GreyWaterPercent = nil
-	doc.Battery = overview.Battery{Status: "stale"}
 }
 
 func (a *App) overviewConfig() config.OverviewConfig {
