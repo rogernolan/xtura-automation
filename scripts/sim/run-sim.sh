@@ -55,6 +55,7 @@ cleanup() {
   rm -rf "${BUILD_DIR}"
 }
 trap cleanup EXIT INT TERM
+cp "${REPO_ROOT}/config.sim.yaml" "${BUILD_DIR}/config.sim.yaml"
 
 for _ in {1..50}; do
   if curl --silent --output /dev/null --max-time 1 http://127.0.0.1:8090/; then
@@ -63,8 +64,8 @@ for _ in {1..50}; do
   sleep 0.1
 done
 
-echo "==> Starting empirebusd (config=config.sim.yaml)"
+echo "==> Starting empirebusd (config=temporary sim copy)"
 echo "    UI/API: http://localhost:8091"
-XTURA_SIM_SWITCHBOT=1 "${BUILD_DIR}/empirebusd" -config ./config.sim.yaml &
+XTURA_SIM_SWITCHBOT=1 "${BUILD_DIR}/empirebusd" -config "${BUILD_DIR}/config.sim.yaml" &
 EMPIREBUSD_PID=$!
 wait "${EMPIREBUSD_PID}"

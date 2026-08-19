@@ -82,6 +82,24 @@ for more than 30 minutes; the offline state re-arms when the sensor reports
 again. Browser push requires enabling notifications from the Settings page and
 accessing Xtura over the Tailscale HTTPS hostname.
 
+Web Push also uses a VAPID key pair to identify Xtura to browser push
+providers. The daemon generates and persists a pair in the configured YAML file
+when both keys are absent. It never rotates an existing pair; if only one key
+is present, startup stops with an error. Set `notifications.subject` to a
+contact URI such as `mailto:you@example.com` before enabling push. The subject
+is not an HTTPS certificate: Tailscale Serve still provides the HTTPS required
+by browsers. To generate or repair the pair manually, run this on the
+deployment host:
+
+```sh
+./scripts/generate-vapid-keys.sh \
+  -config /var/lib/xtura/config.yaml \
+  -subject mailto:you@example.com
+```
+
+Keep the private key and the config file secret; losing the pair means existing
+browser subscriptions must be created again.
+
 - `GET /v1/health`
 - `GET /v1/build`
 - `GET /v1/location/state`

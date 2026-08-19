@@ -84,8 +84,11 @@ mopeka:
   # tank_fill_height_mm: 290
 
 notifications:
-  # Generate a VAPID key pair once and keep the private key secret.
-  # The public key is sent to browsers when they enable push.
+  # Xtura generates this pair on first startup and persists it here. It is
+  # stable server identity: do not rotate it while browsers are subscribed.
+  # To generate it manually, run:
+  #   ./scripts/generate-vapid-keys.sh -config /var/lib/xtura/config.yaml \
+  #     -subject mailto:you@example.com
   # vapid_public_key: ""
   # vapid_private_key: ""
   # subject: "mailto:you@example.com"
