@@ -26,6 +26,7 @@ import (
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 	"empirebus-tests/service/tracking"
+	"empirebus-tests/service/waterhistory"
 )
 
 type Server struct {
@@ -50,6 +51,7 @@ type Application interface {
 	LightsState() domainlights.State
 	FlashExteriorLights(context.Context, int) error
 	WaterState() domainwater.State
+	WaterHistory() waterhistory.Document
 	OpenGreyWaterValve(context.Context) error
 	CloseGreyWaterValve(context.Context) error
 	ScheduleGreyWaterOpening(context.Context, string, time.Duration) (domainwater.State, error)
@@ -107,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/lights/state", s.handleLightsState)
 	mux.HandleFunc("/v1/lights/external/flash", s.handleExteriorFlash)
 	mux.HandleFunc("/v1/water/state", s.handleWaterState)
+	mux.HandleFunc("/v1/water/history", s.handleWaterHistory)
 	mux.HandleFunc("/v1/water/grey-valve/open", s.handleGreyWaterValveOpen)
 	mux.HandleFunc("/v1/water/grey-valve/close", s.handleGreyWaterValveClose)
 	mux.HandleFunc("/v1/water/grey-valve/schedule", s.handleGreyWaterSchedule)
@@ -478,6 +481,14 @@ func (s *Server) handleWaterState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.app.WaterState())
+}
+
+func (s *Server) handleWaterHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.app.WaterHistory())
 }
 
 func (s *Server) handleGreyWaterValveOpen(w http.ResponseWriter, r *http.Request) {
