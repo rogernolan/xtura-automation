@@ -1355,7 +1355,8 @@ function renderWaterHistory() {
   const y = (value) => top + ((100 - Number(value)) / 100) * plotHeight;
   const lineSamples = (field) => {
     const byColumn = new Map();
-    const columnDuration = (end - start) / plotWidth;
+    const chartSamplePixelWidth = 4;
+    const columnDuration = (end - start) / (plotWidth / chartSamplePixelWidth);
     history.samples.forEach((sample) => {
       const timestamp = new Date(sample.t).getTime();
       if (sample[field] === null || sample[field] === undefined || !Number.isFinite(timestamp) || timestamp < start || timestamp > end) {
