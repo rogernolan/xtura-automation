@@ -1368,6 +1368,14 @@ function renderWaterHistory() {
     });
     return output.trim();
   };
+  const pointMarkers = (field, className) => {
+    const points = history.samples.filter((sample) => {
+      const timestamp = new Date(sample.t).getTime();
+      return sample[field] !== null && sample[field] !== undefined && Number.isFinite(timestamp) && timestamp >= start && timestamp <= end;
+    });
+    const visible = points.length > 1 ? [points[0], points[points.length - 1]] : points;
+    return visible.map((sample) => `<circle cx="${x(sample.t).toFixed(1)}" cy="${y(sample[field]).toFixed(1)}" r="3.5" class="${className} water-history-point"/>`).join("");
+  };
   const grid = [0, 25, 50, 75, 100].map((value) => `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" class="water-history-grid"/><text x="${left - 7}" y="${y(value) + 4}" text-anchor="end" class="water-history-axis">${value}%</text>`).join("");
   const labels = [0, 1, 2, 3, 4, 5, 6, 7].map((day) => {
     const at = new Date(start + day * 24 * 60 * 60 * 1000);
@@ -1379,7 +1387,7 @@ function renderWaterHistory() {
     const description = (marker.events || []).map((event) => `${event.tank} ${event.kind}`).join(" and ");
     return `<line x1="${x(marker.t)}" x2="${x(marker.t)}" y1="${top}" y2="${top + plotHeight}" class="water-history-marker"><title>${escapeHtml(description)}</title></line>`;
   }).join("");
-  chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Seven-day water history from 0 to 100 percent"><g>${grid}${labels}</g>${markers}<path d="${path("fresh_percent")}" class="water-history-fresh"/><path d="${path("grey_percent")}" class="water-history-grey"/></svg>`;
+  chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Seven-day water history from 0 to 100 percent"><g>${grid}${labels}</g>${markers}<path d="${path("fresh_percent")}" class="water-history-fresh" fill="none" stroke="#1976d2" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="${path("grey_percent")}" class="water-history-grey" fill="none" stroke="#4b4b4b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${pointMarkers("fresh_percent", "water-history-fresh")}${pointMarkers("grey_percent", "water-history-grey")}</svg>`;
 }
 
 function formatElapsedDays(days) {

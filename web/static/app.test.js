@@ -658,6 +658,8 @@ test("renders seven-day water chart with both series and grouped markers", () =>
   renderWaterHistory();
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh/);
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey/);
+  assert.match(elements.waterHistoryChart.innerHTML, /stroke="#1976d2"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-point/);
   assert.match(elements.waterHistoryChart.innerHTML, /100%/);
   assert.match(elements.waterHistoryChart.innerHTML, /0%/);
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-marker/);
