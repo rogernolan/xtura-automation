@@ -2,6 +2,8 @@ package waterhistory
 
 import (
 	"math"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -67,6 +69,34 @@ func TestSubthresholdMovementDoesNotCreateEvent(t *testing.T) {
 	observeBoth(t, store, base.Add(20*time.Minute), 54, 80)
 	if got := len(store.Document(base.Add(31 * time.Minute)).Events); got != 0 {
 		t.Fatalf("got %d events", got)
+	}
+}
+
+func TestNormalUsageAdvancesSettledBaseline(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 100, 0)
+	observeBoth(t, store, base.Add(time.Minute), 20, 80)
+	observeBoth(t, store, base.Add(2*time.Minute), 90, 70)
+	observeBoth(t, store, base.Add(13*time.Minute), 90, 70)
+	doc := store.Document(base.Add(13 * time.Minute))
+	if len(doc.Events) != 2 {
+		t.Fatalf("expected fill and empty after normal usage, got %+v", doc.Events)
+	}
+}
+
+func TestObservationAppendsSamples(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	store := New(Options{Directory: dir}, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 50)
+	observeBoth(t, store, base.Add(time.Minute), 51, 51)
+	data, err := os.ReadFile(dir + "/samples.ndjson")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(data), "\n"); got != 2 {
+		t.Fatalf("expected two appended rows, got %d", got)
 	}
 }
 
@@ -156,12 +186,12 @@ func TestSummaryUsage(t *testing.T) {
 	observeBoth(t, store, base, 50, 80)
 	observeBoth(t, store, base.Add(time.Minute), 56, 74)
 	observeBoth(t, store, base.Add(11*time.Minute), 56, 74)
-	fresh, grey := 40.0, 60.0
+	fresh, grey := 40.0, 90.0
 	if _, err := store.Observe(Sample{At: base.Add(12 * time.Minute), FreshPercent: &fresh, GreyPercent: &grey}, base.Add(12*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	doc := store.Document(base.Add(12 * time.Minute))
-	if doc.Fresh.UsedPercent == nil || math.Abs(*doc.Fresh.UsedPercent-16) > 0.001 || doc.Grey.UsedPercent == nil || math.Abs(*doc.Grey.UsedPercent-14) > 0.001 {
+	if doc.Fresh.UsedPercent == nil || math.Abs(*doc.Fresh.UsedPercent-16) > 0.001 || doc.Grey.UsedPercent == nil || math.Abs(*doc.Grey.UsedPercent-16) > 0.001 {
 		t.Fatalf("unexpected summaries: %+v", doc)
 	}
 }

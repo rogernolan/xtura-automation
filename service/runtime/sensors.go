@@ -446,6 +446,11 @@ func (a *App) sensorCompactLoop(ctx context.Context) {
 			if err := a.sensorsStore.Compact(); err != nil {
 				a.logger.Printf("sensor history compaction: %v", err)
 			}
+			if a.waterHistory != nil {
+				if err := a.waterHistory.Compact(a.nowUTC()); err != nil {
+					a.logger.Printf("water history compaction: %v", err)
+				}
+			}
 		}
 	}
 }

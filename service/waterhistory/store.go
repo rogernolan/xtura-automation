@@ -88,6 +88,7 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 		offlineObservation = true
 		sample.At = observedAt
 	}
+	eventCount := len(s.events)
 	s.state.LastSampleAt = timePtr(sample.At)
 	s.samples = append(s.samples, Point{At: sample.At, FreshPercent: cloneFloat(sample.FreshPercent), GreyPercent: cloneFloat(sample.GreyPercent)})
 	if sample.FreshPercent != nil {
@@ -104,7 +105,7 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 	}
 	s.state.Fresh = cloneFloat(sample.FreshPercentOr(s.state.Fresh))
 	s.state.Grey = cloneFloat(sample.GreyPercentOr(s.state.Grey))
-	if err := s.persistLocked(); err != nil {
+	if err := s.persistObservationLocked(s.samples[len(s.samples)-1], eventCount); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -158,6 +159,9 @@ func (s *Store) observeTank(tank, kind string, value float64, at time.Time) {
 		return
 	}
 	if cand == nil {
+		if (kind == KindFill && value < baseValue(base)) || (kind == KindEmpty && value > baseValue(base)) {
+			base = cloneFloat(&value)
+		}
 		moved := (kind == KindFill && value-baseValue(base) >= s.options.Threshold) || (kind == KindEmpty && baseValue(base)-value >= s.options.Threshold)
 		if moved {
 			cand = &candidate{Tank: tank, Kind: kind, Baseline: baseValue(base), Current: value, StartedAt: at, MovedAt: at}
@@ -224,6 +228,9 @@ func (s *Store) summaryLocked(tank string, current float64, now time.Time) Summa
 	at := latest.At
 	days := now.UTC().Sub(at).Hours() / 24
 	used := latest.To - current
+	if tank == TankGrey {
+		used = current - latest.To
+	}
 	if used < 0 {
 		used = 0
 	}
@@ -303,6 +310,46 @@ func (s *Store) persistLocked() error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(s.options.Directory, "state.json"), data, 0o644)
+}
+
+func (s *Store) persistObservationLocked(sample Point, eventStart int) error {
+	if s.options.Directory == "" {
+		return nil
+	}
+	if err := os.MkdirAll(s.options.Directory, 0o755); err != nil {
+		return err
+	}
+	if err := appendNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), sample); err != nil {
+		return err
+	}
+	for _, event := range s.events[eventStart:] {
+		if err := appendNDJSON(filepath.Join(s.options.Directory, "events.ndjson"), event); err != nil {
+			return err
+		}
+	}
+	return writeState(filepath.Join(s.options.Directory, "state.json"), s.state)
+}
+
+func appendNDJSON(path string, value interface{}) error {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(append(data, '\n'))
+	return err
+}
+
+func writeState(path string, state persistedState) error {
+	data, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 func readNDJSON(path string, target interface{}) error {
