@@ -306,11 +306,8 @@ func (s *Store) Load() error {
 
 func (s *Store) compactLoadedSamplesLocked() error {
 	compacted := compactSamples(s.samples)
-	if len(compacted) == len(s.samples) {
-		return nil
-	}
 	s.samples = compacted
-	return s.persistLocked()
+	return nil
 }
 
 func (s *Store) Compact(now time.Time) error {
