@@ -1354,15 +1354,16 @@ function renderWaterHistory() {
   const x = (at) => left + ((new Date(at).getTime() - start) / (end - start)) * plotWidth;
   const y = (value) => top + ((100 - Number(value)) / 100) * plotHeight;
   const lineSamples = (field) => {
-    const byMinute = new Map();
+    const byColumn = new Map();
+    const columnDuration = (end - start) / plotWidth;
     history.samples.forEach((sample) => {
       const timestamp = new Date(sample.t).getTime();
       if (sample[field] === null || sample[field] === undefined || !Number.isFinite(timestamp) || timestamp < start || timestamp > end) {
         return;
       }
-      byMinute.set(Math.floor(timestamp / 60000), sample);
+      byColumn.set(Math.floor((timestamp - start) / columnDuration), sample);
     });
-    return [...byMinute.values()].sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+    return [...byColumn.values()].sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
   };
   const path = (field) => {
     let output = "";
