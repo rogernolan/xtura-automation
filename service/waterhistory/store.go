@@ -15,6 +15,7 @@ const (
 	defaultSettling  = 10 * time.Minute
 	defaultGrouping  = time.Hour
 	defaultRetention = 7 * 24 * time.Hour
+	sampleHeartbeat  = time.Minute
 )
 
 type candidate struct {
@@ -90,7 +91,11 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 	}
 	eventCount := len(s.events)
 	s.state.LastSampleAt = timePtr(sample.At)
-	s.samples = append(s.samples, Point{At: sample.At, FreshPercent: cloneFloat(sample.FreshPercent), GreyPercent: cloneFloat(sample.GreyPercent)})
+	point := Point{At: sample.At, FreshPercent: cloneFloat(sample.FreshPercent), GreyPercent: cloneFloat(sample.GreyPercent)}
+	storeSample := s.shouldStoreSample(point)
+	if storeSample {
+		s.samples = append(s.samples, point)
+	}
 	if sample.FreshPercent != nil {
 		s.observeTank(TankFresh, KindFill, *sample.FreshPercent, observedAt)
 		if offlineObservation {
@@ -105,10 +110,28 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 	}
 	s.state.Fresh = cloneFloat(sample.FreshPercentOr(s.state.Fresh))
 	s.state.Grey = cloneFloat(sample.GreyPercentOr(s.state.Grey))
-	if err := s.persistObservationLocked(s.samples[len(s.samples)-1], eventCount); err != nil {
+	if err := s.persistObservationLocked(point, eventCount, storeSample); err != nil {
 		return false, err
 	}
-	return true, nil
+	return storeSample || len(s.events) > eventCount, nil
+}
+
+func (s *Store) shouldStoreSample(point Point) bool {
+	if len(s.samples) == 0 {
+		return true
+	}
+	last := s.samples[len(s.samples)-1]
+	if !sameLevel(last.FreshPercent, point.FreshPercent) || !sameLevel(last.GreyPercent, point.GreyPercent) {
+		return true
+	}
+	return point.At.Sub(last.At) >= sampleHeartbeat
+}
+
+func sameLevel(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func (s *Store) commitCandidate(tank string, at time.Time) {
@@ -312,15 +335,17 @@ func (s *Store) persistLocked() error {
 	return os.WriteFile(filepath.Join(s.options.Directory, "state.json"), data, 0o644)
 }
 
-func (s *Store) persistObservationLocked(sample Point, eventStart int) error {
+func (s *Store) persistObservationLocked(sample Point, eventStart int, storeSample bool) error {
 	if s.options.Directory == "" {
 		return nil
 	}
 	if err := os.MkdirAll(s.options.Directory, 0o755); err != nil {
 		return err
 	}
-	if err := appendNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), sample); err != nil {
-		return err
+	if storeSample {
+		if err := appendNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), sample); err != nil {
+			return err
+		}
 	}
 	for _, event := range s.events[eventStart:] {
 		if err := appendNDJSON(filepath.Join(s.options.Directory, "events.ndjson"), event); err != nil {

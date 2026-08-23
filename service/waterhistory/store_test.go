@@ -100,6 +100,20 @@ func TestObservationAppendsSamples(t *testing.T) {
 	}
 }
 
+func TestIdenticalObservationsUseOneMinuteHeartbeats(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 50)
+	observeBoth(t, store, base.Add(30*time.Second), 50, 50)
+	observeBoth(t, store, base.Add(time.Minute), 50, 50)
+	observeBoth(t, store, base.Add(90*time.Second), 50, 50)
+	observeBoth(t, store, base.Add(2*time.Minute), 50, 50)
+
+	if got := len(store.Document(base.Add(2 * time.Minute)).Samples); got != 3 {
+		t.Fatalf("expected initial sample plus two one-minute heartbeats, got %d", got)
+	}
+}
+
 func TestOppositeMovementClosesCandidate(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
