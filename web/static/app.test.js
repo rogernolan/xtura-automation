@@ -142,7 +142,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     "menuButton", "closeMenuButton", "navigationBackdrop", "navigationDrawer",
     "overviewPanel", "heatingPanel", "waterPanel", "lightingPanel", "locationPanel", "systemPanel", "toolsPanel", "settingsPanel",
     "flashLights", "flashCount",
-    "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton",
+    "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton", "waterState", "waterDetail", "greyScheduleMessage",
     "waterHistoryChart", "freshWaterUsage", "greyWaterUsage",
     "recordingDuration", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval",
     "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
@@ -259,13 +259,14 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
     renderOverviewSettings: context.module.exports.renderOverviewSettings,
     renderOverview: context.module.exports.renderOverview,
     renderTemperature: context.module.exports.renderTemperature,
+    renderWater: context.module.exports.renderWater,
     renderWaterHistory: context.module.exports.renderWaterHistory,
     temperatureChartDomain: context.module.exports.temperatureChartDomain,
     temperatureChartHourBoundaries: context.module.exports.temperatureChartHourBoundaries,
@@ -649,6 +650,25 @@ test("renders seven-day water chart with both series and grouped markers", () =>
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-marker/);
   assert.equal(elements.freshWaterUsage.textContent, "2 days since last fresh water fill, used 22%");
   assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
+});
+
+test("renders water history during the normal water render", () => {
+  const { renderWater, state, elements } = loadApp();
+  state.water = {
+    command_in_progress: false,
+    valve_moving: false,
+    valve_known: true,
+    scheduled_opening: null,
+  };
+  state.waterHistory = {
+    samples: [{ t: new Date().toISOString(), fresh_percent: 80, grey_percent: 20 }],
+    markers: [],
+  };
+
+  renderWater();
+
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey/);
 });
 
 test("renders explicit water no-event summaries", () => {

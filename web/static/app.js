@@ -1279,6 +1279,7 @@ function renderLights() {
 }
 
 function renderWater() {
+  renderWaterHistory();
   const water = state.water;
   const openButton = byId("openGreyValve");
   const closeButton = byId("closeGreyValve");
