@@ -643,7 +643,7 @@ test("renders waiting message when temperature data is absent", () => {
   assert.match(elements.temperatureBody.innerHTML, /Waiting for temperature/);
 });
 
-test("renders seven-day water chart with both series and grouped markers", () => {
+test("renders seven-day water chart as two simple datum-to-datum lines", () => {
   const { renderWaterHistory, state, elements } = loadApp();
   elements.waterHistoryChart.scrollWidth = 720;
   elements.waterHistoryChart.clientWidth = 320;
@@ -661,11 +661,14 @@ test("renders seven-day water chart with both series and grouped markers", () =>
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh/);
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey/);
   assert.match(elements.waterHistoryChart.innerHTML, /stroke="#1976d2"/);
-  assert.match(elements.waterHistoryChart.innerHTML, /water-history-point/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh[^>]*fill="none"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey[^>]*fill="none"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /<path d="[^"]*L[^"]*" class="water-history-fresh"/);
   assert.match(elements.waterHistoryChart.innerHTML, /100%/);
   assert.match(elements.waterHistoryChart.innerHTML, /0%/);
   assert.match(elements.waterHistoryChart.innerHTML, /[A-Z]{3} \d{1,2}/);
-  assert.match(elements.waterHistoryChart.innerHTML, /water-history-marker/);
+  assert.doesNotMatch(elements.waterHistoryChart.innerHTML, /water-history-point/);
+  assert.doesNotMatch(elements.waterHistoryChart.innerHTML, /water-history-marker/);
   assert.equal(elements.waterHistoryChart.scrollLeft, 720);
   assert.equal(elements.freshWaterUsage.textContent, "2 days since last fresh water fill, used 22%");
   assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
