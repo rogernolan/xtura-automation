@@ -674,6 +674,27 @@ test("renders seven-day water chart as two simple datum-to-datum lines", () => {
   assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
 });
 
+test("plots at most one datum per minute for each tank line", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  const minute = Math.floor((Date.now() - 5 * 60 * 1000) / 60000) * 60000;
+  state.waterHistory = {
+    samples: [
+      { t: new Date(minute + 1000).toISOString(), fresh_percent: 80, grey_percent: 20 },
+      { t: new Date(minute + 2000).toISOString(), fresh_percent: 81, grey_percent: 20 },
+      { t: new Date(minute + 3000).toISOString(), fresh_percent: 82, grey_percent: 21 },
+      { t: new Date(minute + 61000).toISOString(), fresh_percent: 83, grey_percent: 22 },
+      { t: new Date(minute + 62000).toISOString(), fresh_percent: 84, grey_percent: 23 },
+    ],
+    markers: [],
+  };
+
+  renderWaterHistory();
+
+  const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
+  assert.ok(freshPath);
+  assert.equal((freshPath[1].match(/L/g) || []).length, 1);
+});
+
 test("renders water history during the normal water render", () => {
   const { renderWater, state, elements } = loadApp();
   state.water = {

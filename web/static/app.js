@@ -1353,13 +1353,24 @@ function renderWaterHistory() {
   const start = end - 7 * 24 * 60 * 60 * 1000;
   const x = (at) => left + ((new Date(at).getTime() - start) / (end - start)) * plotWidth;
   const y = (value) => top + ((100 - Number(value)) / 100) * plotHeight;
+  const lineSamples = (field) => {
+    const byMinute = new Map();
+    history.samples.forEach((sample) => {
+      const timestamp = new Date(sample.t).getTime();
+      if (sample[field] === null || sample[field] === undefined || !Number.isFinite(timestamp) || timestamp < start || timestamp > end) {
+        return;
+      }
+      byMinute.set(Math.floor(timestamp / 60000), sample);
+    });
+    return [...byMinute.values()].sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+  };
   const path = (field) => {
     let output = "";
     let connected = false;
-    history.samples.forEach((sample) => {
-      const value = sample[field];
+    lineSamples(field).forEach((sample) => {
+      const value = Number(sample[field]);
       const timestamp = new Date(sample.t).getTime();
-      if (value === null || value === undefined || !Number.isFinite(timestamp) || timestamp < start || timestamp > end) {
+      if (!Number.isFinite(value) || !Number.isFinite(timestamp)) {
         connected = false;
         return;
       }
