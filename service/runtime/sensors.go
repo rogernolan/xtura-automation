@@ -15,6 +15,7 @@ import (
 	"empirebus-tests/service/domains/overview"
 	"empirebus-tests/service/domains/sensors"
 	"empirebus-tests/service/history"
+	"empirebus-tests/service/waterhistory"
 )
 
 const (
@@ -131,6 +132,27 @@ func (a *App) observeAldeTelemetry() {
 	temp := *telemetry.AldeTemperatureC
 	at := telemetry.UpdatedAt.UTC()
 	a.recordSensorReading(sensors.AldeID, "Alde", "garmin", temp, nil, nil, at)
+}
+
+func (a *App) observeWaterTelemetry() bool {
+	if a.overviewTelemetry == nil || a.waterHistory == nil {
+		return false
+	}
+	telemetry := a.overviewTelemetry()
+	now := a.nowUTC()
+	if telemetry.UpdatedAt == nil || now.Sub(telemetry.UpdatedAt.UTC()) > overviewStaleAfter {
+		return false
+	}
+	changed, err := a.waterHistory.Observe(waterhistory.Sample{
+		At:           telemetry.UpdatedAt.UTC(),
+		FreshPercent: telemetry.FreshWaterPercent,
+		GreyPercent:  telemetry.GreyWaterPercent,
+	}, now)
+	if err != nil {
+		a.logger.Printf("water history observe: %v", err)
+		return false
+	}
+	return changed
 }
 
 // temperatureDocument builds the temperature panel. The first entry in

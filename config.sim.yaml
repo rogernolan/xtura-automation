@@ -25,6 +25,11 @@ mopeka:
   tank_capacity_litres: 22
   tank_fill_height_mm: 290
 
+water_history:
+  threshold_percent: 5
+  settling_period: 10m
+  grouping_window: 1h
+
 automation:
   timezone: Europe/London
   heating_programs:

@@ -54,6 +54,11 @@ overview:
   gas_tank_capacity_litres: 0
   comfort_thresholds: [10, 18, 24, 30]
 
+water_history:
+  threshold_percent: 5
+  settling_period: 10m
+  grouping_window: 1h
+
 switchbot:
   # BLE temperature/humidity sensors shown in the Overview Temperature panel.
   # Disabled by default so the service behaves exactly as before. When disabled
