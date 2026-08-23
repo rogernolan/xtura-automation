@@ -143,6 +143,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     "overviewPanel", "heatingPanel", "waterPanel", "lightingPanel", "locationPanel", "systemPanel", "toolsPanel", "settingsPanel",
     "flashLights", "flashCount",
     "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton",
+    "waterHistoryChart", "freshWaterUsage", "greyWaterUsage",
     "recordingDuration", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval",
     "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
     "scheduleForm", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
@@ -258,13 +259,14 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
     renderOverviewSettings: context.module.exports.renderOverviewSettings,
     renderOverview: context.module.exports.renderOverview,
     renderTemperature: context.module.exports.renderTemperature,
+    renderWaterHistory: context.module.exports.renderWaterHistory,
     temperatureChartDomain: context.module.exports.temperatureChartDomain,
     temperatureChartHourBoundaries: context.module.exports.temperatureChartHourBoundaries,
     trendLabel: context.module.exports.trendLabel,
@@ -625,6 +627,37 @@ test("renders waiting message when temperature data is absent", () => {
   const { renderTemperature, elements, state } = loadApp({ groupedElements: [] });
   renderTemperature({});
   assert.match(elements.temperatureBody.innerHTML, /Waiting for temperature/);
+});
+
+test("renders seven-day water chart with both series and grouped markers", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  const now = Date.now();
+  state.waterHistory = {
+    samples: [
+      { t: new Date(now - 60 * 60 * 1000).toISOString(), fresh_percent: 80, grey_percent: 20 },
+      { t: new Date(now - 30 * 60 * 1000).toISOString(), fresh_percent: 70, grey_percent: 10 },
+    ],
+    markers: [{ t: new Date(now - 30 * 60 * 1000).toISOString(), events: [{ tank: "fresh", kind: "fill" }, { tank: "grey", kind: "empty" }] }],
+    fresh: { event_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(), days_since: 2, used_percent: 22 },
+    grey: { event_at: new Date(now - 24 * 60 * 60 * 1000).toISOString(), days_since: 1, used_percent: 18 },
+  };
+  renderWaterHistory();
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey/);
+  assert.match(elements.waterHistoryChart.innerHTML, /100%/);
+  assert.match(elements.waterHistoryChart.innerHTML, /0%/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-marker/);
+  assert.equal(elements.freshWaterUsage.textContent, "2 days since last fresh water fill, used 22%");
+  assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
+});
+
+test("renders explicit water no-event summaries", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  state.waterHistory = { samples: [] };
+  renderWaterHistory();
+  assert.equal(elements.freshWaterUsage.textContent, "No fresh water fill recorded.");
+  assert.equal(elements.greyWaterUsage.textContent, "No grey water empty recorded.");
+  assert.match(elements.waterHistoryChart.innerHTML, /No water history available/);
 });
 
 test("trend label maps every trend value", () => {
