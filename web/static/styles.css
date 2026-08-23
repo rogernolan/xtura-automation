@@ -718,7 +718,8 @@ h2 {
 
 .water-history-chart svg {
   display: block;
-  width: 100%;
+  width: 720px;
+  min-width: 720px;
   height: 260px;
 }
 

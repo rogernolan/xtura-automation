@@ -144,8 +144,8 @@ test("overview markup uses page panels and drawer navigation", () => {
   for (const tone of ["cold", "comfortable", "warm", "hot"]) {
     assert.match(styles, new RegExp(`overview-temperature-card\\[data-tone=\\\"${tone}\\\"\\]`));
   }
-  assert.match(styles, /\.water-history-chart svg \{[^}]*width: 100%/);
-  assert.doesNotMatch(styles, /\.water-history-chart svg \{[^}]*min-width:/);
+  assert.match(styles, /\.water-history-chart svg \{[^}]*width: 720px/);
+  assert.match(styles, /\.water-history-chart svg \{[^}]*min-width: 720px/);
   assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*radial-gradient\(/);
   assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*var\(--surface\)/);
   assert.match(styles, /\.overview-group-title \{[^}]*color: var\(--text\)/);

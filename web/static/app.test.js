@@ -645,6 +645,8 @@ test("renders waiting message when temperature data is absent", () => {
 
 test("renders seven-day water chart with both series and grouped markers", () => {
   const { renderWaterHistory, state, elements } = loadApp();
+  elements.waterHistoryChart.scrollWidth = 720;
+  elements.waterHistoryChart.clientWidth = 320;
   const now = Date.now();
   state.waterHistory = {
     samples: [
@@ -662,7 +664,9 @@ test("renders seven-day water chart with both series and grouped markers", () =>
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-point/);
   assert.match(elements.waterHistoryChart.innerHTML, /100%/);
   assert.match(elements.waterHistoryChart.innerHTML, /0%/);
+  assert.match(elements.waterHistoryChart.innerHTML, /[A-Z]{3} \d{1,2}/);
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-marker/);
+  assert.equal(elements.waterHistoryChart.scrollLeft, 720);
   assert.equal(elements.freshWaterUsage.textContent, "2 days since last fresh water fill, used 22%");
   assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
 });

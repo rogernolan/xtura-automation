@@ -1377,9 +1377,10 @@ function renderWaterHistory() {
     return visible.map((sample) => `<circle cx="${x(sample.t).toFixed(1)}" cy="${y(sample[field]).toFixed(1)}" r="3.5" class="${className} water-history-point"/>`).join("");
   };
   const grid = [0, 25, 50, 75, 100].map((value) => `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" class="water-history-grid"/><text x="${left - 7}" y="${y(value) + 4}" text-anchor="end" class="water-history-axis">${value}%</text>`).join("");
+  const weekdayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const labels = [0, 1, 2, 3, 4, 5, 6, 7].map((day) => {
     const at = new Date(start + day * 24 * 60 * 60 * 1000);
-    return `<text x="${left + (day / 7) * plotWidth}" y="${height - 8}" text-anchor="middle" class="water-history-axis">${at.toLocaleDateString([], { weekday: "short" })}</text>`;
+    return `<text x="${left + (day / 7) * plotWidth}" y="${height - 8}" text-anchor="middle" class="water-history-axis">${weekdayLabels[at.getDay()]} ${at.getDate()}</text>`;
   }).join("");
   const markers = (history.markers || []).map((marker) => {
     const markerTime = new Date(marker.t).getTime();
@@ -1388,6 +1389,7 @@ function renderWaterHistory() {
     return `<line x1="${x(marker.t)}" x2="${x(marker.t)}" y1="${top}" y2="${top + plotHeight}" class="water-history-marker"><title>${escapeHtml(description)}</title></line>`;
   }).join("");
   chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Seven-day water history from 0 to 100 percent"><g>${grid}${labels}</g>${markers}<path d="${path("fresh_percent")}" class="water-history-fresh" fill="none" stroke="#1976d2" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="${path("grey_percent")}" class="water-history-grey" fill="none" stroke="#4b4b4b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${pointMarkers("fresh_percent", "water-history-fresh")}${pointMarkers("grey_percent", "water-history-grey")}</svg>`;
+  chart.scrollLeft = chart.scrollWidth;
 }
 
 function formatElapsedDays(days) {
