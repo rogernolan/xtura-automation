@@ -138,7 +138,7 @@
         </section>
 
         <section id="waterPanel" class="page-panel" hidden>
-          <div class="panel">
+          <div id="waterControlsPanel" class="panel">
             <div class="panel-heading">
               <h2>Grey water valve</h2>
               <span id="waterState" class="state-text">Loading</span>
@@ -160,13 +160,15 @@
               <button id="greyScheduleButton" class="secondary-wide" type="button">Schedule</button>
             </div>
             <p id="greyScheduleMessage" class="detail-text"></p>
+            <p id="waterDetail" class="detail-text">Waiting for water state.</p>
+          </div>
+          <div id="waterHistoryPanel" class="panel">
             <div class="water-history" aria-labelledby="waterHistoryHeading">
               <h2 id="waterHistoryHeading">Tank history</h2>
               <div id="waterHistoryChart" class="water-history-chart" role="img" aria-label="Seven-day fresh and grey water history"></div>
               <p id="freshWaterUsage" class="detail-text">No fresh water fill recorded.</p>
               <p id="greyWaterUsage" class="detail-text">No grey water empty recorded.</p>
             </div>
-            <p id="waterDetail" class="detail-text">Waiting for water state.</p>
           </div>
         </section>
 

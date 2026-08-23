@@ -91,6 +91,13 @@ test("overview markup uses page panels and drawer navigation", () => {
     "greyScheduleMessage",
     "waterDetail",
   ]);
+  const waterControlsStart = html.indexOf('<div id="waterControlsPanel" class="panel">');
+  const waterHistoryStart = html.indexOf('<div id="waterHistoryPanel" class="panel">');
+  const chartStart = html.indexOf('id="waterHistoryChart"');
+  assert.ok(waterControlsStart >= 0);
+  assert.ok(waterHistoryStart > waterControlsStart);
+  assert.ok(chartStart > waterHistoryStart);
+  assert.ok(!html.slice(waterControlsStart, waterHistoryStart).includes('id="waterHistoryChart"'));
   assertPanelOwnsIds(html, "lightingPanel", [
     "lightsState",
     "flashCount",

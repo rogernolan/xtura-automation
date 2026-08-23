@@ -95,6 +95,15 @@ class ElementStub {
     this.attributes.delete(name);
   }
 
+  appendChild(child) {
+    this.children.push(child);
+    return child;
+  }
+
+  append(...children) {
+    children.forEach((child) => this.appendChild(child));
+  }
+
   hasAttribute(name) {
     return this.attributes.has(name);
   }
@@ -135,19 +144,19 @@ function dispatchWithListeners(target, listeners, event) {
   }
 }
 
-function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
+function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async () => ({ ok: true, text: async () => "" }) } = {}) {
   const ids = [
     "statusMessage", "connectionStatus", "pageTitle",
     "appContent",
     "menuButton", "closeMenuButton", "navigationBackdrop", "navigationDrawer",
     "overviewPanel", "heatingPanel", "waterPanel", "lightingPanel", "locationPanel", "systemPanel", "toolsPanel", "settingsPanel",
-    "flashLights", "flashCount",
+    "flashLights", "flashCount", "lightsState", "lightsDetail",
     "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton", "waterState", "waterDetail", "greyScheduleMessage",
     "waterHistoryChart", "freshWaterUsage", "greyWaterUsage",
-    "recordingDuration", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval",
-    "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
-    "scheduleForm", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
-    "overviewSettingsForm", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
+    "recordingPanel", "recordingState", "recordingDetail", "recordingDuration", "trackingPanel", "trackingState", "trackingDetail", "trackingManualControls", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval", "trackList",
+    "modeOn", "modeSchedule", "modeOff", "modeState", "targetState", "modeDetail", "targetValue", "targetDown", "targetUp", "boostButton", "boostRunning", "cancelBoostButton",
+    "scheduleForm", "scheduleState", "scheduleDetail", "scheduleSlots", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
+    "overviewSettingsForm", "deploymentInfo", "piStatusPanel", "piPowerState", "piStats", "piDetail", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
     "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
@@ -185,6 +194,9 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
   const documentListeners = new Map();
   const document = {
     activeElement: null,
+    createElement(tagName) {
+      return new ElementStub(tagName);
+    },
     getElementById(id) {
       return elements[id] || null;
     },
@@ -249,7 +261,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     console,
     document,
     window,
-    fetch: async () => ({ ok: true, text: async () => "" }),
+    fetch: fetchImpl,
     EventSource: function EventSource() {},
     XturaNavigation: navigation,
     module: { exports: {} },
@@ -259,10 +271,11 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
+    loadInitialState: context.module.exports.loadInitialState,
     renderOverviewSettings: context.module.exports.renderOverviewSettings,
     renderOverview: context.module.exports.renderOverview,
     renderTemperature: context.module.exports.renderTemperature,
@@ -669,6 +682,24 @@ test("renders water history during the normal water render", () => {
 
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh/);
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey/);
+});
+
+test("keeps water history when an unrelated initial request fails", async () => {
+  const history = { samples: [{ t: new Date().toISOString(), fresh_percent: 80, grey_percent: 20 }], markers: [] };
+  const { loadInitialState, state } = loadApp({
+    fetchImpl: async (path) => {
+      if (path === "/v1/water/history") return { ok: true, text: async () => JSON.stringify(history) };
+      if (path === "/v1/lights/state") return { ok: false, status: 503, text: async () => JSON.stringify({ error: "unavailable" }) };
+      if (path === "/v1/tracks") return { ok: true, text: async () => "[]" };
+      return { ok: true, text: async () => "{}" };
+    },
+  });
+
+  await loadInitialState();
+
+  assert.equal(state.waterHistory.samples.length, 1);
+  assert.equal(state.waterHistory.samples[0].fresh_percent, 80);
+  assert.equal(state.waterHistory.samples[0].grey_percent, 20);
 });
 
 test("renders explicit water no-event summaries", () => {

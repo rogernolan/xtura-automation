@@ -1802,7 +1802,7 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, waterHistory, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus, overview, overviewSettings, notificationSettings] = await Promise.all([
+  const results = await Promise.allSettled([
     api.getLightsState(),
     api.getWaterState(),
     api.getWaterHistory(),
@@ -1818,21 +1818,23 @@ async function loadInitialState() {
     api.getOverviewSettings(),
     api.getNotificationSettings(),
   ]);
-  state.lights = lights;
-  state.water = water;
-  state.waterHistory = waterHistory;
-  state.heatingMode = mode;
-  state.schedule = schedule;
-  state.build = build;
-  state.recording = recording;
-  state.trackingSettings = trackingSettings;
-  state.tracking = tracking;
-  state.tracks = tracks;
-  state.piStatus = piStatus;
-  state.overview = overview;
-  state.overviewSettings = overviewSettings;
-  state.notificationSettings = notificationSettings;
-  setStatus("Loaded");
+
+  const value = (index) => results[index].status === "fulfilled" ? results[index].value : null;
+  state.lights = value(0);
+  state.water = value(1);
+  state.waterHistory = value(2);
+  state.heatingMode = value(3);
+  state.schedule = value(4);
+  state.build = value(5);
+  state.recording = value(6);
+  state.trackingSettings = value(7);
+  state.tracking = value(8);
+  state.tracks = value(9);
+  state.piStatus = value(10);
+  state.overview = value(11);
+  state.overviewSettings = value(12);
+  state.notificationSettings = value(13);
+  setStatus(results.some((result) => result.status === "rejected") ? "Loaded with limited data" : "Loaded");
   render();
 }
 
