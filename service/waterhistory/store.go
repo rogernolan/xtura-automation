@@ -293,12 +293,24 @@ func (s *Store) Load() error {
 	}
 	data, err := os.ReadFile(filepath.Join(s.options.Directory, "state.json"))
 	if os.IsNotExist(err) {
-		return nil
+		return s.compactLoadedSamplesLocked()
 	}
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, &s.state)
+	if err := json.Unmarshal(data, &s.state); err != nil {
+		return err
+	}
+	return s.compactLoadedSamplesLocked()
+}
+
+func (s *Store) compactLoadedSamplesLocked() error {
+	compacted := compactSamples(s.samples)
+	if len(compacted) == len(s.samples) {
+		return nil
+	}
+	s.samples = compacted
+	return s.persistLocked()
 }
 
 func (s *Store) Compact(now time.Time) error {
@@ -311,8 +323,23 @@ func (s *Store) Compact(now time.Time) error {
 			kept = append(kept, sample)
 		}
 	}
-	s.samples = kept
+	s.samples = compactSamples(kept)
 	return s.persistLocked()
+}
+
+func compactSamples(samples []Point) []Point {
+	kept := make([]Point, 0, len(samples))
+	for _, sample := range samples {
+		if len(kept) == 0 {
+			kept = append(kept, sample)
+			continue
+		}
+		last := kept[len(kept)-1]
+		if !sameLevel(last.FreshPercent, sample.FreshPercent) || !sameLevel(last.GreyPercent, sample.GreyPercent) || sample.At.Sub(last.At) >= sampleHeartbeat {
+			kept = append(kept, sample)
+		}
+	}
+	return kept
 }
 
 func (s *Store) persistLocked() error {

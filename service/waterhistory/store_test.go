@@ -169,6 +169,26 @@ func TestRestartLoadsSamplesAndEvents(t *testing.T) {
 	}
 }
 
+func TestLoadCompactsIdenticalSamples(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	fresh, grey := 50.0, 50.0
+	if err := writeNDJSON(dir+"/samples.ndjson", []Point{
+		{At: base, FreshPercent: &fresh, GreyPercent: &grey},
+		{At: base.Add(30 * time.Second), FreshPercent: &fresh, GreyPercent: &grey},
+		{At: base.Add(time.Minute), FreshPercent: &fresh, GreyPercent: &grey},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store := New(Options{Directory: dir}, func() time.Time { return base.Add(time.Minute) })
+	if err := store.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(store.Document(base.Add(time.Minute)).Samples); got != 2 {
+		t.Fatalf("expected duplicate legacy sample to be compacted, got %d", got)
+	}
+}
+
 func TestGroupedMarkersKeepIndependentEvents(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
