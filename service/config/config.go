@@ -21,11 +21,18 @@ type Config struct {
 	Tracking      TrackingConfig      `yaml:"tracking,omitempty"`
 	Recording     RecordingConfig     `yaml:"recording,omitempty"`
 	Overview      OverviewConfig      `yaml:"overview,omitempty"`
+	WaterHistory  WaterHistoryConfig  `yaml:"water_history,omitempty"`
 	Switchbot     BtleConfig          `yaml:"switchbot,omitempty"`
 	Mopeka        MopekaConfig        `yaml:"mopeka,omitempty"`
 	Notifications NotificationsConfig `yaml:"notifications,omitempty"`
 	Automation    AutomationConfig    `yaml:"automation"`
 	API           APIConfig           `yaml:"api"`
+}
+
+type WaterHistoryConfig struct {
+	ThresholdPercent float64       `yaml:"threshold_percent,omitempty"`
+	SettlingPeriod   time.Duration `yaml:"settling_period,omitempty"`
+	GroupingWindow   time.Duration `yaml:"grouping_window,omitempty"`
 }
 
 type OverviewConfig struct {
@@ -175,6 +182,7 @@ type NormalizedConfig struct {
 	Tracking      NormalizedTracking
 	Recording     NormalizedRecording
 	Overview      OverviewConfig
+	WaterHistory  WaterHistoryConfig
 	Switchbot     sensors.Settings
 	Mopeka        MopekaConfig
 	Notifications NotificationsConfig
@@ -320,6 +328,15 @@ func (c Config) Validate() error {
 	if c.Overview.GasTankCapacityLitres < 0 {
 		problems = append(problems, "overview.gas_tank_capacity_litres must be greater than zero")
 	}
+	if c.WaterHistory.ThresholdPercent < 0 || c.WaterHistory.ThresholdPercent > 100 {
+		problems = append(problems, "water_history.threshold_percent must be between 0 and 100")
+	}
+	if c.WaterHistory.SettlingPeriod < 0 {
+		problems = append(problems, "water_history.settling_period must not be negative")
+	}
+	if c.WaterHistory.GroupingWindow < 0 {
+		problems = append(problems, "water_history.grouping_window must not be negative")
+	}
 	if len(c.Overview.Comfort) > 0 {
 		if len(c.Overview.Comfort) != 4 {
 			problems = append(problems, "overview.comfort_thresholds must contain four ordered values")
@@ -415,6 +432,7 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		Tracking:      normalizeTracking(c.Tracking),
 		Recording:     normalizeRecording(c.Recording),
 		Overview:      normalizeOverview(c.Overview),
+		WaterHistory:  normalizeWaterHistory(c.WaterHistory),
 		Switchbot:     normalizeBtle(c.Switchbot),
 		Mopeka:        normalizeMopeka(c.Mopeka),
 		Notifications: c.Notifications,
@@ -432,6 +450,20 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 		out.Automation.HeatingPrograms = append(out.Automation.HeatingPrograms, normalized)
 	}
 	return out, nil
+}
+
+func normalizeWaterHistory(in WaterHistoryConfig) WaterHistoryConfig {
+	out := in
+	if out.ThresholdPercent == 0 {
+		out.ThresholdPercent = 5
+	}
+	if out.SettlingPeriod == 0 {
+		out.SettlingPeriod = 10 * time.Minute
+	}
+	if out.GroupingWindow == 0 {
+		out.GroupingWindow = time.Hour
+	}
+	return out
 }
 
 func normalizeOverview(in OverviewConfig) OverviewConfig {

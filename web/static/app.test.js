@@ -95,6 +95,15 @@ class ElementStub {
     this.attributes.delete(name);
   }
 
+  appendChild(child) {
+    this.children.push(child);
+    return child;
+  }
+
+  append(...children) {
+    children.forEach((child) => this.appendChild(child));
+  }
+
   hasAttribute(name) {
     return this.attributes.has(name);
   }
@@ -135,18 +144,19 @@ function dispatchWithListeners(target, listeners, event) {
   }
 }
 
-function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
+function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async () => ({ ok: true, text: async () => "" }), localStorage = undefined } = {}) {
   const ids = [
     "statusMessage", "connectionStatus", "pageTitle",
     "appContent",
     "menuButton", "closeMenuButton", "navigationBackdrop", "navigationDrawer",
     "overviewPanel", "heatingPanel", "waterPanel", "lightingPanel", "locationPanel", "systemPanel", "toolsPanel", "settingsPanel",
-    "flashLights", "flashCount",
-    "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton",
-    "recordingDuration", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval",
-    "modeOn", "modeSchedule", "modeOff", "targetDown", "targetUp", "boostButton", "cancelBoostButton",
-    "scheduleForm", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
-    "overviewSettingsForm", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
+    "flashLights", "flashCount", "lightsState", "lightsDetail",
+    "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton", "waterState", "waterDetail", "greyScheduleMessage",
+    "waterHistoryChart", "freshWaterUsage", "greyWaterUsage",
+    "recordingPanel", "recordingState", "recordingDetail", "recordingDuration", "trackingPanel", "trackingState", "trackingDetail", "trackingManualControls", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval", "trackList",
+    "modeOn", "modeSchedule", "modeOff", "modeState", "targetState", "modeDetail", "targetValue", "targetDown", "targetUp", "boostButton", "boostRunning", "cancelBoostButton",
+    "scheduleForm", "scheduleState", "scheduleDetail", "scheduleSlots", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
+    "overviewSettingsForm", "deploymentInfo", "piStatusPanel", "piPowerState", "piStats", "piDetail", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
     "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
@@ -184,6 +194,9 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
   const documentListeners = new Map();
   const document = {
     activeElement: null,
+    createElement(tagName) {
+      return new ElementStub(tagName);
+    },
     getElementById(id) {
       return elements[id] || null;
     },
@@ -248,7 +261,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     console,
     document,
     window,
-    fetch: async () => ({ ok: true, text: async () => "" }),
+    fetch: fetchImpl,
     EventSource: function EventSource() {},
     XturaNavigation: navigation,
     module: { exports: {} },
@@ -256,15 +269,19 @@ function loadApp({ hash = "#/overview", reducedMotion = false } = {}) {
     require,
     setTimeout,
     clearTimeout,
+    localStorage,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, renderOverviewSettings, renderOverview, renderTemperature, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
+    loadInitialState: context.module.exports.loadInitialState,
     renderOverviewSettings: context.module.exports.renderOverviewSettings,
     renderOverview: context.module.exports.renderOverview,
     renderTemperature: context.module.exports.renderTemperature,
+    renderWater: context.module.exports.renderWater,
+    renderWaterHistory: context.module.exports.renderWaterHistory,
     temperatureChartDomain: context.module.exports.temperatureChartDomain,
     temperatureChartHourBoundaries: context.module.exports.temperatureChartHourBoundaries,
     trendLabel: context.module.exports.trendLabel,
@@ -625,6 +642,118 @@ test("renders waiting message when temperature data is absent", () => {
   const { renderTemperature, elements, state } = loadApp({ groupedElements: [] });
   renderTemperature({});
   assert.match(elements.temperatureBody.innerHTML, /Waiting for temperature/);
+});
+
+test("renders seven-day water chart as two simple datum-to-datum lines", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  elements.waterHistoryChart.scrollWidth = 720;
+  elements.waterHistoryChart.clientWidth = 320;
+  const now = Date.now();
+  state.waterHistory = {
+    samples: [
+      { t: new Date(now - 2 * 60 * 60 * 1000).toISOString(), fresh_percent: 80, grey_percent: 20 },
+      { t: new Date(now - 30 * 60 * 1000).toISOString(), fresh_percent: 70, grey_percent: 10 },
+    ],
+    markers: [{ t: new Date(now - 30 * 60 * 1000).toISOString(), events: [{ tank: "fresh", kind: "fill" }, { tank: "grey", kind: "empty" }] }],
+    fresh: { event_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(), days_since: 2, used_percent: 22 },
+    grey: { event_at: new Date(now - 24 * 60 * 60 * 1000).toISOString(), days_since: 1, used_percent: 18 },
+  };
+  renderWaterHistory();
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey/);
+  assert.match(elements.waterHistoryChart.innerHTML, /stroke="#1976d2"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh[^>]*fill="none"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey[^>]*fill="none"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /<path d="[^"]*L[^"]*" class="water-history-fresh"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /100%/);
+  assert.match(elements.waterHistoryChart.innerHTML, /0%/);
+  assert.match(elements.waterHistoryChart.innerHTML, /[A-Z]{3} \d{1,2}/);
+  assert.doesNotMatch(elements.waterHistoryChart.innerHTML, /water-history-point/);
+  assert.doesNotMatch(elements.waterHistoryChart.innerHTML, /water-history-marker/);
+  assert.equal(elements.waterHistoryChart.scrollLeft, 720);
+  assert.equal(elements.freshWaterUsage.textContent, "2 days since last fresh water fill, used 22%");
+  assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
+});
+
+test("connects each prepared chart datum directly", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  const base = Date.now() - 2 * 60 * 60 * 1000;
+  state.waterHistory = {
+    samples: [
+      { t: new Date(base).toISOString(), fresh_percent: 80, grey_percent: 20 },
+      { t: new Date(base + 10 * 60000).toISOString(), fresh_percent: 81, grey_percent: 21 },
+      { t: new Date(base + 20 * 60000).toISOString(), fresh_percent: 82, grey_percent: 22 },
+    ],
+    markers: [],
+  };
+
+  renderWaterHistory();
+
+  const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
+  assert.ok(freshPath);
+  assert.equal((freshPath[1].match(/L/g) || []).length, 2);
+});
+
+test("renders server-prepared chart samples instead of raw samples", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  const now = Date.now();
+  state.waterHistory = {
+    samples: [{ t: new Date(now).toISOString(), fresh_percent: 0, grey_percent: 0 }],
+    chart_samples: [{ t: new Date(now).toISOString(), fresh_percent: 42, grey_percent: 58 }],
+    markers: [],
+  };
+
+  renderWaterHistory();
+
+  const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
+  assert.ok(freshPath);
+  assert.match(freshPath[1], /,140\.1$/);
+});
+
+test("renders water history during the normal water render", () => {
+  const { renderWater, state, elements } = loadApp();
+  state.water = {
+    command_in_progress: false,
+    valve_moving: false,
+    valve_known: true,
+    scheduled_opening: null,
+  };
+  state.waterHistory = {
+    samples: [{ t: new Date().toISOString(), fresh_percent: 80, grey_percent: 20 }],
+    markers: [],
+  };
+
+  renderWater();
+
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh/);
+  assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey/);
+});
+
+test("keeps water history when an unrelated initial request fails", async () => {
+  const history = { samples: [{ t: new Date().toISOString(), fresh_percent: 80, grey_percent: 20 }], markers: [] };
+  const { loadInitialState, state } = loadApp({
+    fetchImpl: async (path) => {
+      if (path === "/v1/water/history") return { ok: true, text: async () => JSON.stringify(history) };
+      if (path === "/v1/lights/state") return { ok: false, status: 503, text: async () => JSON.stringify({ error: "unavailable" }) };
+      if (path === "/v1/tracks") return { ok: true, text: async () => "[]" };
+      return { ok: true, text: async () => "{}" };
+    },
+  });
+
+  await loadInitialState();
+
+  assert.equal(state.waterHistory.samples.length, 1);
+  assert.equal(state.waterHistory.samples[0].fresh_percent, 80);
+  assert.equal(state.waterHistory.samples[0].grey_percent, 20);
+});
+
+test("renders explicit water no-event summaries", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  state.waterHistory = { samples: [] };
+  renderWaterHistory();
+  assert.equal(elements.freshWaterUsage.textContent, "No fresh water fill recorded.");
+  assert.equal(elements.greyWaterUsage.textContent, "No grey water empty recorded.");
+  assert.match(elements.waterHistoryChart.innerHTML, /No water history available/);
 });
 
 test("trend label maps every trend value", () => {

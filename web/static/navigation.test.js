@@ -91,6 +91,13 @@ test("overview markup uses page panels and drawer navigation", () => {
     "greyScheduleMessage",
     "waterDetail",
   ]);
+  const waterControlsStart = html.indexOf('<div id="waterControlsPanel" class="panel">');
+  const waterHistoryStart = html.indexOf('<div id="waterHistoryPanel" class="panel">');
+  const chartStart = html.indexOf('id="waterHistoryChart"');
+  assert.ok(waterControlsStart >= 0);
+  assert.ok(waterHistoryStart > waterControlsStart);
+  assert.ok(chartStart > waterHistoryStart);
+  assert.ok(!html.slice(waterControlsStart, waterHistoryStart).includes('id="waterHistoryChart"'));
   assertPanelOwnsIds(html, "lightingPanel", [
     "lightsState",
     "flashCount",
@@ -137,6 +144,8 @@ test("overview markup uses page panels and drawer navigation", () => {
   for (const tone of ["cold", "comfortable", "warm", "hot"]) {
     assert.match(styles, new RegExp(`overview-temperature-card\\[data-tone=\\\"${tone}\\\"\\]`));
   }
+  assert.match(styles, /\.water-history-chart svg \{[^}]*width: 720px/);
+  assert.match(styles, /\.water-history-chart svg \{[^}]*min-width: 720px/);
   assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*radial-gradient\(/);
   assert.match(styles, /overview-temperature-card\[data-tone="comfortable"\] \{[^}]*var\(--surface\)/);
   assert.match(styles, /\.overview-group-title \{[^}]*color: var\(--text\)/);

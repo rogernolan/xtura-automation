@@ -8,6 +8,44 @@ import (
 	"time"
 )
 
+func TestWaterHistoryDefaults(t *testing.T) {
+	cfg := validTestConfig()
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.WaterHistory.ThresholdPercent != 5 || normalized.WaterHistory.SettlingPeriod != 10*time.Minute || normalized.WaterHistory.GroupingWindow != time.Hour {
+		t.Fatalf("unexpected water history defaults: %+v", normalized.WaterHistory)
+	}
+}
+
+func TestWaterHistoryRejectsInvalidValues(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  WaterHistoryConfig
+	}{
+		{"threshold", WaterHistoryConfig{ThresholdPercent: 101}},
+		{"settling", WaterHistoryConfig{SettlingPeriod: -time.Second}},
+		{"grouping", WaterHistoryConfig{GroupingWindow: -time.Second}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validTestConfig()
+			cfg.WaterHistory = tc.cfg
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+func validTestConfig() Config {
+	return Config{
+		Garmin:     GarminConfig{WSURL: "ws://localhost:8090/ws", HeartbeatInterval: time.Second},
+		Automation: AutomationConfig{Timezone: "UTC", HeatingPrograms: []HeatingProgramConfig{{ID: "test", Days: []string{"mon"}, Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}}}}},
+		API:        APIConfig{Listen: ":8091"},
+	}
+}
+
 func TestLoadFileAndNormalize(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

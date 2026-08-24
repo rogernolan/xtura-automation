@@ -66,6 +66,16 @@ func TestAppTrackingWiring(t *testing.T) {
 	}
 }
 
+func TestWaterHistoryDirectoryFollowsConfigDirectory(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if got, want := waterHistoryDirectoryForConfig(configPath), filepath.Join(filepath.Dir(configPath), "water-history"); got != want {
+		t.Fatalf("water history directory = %q, want %q", got, want)
+	}
+	if got := waterHistoryDirectoryForConfig(""); got != "" {
+		t.Fatalf("empty config path should disable persistent water history in tests, got %q", got)
+	}
+}
+
 func TestUpdateTrackingSettings(t *testing.T) {
 	server := newGPSServer(t)
 	configPath := filepath.Join(t.TempDir(), "config.yaml")

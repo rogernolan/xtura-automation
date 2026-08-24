@@ -27,6 +27,7 @@ import (
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 	"empirebus-tests/service/tracking"
+	"empirebus-tests/service/waterhistory"
 )
 
 type fakeApp struct {
@@ -145,6 +146,10 @@ func (f fakeApp) FlashExteriorLights(context.Context, int) error {
 
 func (f fakeApp) WaterState() domainwater.State {
 	return f.water
+}
+
+func (f fakeApp) WaterHistory() waterhistory.Document {
+	return waterhistory.Document{}
 }
 
 func (f fakeApp) OpenGreyWaterValve(context.Context) error {
@@ -840,6 +845,30 @@ func TestHandleWaterStateGet(t *testing.T) {
 	}
 	if !state.ValveKnown || !state.ValveMoving || state.ValveDirection != domainwater.ValveDirectionOpening {
 		t.Fatalf("unexpected water state: %+v", state)
+	}
+}
+
+func TestHandleWaterHistoryGet(t *testing.T) {
+	server := New(fakeApp{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/water/history", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var doc waterhistory.Document
+	if err := json.NewDecoder(rr.Body).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHandleWaterHistoryRejectsNonGet(t *testing.T) {
+	server := New(fakeApp{})
+	req := httptest.NewRequest(http.MethodPost, "/v1/water/history", nil)
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status=%d", rr.Code)
 	}
 }
 

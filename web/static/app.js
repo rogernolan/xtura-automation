@@ -22,6 +22,10 @@ class XturaApi {
     return this.request("/v1/water/state");
   }
 
+  async getWaterHistory() {
+    return this.request("/v1/water/history");
+  }
+
   async openGreyValve() {
     return this.request("/v1/water/grey-valve/open", { method: "POST" });
   }
@@ -181,6 +185,7 @@ const state = {
   build: null,
   lights: null,
   water: null,
+  waterHistory: null,
   heatingMode: null,
   heatingState: null,
   recording: null,
@@ -1274,6 +1279,7 @@ function renderLights() {
 }
 
 function renderWater() {
+  renderWaterHistory();
   const water = state.water;
   const openButton = byId("openGreyValve");
   const closeButton = byId("closeGreyValve");
@@ -1314,6 +1320,74 @@ function renderWater() {
   scheduleTime.disabled = state.requestInFlight || Boolean(scheduled);
   scheduleDuration.disabled = state.requestInFlight || Boolean(scheduled);
   scheduleButton.disabled = state.requestInFlight;
+}
+
+function renderWaterHistory() {
+  const chart = byId("waterHistoryChart");
+  const freshUsage = byId("freshWaterUsage");
+  const greyUsage = byId("greyWaterUsage");
+  if (!chart || !freshUsage || !greyUsage) return;
+  const history = state.waterHistory;
+  const summaryText = (summary, label, emptyText) => {
+    if (!summary || summary.event_at === undefined || summary.event_at === null) return emptyText;
+    const days = Number(summary.days_since);
+    const used = Number(summary.used_percent);
+    return `${Number.isFinite(days) ? formatElapsedDays(days) : "0 days"} since last ${label}, used ${Number.isFinite(used) ? Math.max(0, used).toFixed(0) : "0"}%`;
+  };
+  freshUsage.textContent = summaryText(history && history.fresh, "fresh water fill", "No fresh water fill recorded.");
+  greyUsage.textContent = summaryText(history && history.grey, "grey water empty", "No grey water empty recorded.");
+  const chartSamples = history && (Array.isArray(history.chart_samples) ? history.chart_samples : history.samples);
+  if (!Array.isArray(chartSamples) || chartSamples.length === 0) {
+    chart.innerHTML = `<svg viewBox="0 0 720 260" role="img" aria-label="No water history available"><text x="360" y="130" text-anchor="middle" class="water-history-axis">No water history available.</text></svg>`;
+    return;
+  }
+  const width = 720;
+  const height = 260;
+  const left = 42;
+  const right = 12;
+  const top = 16;
+  const bottom = 30;
+  const plotWidth = width - left - right;
+  const plotHeight = height - top - bottom;
+  const latest = Math.max(...chartSamples.map((sample) => new Date(sample.t).getTime()));
+  const end = Number.isFinite(latest) ? Math.max(Date.now(), latest) : Date.now();
+  const start = end - 7 * 24 * 60 * 60 * 1000;
+  const x = (at) => left + ((new Date(at).getTime() - start) / (end - start)) * plotWidth;
+  const y = (value) => top + ((100 - Number(value)) / 100) * plotHeight;
+  const lineSamples = (field) => {
+    return chartSamples.filter((sample) => {
+      const timestamp = new Date(sample.t).getTime();
+      return timestamp >= start && timestamp <= end;
+    }).sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+  };
+  const path = (field) => {
+    let output = "";
+    let connected = false;
+    lineSamples(field).forEach((sample) => {
+      const timestamp = new Date(sample.t).getTime();
+      const value = Number(sample[field]);
+      if (!Number.isFinite(value) || !Number.isFinite(timestamp)) {
+        connected = false;
+        return;
+      }
+      output += `${connected ? "L" : "M"}${x(sample.t).toFixed(1)},${y(value).toFixed(1)} `;
+      connected = true;
+    });
+    return output.trim();
+  };
+  const grid = [0, 25, 50, 75, 100].map((value) => `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" class="water-history-grid"/><text x="${left - 7}" y="${y(value) + 4}" text-anchor="end" class="water-history-axis">${value}%</text>`).join("");
+  const weekdayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const labels = [0, 1, 2, 3, 4, 5, 6, 7].map((day) => {
+    const at = new Date(start + day * 24 * 60 * 60 * 1000);
+    return `<text x="${left + (day / 7) * plotWidth}" y="${height - 8}" text-anchor="middle" class="water-history-axis">${weekdayLabels[at.getDay()]} ${at.getDate()}</text>`;
+  }).join("");
+  chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Seven-day water history from 0 to 100 percent"><g>${grid}${labels}</g><path d="${path("fresh_percent")}" class="water-history-fresh" fill="none" stroke="#1976d2" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="${path("grey_percent")}" class="water-history-grey" fill="none" stroke="#4b4b4b" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+  chart.scrollLeft = chart.scrollWidth;
+}
+
+function formatElapsedDays(days) {
+  const rounded = Math.max(0, Math.floor(days));
+  return `${rounded} day${rounded === 1 ? "" : "s"}`;
 }
 
 function formatScheduledOpen(openAt) {
@@ -1731,9 +1805,10 @@ async function withRequest(action, busyMessage) {
 }
 
 async function loadInitialState() {
-  const [lights, water, mode, schedule, build, recording, trackingSettings, tracking, tracks, piStatus, overview, overviewSettings, notificationSettings] = await Promise.all([
+  const results = await Promise.allSettled([
     api.getLightsState(),
     api.getWaterState(),
+    api.getWaterHistory(),
     api.getHeatingMode(),
     api.getHeatingSchedule(),
     api.getBuildInfo(),
@@ -1746,20 +1821,23 @@ async function loadInitialState() {
     api.getOverviewSettings(),
     api.getNotificationSettings(),
   ]);
-  state.lights = lights;
-  state.water = water;
-  state.heatingMode = mode;
-  state.schedule = schedule;
-  state.build = build;
-  state.recording = recording;
-  state.trackingSettings = trackingSettings;
-  state.tracking = tracking;
-  state.tracks = tracks;
-  state.piStatus = piStatus;
-  state.overview = overview;
-  state.overviewSettings = overviewSettings;
-  state.notificationSettings = notificationSettings;
-  setStatus("Loaded");
+
+  const value = (index) => results[index].status === "fulfilled" ? results[index].value : null;
+  state.lights = value(0);
+  state.water = value(1);
+  state.waterHistory = value(2);
+  state.heatingMode = value(3);
+  state.schedule = value(4);
+  state.build = value(5);
+  state.recording = value(6);
+  state.trackingSettings = value(7);
+  state.tracking = value(8);
+  state.tracks = value(9);
+  state.piStatus = value(10);
+  state.overview = value(11);
+  state.overviewSettings = value(12);
+  state.notificationSettings = value(13);
+  setStatus(results.some((result) => result.status === "rejected") ? "Loaded with limited data" : "Loaded");
   render();
 }
 
@@ -1774,6 +1852,10 @@ function connectEvents() {
   events.addEventListener("water.state_changed", (event) => {
     state.water = JSON.parse(event.data).payload;
     render();
+  });
+  events.addEventListener("water.history_changed", (event) => {
+    state.waterHistory = JSON.parse(event.data).payload;
+    renderWaterHistory();
   });
   events.addEventListener("heating.mode_changed", (event) => {
     state.heatingMode = JSON.parse(event.data).payload;

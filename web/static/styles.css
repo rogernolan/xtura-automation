@@ -698,6 +698,37 @@ h2 {
   gap: 6px;
 }
 
+.water-history {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.water-history h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.water-history-chart {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.water-history-chart svg {
+  display: block;
+  width: 720px;
+  min-width: 720px;
+  height: 260px;
+}
+
+.water-history-grid { stroke: var(--border); stroke-width: 1; }
+.water-history-axis { fill: var(--muted); font-size: 11px; font-weight: 700; }
+.water-history-fresh { fill: none; stroke: #1976d2; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.water-history-grey { fill: none; stroke: #4b4b4b; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.water-history-marker { stroke: #b07a23; stroke-width: 2; stroke-dasharray: 4 4; }
+
 .pi-stat-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

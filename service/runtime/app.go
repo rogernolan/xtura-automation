@@ -34,6 +34,7 @@ import (
 	"empirebus-tests/service/notifications"
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/tracking"
+	"empirebus-tests/service/waterhistory"
 )
 
 var trackingDirectory = "/var/lib/xtura/tracks"
@@ -102,6 +103,7 @@ type App struct {
 	notificationEvaluator *notifications.Evaluator
 	notificationSender    *notifications.Sender
 	notificationSubs      *notifications.SubscriptionStore
+	waterHistory          *waterhistory.Store
 
 	mu                 sync.RWMutex
 	configMu           sync.Mutex
@@ -217,6 +219,15 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	}
 	sensorStore := history.New(sensorHistoryDirectory, history.DefaultWindow, history.DefaultRetention, time.Now, logger)
 	seedSensorHistory(sensorStore, time.Now().UTC())
+	waterStore := waterhistory.New(waterhistory.Options{
+		Directory:      waterHistoryDirectoryForConfig(configPath),
+		Threshold:      cfg.WaterHistory.ThresholdPercent,
+		SettlingPeriod: cfg.WaterHistory.SettlingPeriod,
+		GroupingWindow: cfg.WaterHistory.GroupingWindow,
+	}, time.Now)
+	if err := waterStore.Load(); err != nil {
+		return nil, fmt.Errorf("load water history: %w", err)
+	}
 	adapter := garmin.New(garmin.Config{
 		WSURL:             cfg.Garmin.WSURL,
 		Origin:            cfg.Garmin.Origin,
@@ -258,6 +269,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		overviewTelemetry:     overviewTelemetry,
 		now:                   time.Now,
 		sensorsStore:          sensorStore,
+		waterHistory:          waterStore,
 		sensorStates:          make(map[string]*sensorState),
 		lastHistory:           make(map[string]sensorStamp),
 		sensorSettings:        cfg.Switchbot,
@@ -315,8 +327,22 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	return app, nil
 }
 
+func waterHistoryDirectoryForConfig(configPath string) string {
+	if strings.TrimSpace(configPath) == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(configPath), "water-history")
+}
+
 func (a *App) Broker() *events.Broker {
 	return a.broker
+}
+
+func (a *App) WaterHistory() waterhistory.Document {
+	if a.waterHistory == nil {
+		return waterhistory.Document{}
+	}
+	return a.waterHistory.Document(a.nowUTC())
 }
 
 func (a *App) HostStatus() host.Metrics {
@@ -844,6 +870,9 @@ func (a *App) publishStateLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.observeAldeTelemetry()
+			if a.observeWaterTelemetry() {
+				a.broker.Publish(events.Event{Type: "water.history_changed", Timestamp: a.nowUTC(), Payload: a.WaterHistory()})
+			}
 			a.evaluateOfflineNotifications()
 			currentOverview := a.Overview()
 			if !reflect.DeepEqual(currentOverview, lastOverview) {
