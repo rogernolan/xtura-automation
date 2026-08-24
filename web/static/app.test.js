@@ -144,7 +144,7 @@ function dispatchWithListeners(target, listeners, event) {
   }
 }
 
-function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async () => ({ ok: true, text: async () => "" }) } = {}) {
+function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async () => ({ ok: true, text: async () => "" }), localStorage = undefined } = {}) {
   const ids = [
     "statusMessage", "connectionStatus", "pageTitle",
     "appContent",
@@ -269,6 +269,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     require,
     setTimeout,
     clearTimeout,
+    localStorage,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
   vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, waterChartSmoothedSamples, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
@@ -737,6 +738,23 @@ test("extends cached smoothed samples when a new history payload appends data", 
 
   assert.strictEqual(second, first);
   assert.equal(second.length, 2);
+});
+
+test("hydrates smoothed samples from persistent storage after a refresh", () => {
+  const stored = new Map();
+  const localStorage = {
+    getItem(key) { return stored.get(key) || null; },
+    setItem(key, value) { stored.set(key, value); },
+  };
+  const firstSample = { t: new Date(Date.now() - 1000).toISOString(), fresh_percent: 80, grey_percent: 20 };
+  const firstApp = loadApp({ localStorage });
+  firstApp.waterChartSmoothedSamples({ samples: [firstSample] }, "fresh_percent");
+  const secondApp = loadApp({ localStorage });
+  const result = secondApp.waterChartSmoothedSamples({
+    samples: [firstSample, { t: new Date().toISOString(), fresh_percent: 81, grey_percent: 20 }],
+  }, "fresh_percent");
+
+  assert.equal(result.length, 2);
 });
 
 test("renders water history during the normal water render", () => {

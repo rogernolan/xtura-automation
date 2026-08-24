@@ -1324,12 +1324,52 @@ function renderWater() {
 }
 
 const waterChartSmoothingCache = new Map();
+const waterChartCacheStorageKey = "xtura.water-chart-smoothing.v1";
+let waterChartCacheHydrated = false;
+let waterChartCachePersistTimer = null;
 
 function waterChartSampleKey(sample, field) {
   return `${sample && sample.t}|${sample && sample[field]}`;
 }
 
+function hydrateWaterChartCache() {
+  if (waterChartCacheHydrated) return;
+  waterChartCacheHydrated = true;
+  if (typeof localStorage === "undefined") return;
+  try {
+    const stored = localStorage.getItem(waterChartCacheStorageKey);
+    if (!stored) return;
+    const parsed = JSON.parse(stored);
+    Object.entries(parsed).forEach(([field, cached]) => {
+      if (cached && Array.isArray(cached.values) && Array.isArray(cached.window)) {
+        waterChartSmoothingCache.set(field, cached);
+      }
+    });
+  } catch (_) {
+    return;
+  }
+}
+
+function persistWaterChartCacheNow() {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const serializable = Object.fromEntries(waterChartSmoothingCache.entries());
+    localStorage.setItem(waterChartCacheStorageKey, JSON.stringify(serializable));
+  } catch (_) {
+    return;
+  }
+}
+
+function scheduleWaterChartCachePersist() {
+  if (waterChartCachePersistTimer !== null || typeof localStorage === "undefined") return;
+  waterChartCachePersistTimer = setTimeout(() => {
+    waterChartCachePersistTimer = null;
+    persistWaterChartCacheNow();
+  }, 1000);
+}
+
 function waterChartSmoothedSamples(history, field) {
+  hydrateWaterChartCache();
   if (!history || !Array.isArray(history.samples)) {
     return [];
   }
@@ -1372,6 +1412,11 @@ function waterChartSmoothedSamples(history, field) {
     window,
     sum,
   });
+  if (canAppend) {
+    scheduleWaterChartCachePersist();
+  } else {
+    persistWaterChartCacheNow();
+  }
   return smoothed;
 }
 
