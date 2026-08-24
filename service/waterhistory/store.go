@@ -460,6 +460,9 @@ func (s *Store) persistLoadedCacheLocked() error {
 		}
 		return err
 	}
+	if _, err := os.Stat(filepath.Join(s.options.Directory, chartCacheFile)); os.IsPermission(err) {
+		return nil
+	}
 	if err := s.persistChartLocked(); err != nil {
 		return err
 	}
