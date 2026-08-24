@@ -1341,11 +1341,22 @@ function hydrateWaterChartCache() {
     const stored = localStorage.getItem(waterChartCacheStorageKey);
     if (!stored) return;
     const parsed = JSON.parse(stored);
+    let migrated = false;
     Object.entries(parsed).forEach(([field, cached]) => {
       if (cached && Array.isArray(cached.displayValues) && cached.displayByBucket && Array.isArray(cached.window)) {
         waterChartSmoothingCache.set(field, cached);
+      } else if (cached && Array.isArray(cached.values) && Array.isArray(cached.window)) {
+        const displayByBucket = {};
+        cached.values.forEach((sample) => {
+          displayByBucket[Math.floor(sample.timestamp / waterChartDisplayBucketMilliseconds)] = sample;
+        });
+        const migratedCache = { ...cached, displayValues: Object.values(displayByBucket).sort((a, b) => a.timestamp - b.timestamp), displayByBucket };
+        delete migratedCache.values;
+        waterChartSmoothingCache.set(field, migratedCache);
+        migrated = true;
       }
     });
+    if (migrated) persistWaterChartCacheNow();
   } catch (_) {
     return;
   }
