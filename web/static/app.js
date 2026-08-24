@@ -174,6 +174,7 @@ const scheduleSlotCount = 4;
 const minimumSlotMinutes = 5;
 const minutesPerDay = 24 * 60;
 const waterChartMovingAverageMinutes = 5;
+const waterChartDisplayBucketMilliseconds = (7 * 24 * 60 * 60 * 1000) / ((720 - 42 - 12) / 4);
 const fallbackVisibleSlots = [
   { start: "05:30", mode: "heat", target_celsius: 18 },
   { start: "08:00", mode: "off" },
@@ -1324,7 +1325,7 @@ function renderWater() {
 }
 
 const waterChartSmoothingCache = new Map();
-const waterChartCacheStorageKey = "xtura.water-chart-smoothing.v1";
+const waterChartCacheStorageKey = "xtura.water-chart-smoothing.v2";
 let waterChartCacheHydrated = false;
 let waterChartCachePersistTimer = null;
 
@@ -1341,7 +1342,7 @@ function hydrateWaterChartCache() {
     if (!stored) return;
     const parsed = JSON.parse(stored);
     Object.entries(parsed).forEach(([field, cached]) => {
-      if (cached && Array.isArray(cached.values) && Array.isArray(cached.window)) {
+      if (cached && Array.isArray(cached.displayValues) && cached.displayByBucket && Array.isArray(cached.window)) {
         waterChartSmoothingCache.set(field, cached);
       }
     });
@@ -1381,10 +1382,10 @@ function waterChartSmoothedSamples(history, field) {
     && firstKey === cached.firstKey
     && waterChartSampleKey(samples[cached.sourceLength - 1], field) === cached.lastKey;
   if (canAppend && samples.length === cached.sourceLength) {
-    return cached.values;
+    return cached.displayValues;
   }
   const windowMilliseconds = waterChartMovingAverageMinutes * 60 * 1000;
-  const smoothed = canAppend ? cached.values : [];
+  const displayByBucket = canAppend ? cached.displayByBucket : {};
   const window = canAppend ? cached.window : [];
   let sum = canAppend ? cached.sum : 0;
   const startIndex = canAppend ? cached.sourceLength : 0;
@@ -1402,13 +1403,19 @@ function waterChartSmoothedSamples(history, field) {
     while (window[0].timestamp < timestamp - windowMilliseconds) {
       sum -= window.shift().value;
     }
-    smoothed.push({ t: sample.t, timestamp, value: sum / window.length });
+    displayByBucket[Math.floor(timestamp / waterChartDisplayBucketMilliseconds)] = {
+      t: sample.t,
+      timestamp,
+      value: sum / window.length,
+    };
   }
+  const displayValues = Object.values(displayByBucket).sort((a, b) => a.timestamp - b.timestamp);
   waterChartSmoothingCache.set(field, {
     firstKey,
     lastKey: waterChartSampleKey(samples[samples.length - 1], field),
     sourceLength: samples.length,
-    values: smoothed,
+    displayValues,
+    displayByBucket,
     window,
     sum,
   });
@@ -1417,7 +1424,7 @@ function waterChartSmoothedSamples(history, field) {
   } else {
     persistWaterChartCacheNow();
   }
-  return smoothed;
+  return displayValues;
 }
 
 function renderWaterHistory() {

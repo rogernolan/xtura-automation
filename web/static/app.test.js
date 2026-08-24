@@ -652,7 +652,7 @@ test("renders seven-day water chart as two simple datum-to-datum lines", () => {
   const now = Date.now();
   state.waterHistory = {
     samples: [
-      { t: new Date(now - 60 * 60 * 1000).toISOString(), fresh_percent: 80, grey_percent: 20 },
+      { t: new Date(now - 2 * 60 * 60 * 1000).toISOString(), fresh_percent: 80, grey_percent: 20 },
       { t: new Date(now - 30 * 60 * 1000).toISOString(), fresh_percent: 70, grey_percent: 10 },
     ],
     markers: [{ t: new Date(now - 30 * 60 * 1000).toISOString(), events: [{ tank: "fresh", kind: "fill" }, { tank: "grey", kind: "empty" }] }],
@@ -736,8 +736,9 @@ test("extends cached smoothed samples when a new history payload appends data", 
 
   const second = waterChartSmoothedSamples(nextHistory, "fresh_percent");
 
-  assert.strictEqual(second, first);
-  assert.equal(second.length, 2);
+  assert.equal(second.length, 1);
+  assert.equal(first.length, 1);
+  assert.equal(second[0].value, 80.5);
 });
 
 test("hydrates smoothed samples from persistent storage after a refresh", () => {
@@ -754,7 +755,7 @@ test("hydrates smoothed samples from persistent storage after a refresh", () => 
     samples: [firstSample, { t: new Date().toISOString(), fresh_percent: 81, grey_percent: 20 }],
   }, "fresh_percent");
 
-  assert.equal(result.length, 2);
+  assert.equal(result.length, 1);
 });
 
 test("renders water history during the normal water render", () => {
