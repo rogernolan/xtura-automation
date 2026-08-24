@@ -271,7 +271,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     clearTimeout,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, waterChartSmoothedSamples, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
@@ -281,6 +281,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     renderTemperature: context.module.exports.renderTemperature,
     renderWater: context.module.exports.renderWater,
     renderWaterHistory: context.module.exports.renderWaterHistory,
+    waterChartSmoothedSamples: context.module.exports.waterChartSmoothedSamples,
     temperatureChartDomain: context.module.exports.temperatureChartDomain,
     temperatureChartHourBoundaries: context.module.exports.temperatureChartHourBoundaries,
     trendLabel: context.module.exports.trendLabel,
@@ -709,6 +710,18 @@ test("smooths rounded chart readings with the configured moving average", () => 
   const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
   assert.ok(freshPath);
   assert.match(freshPath[1], /,123\.0$/);
+});
+
+test("reuses cached smoothed samples when history is unchanged", () => {
+  const { waterChartSmoothedSamples } = loadApp();
+  const history = {
+    samples: [{ t: new Date().toISOString(), fresh_percent: 80, grey_percent: 20 }],
+  };
+
+  const first = waterChartSmoothedSamples(history, "fresh_percent");
+  const second = waterChartSmoothedSamples(history, "fresh_percent");
+
+  assert.strictEqual(second, first);
 });
 
 test("renders water history during the normal water render", () => {

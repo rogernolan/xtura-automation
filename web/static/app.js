@@ -1323,6 +1323,58 @@ function renderWater() {
   scheduleButton.disabled = state.requestInFlight;
 }
 
+const waterChartSmoothingCache = new WeakMap();
+
+function waterChartSmoothedSamples(history, field) {
+  if (!history || !Array.isArray(history.samples)) {
+    return [];
+  }
+  const samples = history.samples;
+  const firstSample = samples[0];
+  const lastSample = samples[samples.length - 1];
+  const signature = [
+    samples.length,
+    firstSample && firstSample.t,
+    firstSample && firstSample[field],
+    lastSample && lastSample.t,
+    lastSample && lastSample[field],
+  ].join("|");
+  const cachedByField = waterChartSmoothingCache.get(history);
+  const cached = cachedByField && cachedByField.get(field);
+  if (cached && cached.samples === samples && cached.signature === signature) {
+    return cached.values;
+  }
+  const source = samples
+    .map((sample) => ({
+      t: sample.t,
+      timestamp: new Date(sample.t).getTime(),
+      value: sample[field] === null || sample[field] === undefined
+        ? Number.NaN
+        : Math.round(Number(sample[field])),
+    }))
+    .filter((sample) => Number.isFinite(sample.timestamp) && Number.isFinite(sample.value))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const windowMilliseconds = waterChartMovingAverageMinutes * 60 * 1000;
+  const values = [];
+  let first = 0;
+  let sum = 0;
+  const smoothed = source.map((sample) => {
+    values.push(sample.value);
+    sum += sample.value;
+    while (source[first].timestamp < sample.timestamp - windowMilliseconds) {
+      sum -= values[first];
+      first += 1;
+    }
+    return { t: sample.t, timestamp: sample.timestamp, value: sum / (values.length - first) };
+  });
+  const nextCache = cachedByField || new Map();
+  nextCache.set(field, { samples, signature, values: smoothed });
+  if (!cachedByField) {
+    waterChartSmoothingCache.set(history, nextCache);
+  }
+  return smoothed;
+}
+
 function renderWaterHistory() {
   const chart = byId("waterHistoryChart");
   const freshUsage = byId("freshWaterUsage");
@@ -1354,36 +1406,11 @@ function renderWaterHistory() {
   const start = end - 7 * 24 * 60 * 60 * 1000;
   const x = (at) => left + ((new Date(at).getTime() - start) / (end - start)) * plotWidth;
   const y = (value) => top + ((100 - Number(value)) / 100) * plotHeight;
-  const smoothedSamples = (field) => {
-    const source = history.samples
-      .map((sample) => ({
-        t: sample.t,
-        timestamp: new Date(sample.t).getTime(),
-        value: sample[field] === null || sample[field] === undefined
-          ? Number.NaN
-          : Math.round(Number(sample[field])),
-      }))
-      .filter((sample) => Number.isFinite(sample.timestamp) && Number.isFinite(sample.value))
-      .sort((a, b) => a.timestamp - b.timestamp);
-    const windowMilliseconds = waterChartMovingAverageMinutes * 60 * 1000;
-    const values = [];
-    let first = 0;
-    let sum = 0;
-    return source.map((sample) => {
-      values.push(sample.value);
-      sum += sample.value;
-      while (source[first].timestamp < sample.timestamp - windowMilliseconds) {
-        sum -= values[first];
-        first += 1;
-      }
-      return { t: sample.t, timestamp: sample.timestamp, value: sum / (values.length - first) };
-    });
-  };
   const lineSamples = (field) => {
     const byColumn = new Map();
     const chartSamplePixelWidth = 4;
     const columnDuration = (end - start) / (plotWidth / chartSamplePixelWidth);
-    smoothedSamples(field).forEach((sample) => {
+    waterChartSmoothedSamples(history, field).forEach((sample) => {
       if (sample.timestamp < start || sample.timestamp > end) {
         return;
       }
