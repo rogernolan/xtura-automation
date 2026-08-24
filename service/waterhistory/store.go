@@ -443,7 +443,12 @@ func (s *Store) initializeChartCacheLocked() error {
 	if err := s.loadChartCacheLocked(); err == nil {
 		s.seedChartWindowsLocked()
 		s.trimRawSamplesLocked(s.latestSampleAtLocked())
-		return s.persistLoadedCacheLocked()
+		return nil
+	} else if isPermission(err) {
+		s.resetChartCacheLocked()
+		s.chartSamplesLocked()
+		s.trimRawSamplesLocked(s.latestSampleAtLocked())
+		return nil
 	} else if !os.IsNotExist(err) && !isPermission(err) {
 		return err
 	}
