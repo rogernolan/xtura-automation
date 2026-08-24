@@ -444,13 +444,6 @@ func (s *Store) initializeChartCacheLocked() error {
 		s.seedChartWindowsLocked()
 		s.trimRawSamplesLocked(s.latestSampleAtLocked())
 		return nil
-	} else if isPermission(err) {
-		s.resetChartCacheLocked()
-		s.chartSamplesLocked()
-		s.trimRawSamplesLocked(s.latestSampleAtLocked())
-		return nil
-	} else if !os.IsNotExist(err) && !isPermission(err) {
-		return err
 	}
 	s.resetChartCacheLocked()
 	s.chartSamplesLocked()
@@ -468,7 +461,9 @@ func (s *Store) persistLoadedCacheLocked() error {
 		}
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(s.options.Directory, chartCacheFile)); isPermission(err) {
+	if _, err := os.Stat(filepath.Join(s.options.Directory, chartCacheFile)); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
 		return nil
 	}
 	if err := s.persistChartLocked(); err != nil {
