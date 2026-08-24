@@ -2,6 +2,7 @@ package waterhistory
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +33,7 @@ type chartWindowSample struct {
 
 type chartCache struct {
 	processed   int
+	throughAt   *time.Time
 	buckets     map[int64]int
 	samples     []Point
 	freshWindow []chartWindowSample
@@ -140,9 +142,6 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 		s.chartSamplesLocked()
 		s.trimRawSamplesLocked(sample.At)
 		if err := s.persistChartLocked(); err != nil {
-			return false, err
-		}
-		if err := s.persistRawSamplesLocked(); err != nil {
 			return false, err
 		}
 	}
@@ -286,18 +285,22 @@ func (s *Store) chartSamplesLocked() []Point {
 	for s.chart.processed < len(s.samples) {
 		sample := s.samples[s.chart.processed]
 		s.chart.processed++
+		s.chart.throughAt = timePtr(sample.At)
 		s.updateChartFieldLocked(sample, sample.FreshPercent, true)
 		s.updateChartFieldLocked(sample, sample.GreyPercent, false)
 	}
 	return s.chart.samples
 }
 
-func (s *Store) seedChartWindowsLocked() {
+func (s *Store) seedChartWindowsLocked(limit int) {
 	s.chart.freshWindow = nil
 	s.chart.greyWindow = nil
 	s.chart.freshSum = 0
 	s.chart.greySum = 0
-	for _, sample := range s.samples {
+	if limit > len(s.samples) {
+		limit = len(s.samples)
+	}
+	for _, sample := range s.samples[:limit] {
 		s.addChartWindowLocked(sample.At, sample.FreshPercent, true)
 		s.addChartWindowLocked(sample.At, sample.GreyPercent, false)
 	}
@@ -441,7 +444,20 @@ func (s *Store) Load() error {
 
 func (s *Store) initializeChartCacheLocked() error {
 	if err := s.loadChartCacheLocked(); err == nil {
-		s.seedChartWindowsLocked()
+		replayFrom := 0
+		if s.chart.throughAt != nil {
+			for replayFrom < len(s.samples) && !s.samples[replayFrom].At.After(*s.chart.throughAt) {
+				replayFrom++
+			}
+		}
+		s.seedChartWindowsLocked(replayFrom)
+		s.chart.processed = replayFrom
+		s.chartSamplesLocked()
+		if s.chart.processed > replayFrom {
+			if err := s.persistChartLocked(); err != nil {
+				return err
+			}
+		}
 		s.trimRawSamplesLocked(s.latestSampleAtLocked())
 		return nil
 	}
@@ -494,16 +510,26 @@ func (s *Store) loadChartCacheLocked() error {
 	if err != nil {
 		return err
 	}
-	var samples []Point
-	if err := json.Unmarshal(data, &samples); err != nil {
-		return err
+	var persisted struct {
+		ThroughAt *time.Time `json:"through_at,omitempty"`
+		Samples   []Point    `json:"samples"`
 	}
-	s.chart.samples = samples
-	s.chart.buckets = make(map[int64]int, len(samples))
-	for index, sample := range samples {
+	if err := json.Unmarshal(data, &persisted); err == nil && bytes.HasPrefix(bytes.TrimSpace(data), []byte("{")) {
+		s.chart.throughAt = persisted.ThroughAt
+		s.chart.samples = persisted.Samples
+	} else {
+		var legacy []Point
+		if err := json.Unmarshal(data, &legacy); err != nil {
+			return err
+		}
+		s.chart.throughAt = nil
+		s.chart.samples = nil
+	}
+	s.chart.buckets = make(map[int64]int, len(s.chart.samples))
+	for index, sample := range s.chart.samples {
 		s.chart.buckets[sample.At.UnixNano()/int64(chartDisplayBucket)] = index
 	}
-	s.chart.processed = len(s.samples)
+	s.chart.processed = 0
 	return nil
 }
 
@@ -514,11 +540,14 @@ func (s *Store) persistChartLocked() error {
 	if err := os.MkdirAll(s.options.Directory, 0o755); err != nil {
 		return err
 	}
-	data, err := json.Marshal(s.chart.samples)
+	data, err := json.Marshal(struct {
+		ThroughAt *time.Time `json:"through_at,omitempty"`
+		Samples   []Point    `json:"samples"`
+	}{ThroughAt: s.chart.throughAt, Samples: s.chart.samples})
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.options.Directory, chartCacheFile), data, 0o644)
+	return writeFileAtomic(filepath.Join(s.options.Directory, chartCacheFile), data, 0o644)
 }
 
 func (s *Store) persistRawSamplesLocked() error {
@@ -596,7 +625,7 @@ func (s *Store) persistLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.options.Directory, "state.json"), data, 0o644)
+	return writeFileAtomic(filepath.Join(s.options.Directory, "state.json"), data, 0o644)
 }
 
 func (s *Store) persistObservationLocked(sample Point, eventStart int, storeSample bool) error {
@@ -638,7 +667,33 @@ func writeState(path string, state persistedState) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return writeFileAtomic(path, data, 0o644)
+}
+
+func writeFileAtomic(path string, data []byte, mode fs.FileMode) error {
+	dir := filepath.Dir(path)
+	temp, err := os.CreateTemp(dir, ".water-history-*")
+	if err != nil {
+		return err
+	}
+	tempName := temp.Name()
+	defer os.Remove(tempName)
+	if err := temp.Chmod(mode); err != nil {
+		temp.Close()
+		return err
+	}
+	if _, err := temp.Write(data); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempName, path)
 }
 
 func readNDJSON(path string, target interface{}) error {

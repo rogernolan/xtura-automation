@@ -3,6 +3,7 @@ package waterhistory
 import (
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,32 @@ func TestChartCacheSurvivesRestartWithoutRawHistory(t *testing.T) {
 	}
 	if len(reloaded.samples) != 1 || reloaded.chart.processed != len(reloaded.samples) {
 		t.Fatalf("expected only rolling raw samples after restart, got %d raw and processed=%d", len(reloaded.samples), reloaded.chart.processed)
+	}
+}
+
+func TestRestartReplaysRawSamplesNewerThanChartWatermark(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	options := Options{Directory: dir, Retention: 7 * 24 * time.Hour}
+	store := New(options, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 50)
+	observeBoth(t, store, base.Add(time.Minute), 51, 49)
+
+	// Simulate a crash after the raw append but before the chart cache write.
+	fresh, grey := 52.0, 48.0
+	if err := appendNDJSON(filepath.Join(dir, "samples.ndjson"), Point{At: base.Add(2 * time.Minute), FreshPercent: &fresh, GreyPercent: &grey}); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := New(options, func() time.Time { return base.Add(3 * time.Minute) })
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if !reloaded.chart.throughAt.Equal(base.Add(2 * time.Minute)) {
+		t.Fatalf("chart watermark = %v, want %v", reloaded.chart.throughAt, base.Add(2*time.Minute))
+	}
+	if got := *reloaded.chart.samples[0].FreshPercent; math.Abs(got-51) > 0.001 {
+		t.Fatalf("replayed chart value = %v, want 51", got)
 	}
 }
 

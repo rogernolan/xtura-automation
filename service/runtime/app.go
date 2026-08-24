@@ -38,7 +38,6 @@ import (
 )
 
 var trackingDirectory = "/var/lib/xtura/tracks"
-var waterHistoryDirectory = "/var/lib/xtura/water-history"
 
 // sensorCompactInterval is how often the history store retention runs.
 const sensorCompactInterval = time.Hour
@@ -221,7 +220,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	sensorStore := history.New(sensorHistoryDirectory, history.DefaultWindow, history.DefaultRetention, time.Now, logger)
 	seedSensorHistory(sensorStore, time.Now().UTC())
 	waterStore := waterhistory.New(waterhistory.Options{
-		Directory:      waterHistoryDirectory,
+		Directory:      waterHistoryDirectoryForConfig(configPath),
 		Threshold:      cfg.WaterHistory.ThresholdPercent,
 		SettlingPeriod: cfg.WaterHistory.SettlingPeriod,
 		GroupingWindow: cfg.WaterHistory.GroupingWindow,
@@ -326,6 +325,13 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	go app.schedulerLoop(ctx)
 	go app.waterSchedulerLoop(ctx)
 	return app, nil
+}
+
+func waterHistoryDirectoryForConfig(configPath string) string {
+	if strings.TrimSpace(configPath) == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(configPath), "water-history")
 }
 
 func (a *App) Broker() *events.Broker {
