@@ -1323,55 +1323,55 @@ function renderWater() {
   scheduleButton.disabled = state.requestInFlight;
 }
 
-const waterChartSmoothingCache = new WeakMap();
+const waterChartSmoothingCache = new Map();
+
+function waterChartSampleKey(sample, field) {
+  return `${sample && sample.t}|${sample && sample[field]}`;
+}
 
 function waterChartSmoothedSamples(history, field) {
   if (!history || !Array.isArray(history.samples)) {
     return [];
   }
   const samples = history.samples;
-  const firstSample = samples[0];
-  const lastSample = samples[samples.length - 1];
-  const signature = [
-    samples.length,
-    firstSample && firstSample.t,
-    firstSample && firstSample[field],
-    lastSample && lastSample.t,
-    lastSample && lastSample[field],
-  ].join("|");
-  const cachedByField = waterChartSmoothingCache.get(history);
-  const cached = cachedByField && cachedByField.get(field);
-  if (cached && cached.samples === samples && cached.signature === signature) {
+  const firstKey = waterChartSampleKey(samples[0], field);
+  const cached = waterChartSmoothingCache.get(field);
+  const canAppend = cached
+    && samples.length >= cached.sourceLength
+    && firstKey === cached.firstKey
+    && waterChartSampleKey(samples[cached.sourceLength - 1], field) === cached.lastKey;
+  if (canAppend && samples.length === cached.sourceLength) {
     return cached.values;
   }
-  const source = samples
-    .map((sample) => ({
-      t: sample.t,
-      timestamp: new Date(sample.t).getTime(),
-      value: sample[field] === null || sample[field] === undefined
-        ? Number.NaN
-        : Math.round(Number(sample[field])),
-    }))
-    .filter((sample) => Number.isFinite(sample.timestamp) && Number.isFinite(sample.value))
-    .sort((a, b) => a.timestamp - b.timestamp);
   const windowMilliseconds = waterChartMovingAverageMinutes * 60 * 1000;
-  const values = [];
-  let first = 0;
-  let sum = 0;
-  const smoothed = source.map((sample) => {
-    values.push(sample.value);
-    sum += sample.value;
-    while (source[first].timestamp < sample.timestamp - windowMilliseconds) {
-      sum -= values[first];
-      first += 1;
+  const smoothed = canAppend ? cached.values : [];
+  const window = canAppend ? cached.window : [];
+  let sum = canAppend ? cached.sum : 0;
+  const startIndex = canAppend ? cached.sourceLength : 0;
+  for (let index = startIndex; index < samples.length; index += 1) {
+    const sample = samples[index];
+    const timestamp = new Date(sample.t).getTime();
+    const value = sample[field] === null || sample[field] === undefined
+      ? Number.NaN
+      : Math.round(Number(sample[field]));
+    if (!Number.isFinite(timestamp) || !Number.isFinite(value)) {
+      continue;
     }
-    return { t: sample.t, timestamp: sample.timestamp, value: sum / (values.length - first) };
-  });
-  const nextCache = cachedByField || new Map();
-  nextCache.set(field, { samples, signature, values: smoothed });
-  if (!cachedByField) {
-    waterChartSmoothingCache.set(history, nextCache);
+    window.push({ timestamp, value });
+    sum += value;
+    while (window[0].timestamp < timestamp - windowMilliseconds) {
+      sum -= window.shift().value;
+    }
+    smoothed.push({ t: sample.t, timestamp, value: sum / window.length });
   }
+  waterChartSmoothingCache.set(field, {
+    firstKey,
+    lastKey: waterChartSampleKey(samples[samples.length - 1], field),
+    sourceLength: samples.length,
+    values: smoothed,
+    window,
+    sum,
+  });
   return smoothed;
 }
 

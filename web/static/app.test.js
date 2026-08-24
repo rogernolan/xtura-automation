@@ -724,6 +724,21 @@ test("reuses cached smoothed samples when history is unchanged", () => {
   assert.strictEqual(second, first);
 });
 
+test("extends cached smoothed samples when a new history payload appends data", () => {
+  const { waterChartSmoothedSamples } = loadApp();
+  const firstSample = { t: new Date(Date.now() - 1000).toISOString(), fresh_percent: 80, grey_percent: 20 };
+  const history = { samples: [firstSample] };
+  const first = waterChartSmoothedSamples(history, "fresh_percent");
+  const nextHistory = {
+    samples: [firstSample, { t: new Date().toISOString(), fresh_percent: 81, grey_percent: 20 }],
+  };
+
+  const second = waterChartSmoothedSamples(nextHistory, "fresh_percent");
+
+  assert.strictEqual(second, first);
+  assert.equal(second.length, 2);
+});
+
 test("renders water history during the normal water render", () => {
   const { renderWater, state, elements } = loadApp();
   state.water = {
