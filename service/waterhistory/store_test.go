@@ -130,8 +130,34 @@ func TestDocumentBuildsAppendOnlyChartCache(t *testing.T) {
 
 	observeBoth(t, store, base.Add(61*time.Minute), 69.6, 31.6)
 	store.Document(base.Add(61 * time.Minute))
-	if store.chart.processed != len(store.samples) || store.chart.processed != 4 {
-		t.Fatalf("expected cache to append-process only the new sample, processed %d of %d", store.chart.processed, len(store.samples))
+	if store.chart.processed != len(store.samples) {
+		t.Fatalf("expected cache to append-process the rolling raw window, processed %d of %d", store.chart.processed, len(store.samples))
+	}
+	if len(store.samples) != 1 {
+		t.Fatalf("expected only the current five-minute raw window to remain, got %d samples", len(store.samples))
+	}
+}
+
+func TestChartCacheSurvivesRestartWithoutRawHistory(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	options := Options{Directory: dir, Retention: 7 * 24 * time.Hour}
+	store := New(options, func() time.Time { return base })
+	observeBoth(t, store, base, 80, 20)
+	observeBoth(t, store, base.Add(time.Minute), 81, 19)
+	observeBoth(t, store, base.Add(30*time.Minute), 70, 30)
+	want := store.Document(base.Add(30 * time.Minute))
+
+	reloaded := New(options, func() time.Time { return base.Add(31 * time.Minute) })
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	got := reloaded.Document(base.Add(31 * time.Minute))
+	if len(got.ChartSamples) != len(want.ChartSamples) || *got.ChartSamples[0].FreshPercent != *want.ChartSamples[0].FreshPercent {
+		t.Fatalf("chart cache changed across restart: got %+v want %+v", got.ChartSamples, want.ChartSamples)
+	}
+	if len(reloaded.samples) != 1 || reloaded.chart.processed != len(reloaded.samples) {
+		t.Fatalf("expected only rolling raw samples after restart, got %d raw and processed=%d", len(reloaded.samples), reloaded.chart.processed)
 	}
 }
 
@@ -199,7 +225,7 @@ func TestRestartLoadsSamplesAndEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := reloaded.Document(base.Add(12 * time.Minute))
-	if len(doc.Samples) != 3 || len(doc.Events) != 1 {
+	if len(doc.Samples) != 1 || len(doc.Events) != 1 {
 		t.Fatalf("unexpected reload: %+v", doc)
 	}
 }

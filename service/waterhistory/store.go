@@ -19,6 +19,7 @@ const (
 	sampleHeartbeat    = time.Minute
 	chartAverageWindow = 5 * time.Minute
 	chartDisplayBucket = time.Hour
+	chartCacheFile     = "chart-samples.json"
 )
 
 type chartWindowSample struct {
@@ -134,6 +135,13 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 	}
 	if storeSample {
 		s.chartSamplesLocked()
+		s.trimRawSamplesLocked(sample.At)
+		if err := s.persistChartLocked(); err != nil {
+			return false, err
+		}
+		if err := s.persistRawSamplesLocked(); err != nil {
+			return false, err
+		}
 	}
 	return storeSample || len(s.events) > eventCount, nil
 }
@@ -281,7 +289,18 @@ func (s *Store) chartSamplesLocked() []Point {
 	return s.chart.samples
 }
 
-func (s *Store) updateChartFieldLocked(sample Point, value *float64, fresh bool) {
+func (s *Store) seedChartWindowsLocked() {
+	s.chart.freshWindow = nil
+	s.chart.greyWindow = nil
+	s.chart.freshSum = 0
+	s.chart.greySum = 0
+	for _, sample := range s.samples {
+		s.addChartWindowLocked(sample.At, sample.FreshPercent, true)
+		s.addChartWindowLocked(sample.At, sample.GreyPercent, false)
+	}
+}
+
+func (s *Store) addChartWindowLocked(at time.Time, value *float64, fresh bool) {
 	if value == nil {
 		return
 	}
@@ -292,12 +311,25 @@ func (s *Store) updateChartFieldLocked(sample Point, value *float64, fresh bool)
 		window = &s.chart.greyWindow
 		sum = &s.chart.greySum
 	}
-	*window = append(*window, chartWindowSample{at: sample.At, value: rounded})
+	*window = append(*window, chartWindowSample{at: at, value: rounded})
 	*sum += rounded
-	cutoff := sample.At.Add(-chartAverageWindow)
+	cutoff := at.Add(-chartAverageWindow)
 	for len(*window) > 0 && (*window)[0].at.Before(cutoff) {
 		*sum -= (*window)[0].value
 		*window = (*window)[1:]
+	}
+}
+
+func (s *Store) updateChartFieldLocked(sample Point, value *float64, fresh bool) {
+	if value == nil {
+		return
+	}
+	s.addChartWindowLocked(sample.At, value, fresh)
+	window := &s.chart.freshWindow
+	sum := &s.chart.freshSum
+	if !fresh {
+		window = &s.chart.greyWindow
+		sum = &s.chart.greySum
 	}
 	average := *sum / float64(len(*window))
 	bucket := sample.At.UnixNano() / int64(chartDisplayBucket)
@@ -318,6 +350,18 @@ func (s *Store) updateChartFieldLocked(sample Point, value *float64, fresh bool)
 
 func (s *Store) resetChartCacheLocked() {
 	s.chart = chartCache{}
+}
+
+func (s *Store) trimRawSamplesLocked(at time.Time) {
+	cutoff := at.Add(-chartAverageWindow)
+	kept := s.samples[:0]
+	for _, sample := range s.samples {
+		if !sample.At.Before(cutoff) {
+			kept = append(kept, sample)
+		}
+	}
+	s.samples = kept
+	s.chart.processed = len(s.samples)
 }
 
 func (s *Store) summaryLocked(tank string, current float64, now time.Time) Summary {
@@ -375,7 +419,10 @@ func (s *Store) Load() error {
 	}
 	data, err := os.ReadFile(filepath.Join(s.options.Directory, "state.json"))
 	if os.IsNotExist(err) {
-		return s.compactLoadedSamplesLocked()
+		if err := s.compactLoadedSamplesLocked(); err != nil {
+			return err
+		}
+		return s.initializeChartCacheLocked()
 	}
 	if err != nil {
 		return err
@@ -383,7 +430,85 @@ func (s *Store) Load() error {
 	if err := json.Unmarshal(data, &s.state); err != nil {
 		return err
 	}
-	return s.compactLoadedSamplesLocked()
+	if err := s.compactLoadedSamplesLocked(); err != nil {
+		return err
+	}
+	return s.initializeChartCacheLocked()
+}
+
+func (s *Store) initializeChartCacheLocked() error {
+	if err := s.loadChartCacheLocked(); err == nil {
+		s.seedChartWindowsLocked()
+		s.trimRawSamplesLocked(s.latestSampleAtLocked())
+		return s.persistLoadedCacheLocked()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	s.resetChartCacheLocked()
+	s.chartSamplesLocked()
+	s.trimRawSamplesLocked(s.latestSampleAtLocked())
+	return s.persistLoadedCacheLocked()
+}
+
+func (s *Store) persistLoadedCacheLocked() error {
+	if s.options.Directory == "" {
+		return nil
+	}
+	if _, err := os.Stat(s.options.Directory); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := s.persistChartLocked(); err != nil {
+		return err
+	}
+	return s.persistRawSamplesLocked()
+}
+
+func (s *Store) latestSampleAtLocked() time.Time {
+	if len(s.samples) == 0 {
+		return s.now().UTC()
+	}
+	return s.samples[len(s.samples)-1].At
+}
+
+func (s *Store) loadChartCacheLocked() error {
+	data, err := os.ReadFile(filepath.Join(s.options.Directory, chartCacheFile))
+	if err != nil {
+		return err
+	}
+	var samples []Point
+	if err := json.Unmarshal(data, &samples); err != nil {
+		return err
+	}
+	s.chart.samples = samples
+	s.chart.buckets = make(map[int64]int, len(samples))
+	for index, sample := range samples {
+		s.chart.buckets[sample.At.UnixNano()/int64(chartDisplayBucket)] = index
+	}
+	s.chart.processed = len(s.samples)
+	return nil
+}
+
+func (s *Store) persistChartLocked() error {
+	if s.options.Directory == "" {
+		return nil
+	}
+	if err := os.MkdirAll(s.options.Directory, 0o755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(s.chart.samples)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(s.options.Directory, chartCacheFile), data, 0o644)
+}
+
+func (s *Store) persistRawSamplesLocked() error {
+	if s.options.Directory == "" {
+		return nil
+	}
+	return writeNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), s.samples)
 }
 
 func (s *Store) compactLoadedSamplesLocked() error {
@@ -404,7 +529,21 @@ func (s *Store) Compact(now time.Time) error {
 		}
 	}
 	s.samples = compactSamples(kept)
-	s.resetChartCacheLocked()
+	chartCutoff := cutoff
+	chartKept := s.chart.samples[:0]
+	for _, sample := range s.chart.samples {
+		if !sample.At.Before(chartCutoff) {
+			chartKept = append(chartKept, sample)
+		}
+	}
+	s.chart.samples = chartKept
+	s.chart.buckets = make(map[int64]int, len(chartKept))
+	for index, sample := range chartKept {
+		s.chart.buckets[sample.At.UnixNano()/int64(chartDisplayBucket)] = index
+	}
+	if err := s.persistChartLocked(); err != nil {
+		return err
+	}
 	return s.persistLocked()
 }
 

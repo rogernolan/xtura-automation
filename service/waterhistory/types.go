@@ -43,7 +43,7 @@ type Summary struct {
 }
 
 type Document struct {
-	Samples      []Point  `json:"samples"`
+	Samples      []Point  `json:"-"`
 	ChartSamples []Point  `json:"chart_samples"`
 	Events       []Event  `json:"events"`
 	Markers      []Marker `json:"markers"`
