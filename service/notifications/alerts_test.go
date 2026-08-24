@@ -38,7 +38,7 @@ func TestEvaluatorCrossingAndRearm(t *testing.T) {
 	}
 }
 
-func TestEvaluatorRepeatHonorsTenMinuteDebounce(t *testing.T) {
+func TestEvaluatorRepeatEveryFiveMinutes(t *testing.T) {
 	now := time.Unix(0, 0)
 	settings := Settings{Alerts: []Alert{{ID: "cold", Name: "Cabin cold", SensorID: "alde", LowCelsius: ptr(10), Mode: DeliveryRepeat}}}
 	e := NewEvaluator(settings)
@@ -51,11 +51,11 @@ func TestEvaluatorRepeatHonorsTenMinuteDebounce(t *testing.T) {
 	if got := e.Evaluate("alde", "Alde", 8, now.Add(2*time.Minute)); len(got) != 0 {
 		t.Fatalf("re-cross within debounce window = %#v", got)
 	}
-	if got := e.Evaluate("alde", "Alde", 8, now.Add(5*time.Minute)); len(got) != 0 {
-		t.Fatalf("repeat before debounce window = %#v", got)
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(5*time.Minute)); len(got) != 1 {
+		t.Fatalf("five-minute repeat = %#v", got)
 	}
 	if got := e.Evaluate("alde", "Alde", 8, now.Add(10*time.Minute)); len(got) != 1 {
-		t.Fatalf("repeat after debounce window = %#v", got)
+		t.Fatalf("ten-minute repeat = %#v", got)
 	}
 
 	if got := e.Evaluate("alde", "Alde", 12, now.Add(11*time.Minute)); len(got) != 0 {
@@ -64,11 +64,8 @@ func TestEvaluatorRepeatHonorsTenMinuteDebounce(t *testing.T) {
 	if got := e.Evaluate("alde", "Alde", 8, now.Add(12*time.Minute)); len(got) != 0 {
 		t.Fatalf("second re-cross within debounce window = %#v", got)
 	}
-	if got := e.Evaluate("alde", "Alde", 12, now.Add(14*time.Minute)); len(got) != 0 {
-		t.Fatalf("re-arm after suppressed re-cross = %#v", got)
-	}
-	if got := e.Evaluate("alde", "Alde", 8, now.Add(20*time.Minute)); len(got) != 1 {
-		t.Fatalf("re-cross after debounce window = %#v", got)
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(15*time.Minute)); len(got) != 1 {
+		t.Fatalf("repeat after suppressed re-cross = %#v", got)
 	}
 }
 
