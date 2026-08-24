@@ -43,11 +43,12 @@ type Summary struct {
 }
 
 type Document struct {
-	Samples []Point  `json:"samples"`
-	Events  []Event  `json:"events"`
-	Markers []Marker `json:"markers"`
-	Fresh   Summary  `json:"fresh"`
-	Grey    Summary  `json:"grey"`
+	Samples      []Point  `json:"samples"`
+	ChartSamples []Point  `json:"chart_samples"`
+	Events       []Event  `json:"events"`
+	Markers      []Marker `json:"markers"`
+	Fresh        Summary  `json:"fresh"`
+	Grey         Summary  `json:"grey"`
 }
 
 const (

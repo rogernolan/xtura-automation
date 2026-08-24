@@ -100,6 +100,41 @@ func TestObservationAppendsSamples(t *testing.T) {
 	}
 }
 
+func TestDocumentBuildsAppendOnlyChartCache(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 80.4, 20.4)
+	observeBoth(t, store, base.Add(2*time.Minute), 79.6, 21.6)
+	doc := store.Document(base.Add(2 * time.Minute))
+	if len(doc.ChartSamples) != 1 {
+		t.Fatalf("expected one hourly chart sample, got %+v", doc.ChartSamples)
+	}
+	if got := *doc.ChartSamples[0].FreshPercent; math.Abs(got-80) > 0.001 {
+		t.Fatalf("expected rounded five-minute average of fresh readings, got %v", got)
+	}
+	if got := *doc.ChartSamples[0].GreyPercent; math.Abs(got-21) > 0.001 {
+		t.Fatalf("expected rounded five-minute average of grey readings, got %v", got)
+	}
+
+	observeBoth(t, store, base.Add(30*time.Minute), 70.4, 30.4)
+	doc = store.Document(base.Add(30 * time.Minute))
+	if len(doc.ChartSamples) != 1 {
+		t.Fatalf("expected one hourly chart sample, got %+v", doc.ChartSamples)
+	}
+	if got := *doc.ChartSamples[0].FreshPercent; math.Abs(got-70) > 0.001 {
+		t.Fatalf("expected latest five-minute average in the bucket, got %v", got)
+	}
+	if store.chart.processed != len(store.samples) {
+		t.Fatalf("expected chart cache to process all samples, processed %d of %d", store.chart.processed, len(store.samples))
+	}
+
+	observeBoth(t, store, base.Add(61*time.Minute), 69.6, 31.6)
+	store.Document(base.Add(61 * time.Minute))
+	if store.chart.processed != len(store.samples) || store.chart.processed != 4 {
+		t.Fatalf("expected cache to append-process only the new sample, processed %d of %d", store.chart.processed, len(store.samples))
+	}
+}
+
 func TestIdenticalObservationsUseOneMinuteHeartbeats(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)

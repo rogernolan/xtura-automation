@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,12 +12,29 @@ import (
 )
 
 const (
-	defaultThreshold = 5
-	defaultSettling  = 10 * time.Minute
-	defaultGrouping  = time.Hour
-	defaultRetention = 7 * 24 * time.Hour
-	sampleHeartbeat  = time.Minute
+	defaultThreshold   = 5
+	defaultSettling    = 10 * time.Minute
+	defaultGrouping    = time.Hour
+	defaultRetention   = 7 * 24 * time.Hour
+	sampleHeartbeat    = time.Minute
+	chartAverageWindow = 5 * time.Minute
+	chartDisplayBucket = time.Hour
 )
+
+type chartWindowSample struct {
+	at    time.Time
+	value float64
+}
+
+type chartCache struct {
+	processed   int
+	buckets     map[int64]int
+	samples     []Point
+	freshWindow []chartWindowSample
+	greyWindow  []chartWindowSample
+	freshSum    float64
+	greySum     float64
+}
 
 type candidate struct {
 	Tank      string    `json:"tank"`
@@ -44,6 +62,7 @@ type Store struct {
 	samples []Point
 	events  []Event
 	state   persistedState
+	chart   chartCache
 }
 
 func New(options Options, now func() time.Time) *Store {
@@ -112,6 +131,9 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 	s.state.Grey = cloneFloat(sample.GreyPercentOr(s.state.Grey))
 	if err := s.persistObservationLocked(point, eventCount, storeSample); err != nil {
 		return false, err
+	}
+	if storeSample {
+		s.chartSamplesLocked()
 	}
 	return storeSample || len(s.events) > eventCount, nil
 }
@@ -223,6 +245,11 @@ func (s *Store) Document(now time.Time) Document {
 			doc.Samples = append(doc.Samples, sample)
 		}
 	}
+	for _, sample := range s.chartSamplesLocked() {
+		if !sample.At.Before(cutoff) {
+			doc.ChartSamples = append(doc.ChartSamples, sample)
+		}
+	}
 	for _, event := range s.events {
 		if !event.At.Before(cutoff) {
 			doc.Events = append(doc.Events, event)
@@ -236,6 +263,61 @@ func (s *Store) Document(now time.Time) Document {
 	}
 	doc.Markers = s.groupMarkers(doc.Events)
 	return doc
+}
+
+// chartSamplesLocked incrementally prepares the small, render-ready history
+// sent to every client. Raw samples are append-only, so only the new suffix
+// needs to pass through the moving average and display bucketing.
+func (s *Store) chartSamplesLocked() []Point {
+	if s.chart.buckets == nil {
+		s.chart.buckets = make(map[int64]int)
+	}
+	for s.chart.processed < len(s.samples) {
+		sample := s.samples[s.chart.processed]
+		s.chart.processed++
+		s.updateChartFieldLocked(sample, sample.FreshPercent, true)
+		s.updateChartFieldLocked(sample, sample.GreyPercent, false)
+	}
+	return s.chart.samples
+}
+
+func (s *Store) updateChartFieldLocked(sample Point, value *float64, fresh bool) {
+	if value == nil {
+		return
+	}
+	rounded := math.Round(*value)
+	window := &s.chart.freshWindow
+	sum := &s.chart.freshSum
+	if !fresh {
+		window = &s.chart.greyWindow
+		sum = &s.chart.greySum
+	}
+	*window = append(*window, chartWindowSample{at: sample.At, value: rounded})
+	*sum += rounded
+	cutoff := sample.At.Add(-chartAverageWindow)
+	for len(*window) > 0 && (*window)[0].at.Before(cutoff) {
+		*sum -= (*window)[0].value
+		*window = (*window)[1:]
+	}
+	average := *sum / float64(len(*window))
+	bucket := sample.At.UnixNano() / int64(chartDisplayBucket)
+	index, exists := s.chart.buckets[bucket]
+	if !exists {
+		index = len(s.chart.samples)
+		s.chart.buckets[bucket] = index
+		s.chart.samples = append(s.chart.samples, Point{At: sample.At})
+	} else if sample.At.After(s.chart.samples[index].At) {
+		s.chart.samples[index].At = sample.At
+	}
+	if fresh {
+		s.chart.samples[index].FreshPercent = cloneFloat(&average)
+	} else {
+		s.chart.samples[index].GreyPercent = cloneFloat(&average)
+	}
+}
+
+func (s *Store) resetChartCacheLocked() {
+	s.chart = chartCache{}
 }
 
 func (s *Store) summaryLocked(tank string, current float64, now time.Time) Summary {
@@ -307,6 +389,7 @@ func (s *Store) Load() error {
 func (s *Store) compactLoadedSamplesLocked() error {
 	compacted := compactSamples(s.samples)
 	s.samples = compacted
+	s.resetChartCacheLocked()
 	return nil
 }
 
@@ -321,6 +404,7 @@ func (s *Store) Compact(now time.Time) error {
 		}
 	}
 	s.samples = compactSamples(kept)
+	s.resetChartCacheLocked()
 	return s.persistLocked()
 }
 

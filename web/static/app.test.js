@@ -272,7 +272,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     localStorage,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, waterChartSmoothedSamples, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
@@ -282,7 +282,6 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     renderTemperature: context.module.exports.renderTemperature,
     renderWater: context.module.exports.renderWater,
     renderWaterHistory: context.module.exports.renderWaterHistory,
-    waterChartSmoothedSamples: context.module.exports.waterChartSmoothedSamples,
     temperatureChartDomain: context.module.exports.temperatureChartDomain,
     temperatureChartHourBoundaries: context.module.exports.temperatureChartHourBoundaries,
     trendLabel: context.module.exports.trendLabel,
@@ -676,7 +675,7 @@ test("renders seven-day water chart as two simple datum-to-datum lines", () => {
   assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
 });
 
-test("plots at most one datum per four rendered chart columns for each tank line", () => {
+test("connects each prepared chart datum directly", () => {
   const { renderWaterHistory, state, elements } = loadApp();
   const base = Date.now() - 2 * 60 * 60 * 1000;
   state.waterHistory = {
@@ -692,17 +691,15 @@ test("plots at most one datum per four rendered chart columns for each tank line
 
   const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
   assert.ok(freshPath);
-  assert.equal((freshPath[1].match(/L/g) || []).length, 0);
+  assert.equal((freshPath[1].match(/L/g) || []).length, 2);
 });
 
-test("smooths rounded chart readings with the configured moving average", () => {
+test("renders server-prepared chart samples instead of raw samples", () => {
   const { renderWaterHistory, state, elements } = loadApp();
   const now = Date.now();
   state.waterHistory = {
-    samples: [
-      { t: new Date(now - 60 * 1000).toISOString(), fresh_percent: 100, grey_percent: 0 },
-      { t: new Date(now).toISOString(), fresh_percent: 0, grey_percent: 0 },
-    ],
+    samples: [{ t: new Date(now).toISOString(), fresh_percent: 0, grey_percent: 0 }],
+    chart_samples: [{ t: new Date(now).toISOString(), fresh_percent: 42, grey_percent: 58 }],
     markers: [],
   };
 
@@ -710,52 +707,7 @@ test("smooths rounded chart readings with the configured moving average", () => 
 
   const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
   assert.ok(freshPath);
-  assert.match(freshPath[1], /,123\.0$/);
-});
-
-test("reuses cached smoothed samples when history is unchanged", () => {
-  const { waterChartSmoothedSamples } = loadApp();
-  const history = {
-    samples: [{ t: new Date().toISOString(), fresh_percent: 80, grey_percent: 20 }],
-  };
-
-  const first = waterChartSmoothedSamples(history, "fresh_percent");
-  const second = waterChartSmoothedSamples(history, "fresh_percent");
-
-  assert.strictEqual(second, first);
-});
-
-test("extends cached smoothed samples when a new history payload appends data", () => {
-  const { waterChartSmoothedSamples } = loadApp();
-  const firstSample = { t: new Date(Date.now() - 1000).toISOString(), fresh_percent: 80, grey_percent: 20 };
-  const history = { samples: [firstSample] };
-  const first = waterChartSmoothedSamples(history, "fresh_percent");
-  const nextHistory = {
-    samples: [firstSample, { t: new Date().toISOString(), fresh_percent: 81, grey_percent: 20 }],
-  };
-
-  const second = waterChartSmoothedSamples(nextHistory, "fresh_percent");
-
-  assert.equal(second.length, 1);
-  assert.equal(first.length, 1);
-  assert.equal(second[0].value, 80.5);
-});
-
-test("hydrates smoothed samples from persistent storage after a refresh", () => {
-  const stored = new Map();
-  const localStorage = {
-    getItem(key) { return stored.get(key) || null; },
-    setItem(key, value) { stored.set(key, value); },
-  };
-  const firstSample = { t: new Date(Date.now() - 1000).toISOString(), fresh_percent: 80, grey_percent: 20 };
-  const firstApp = loadApp({ localStorage });
-  firstApp.waterChartSmoothedSamples({ samples: [firstSample] }, "fresh_percent");
-  const secondApp = loadApp({ localStorage });
-  const result = secondApp.waterChartSmoothedSamples({
-    samples: [firstSample, { t: new Date().toISOString(), fresh_percent: 81, grey_percent: 20 }],
-  }, "fresh_percent");
-
-  assert.equal(result.length, 1);
+  assert.match(freshPath[1], /,140\.1$/);
 });
 
 test("renders water history during the normal water render", () => {
