@@ -148,8 +148,9 @@ func (e *Evaluator) evaluateSide(alert Alert, sensorName string, temp float64, a
 		e.state[alert.ID][side] = state
 		return nil
 	}
-	shouldSend := (!state.violated && (state.lastSent.IsZero() || !at.Before(state.lastSent.Add(DebounceInterval))) ||
-		state.violated && alert.Mode == DeliveryRepeat && !state.lastSent.IsZero() && !at.Before(state.lastSent.Add(RepeatInterval)))
+	cooldownElapsed := state.lastSent.IsZero() || !at.Before(state.lastSent.Add(DebounceInterval))
+	shouldSend := cooldownElapsed && (!state.violated ||
+		alert.Mode == DeliveryRepeat && !state.lastSent.IsZero() && !at.Before(state.lastSent.Add(RepeatInterval)))
 	state.violated = true
 	if !shouldSend {
 		e.state[alert.ID][side] = state

@@ -38,27 +38,51 @@ func TestEvaluatorCrossingAndRearm(t *testing.T) {
 	}
 }
 
-func TestEvaluatorRepeatEveryFiveMinutes(t *testing.T) {
+func TestEvaluatorRepeatHonorsTenMinuteDebounce(t *testing.T) {
 	now := time.Unix(0, 0)
 	settings := Settings{Alerts: []Alert{{ID: "cold", Name: "Cabin cold", SensorID: "alde", LowCelsius: ptr(10), Mode: DeliveryRepeat}}}
 	e := NewEvaluator(settings)
-	for i, want := range []int{1, 0, 0, 0, 0, 1} {
-		got := e.Evaluate("alde", "Alde", 8, now.Add(time.Duration(i)*time.Minute))
-		if len(got) != want {
-			t.Fatalf("minute %d notifications = %#v, want %d", i, got, want)
-		}
+	if got := e.Evaluate("alde", "Alde", 8, now); len(got) != 1 {
+		t.Fatalf("initial notification = %#v", got)
 	}
-	if got := e.Evaluate("alde", "Alde", 12, now.Add(6*time.Minute)); len(got) != 0 {
+	if got := e.Evaluate("alde", "Alde", 12, now.Add(time.Minute)); len(got) != 0 {
 		t.Fatalf("re-arm before re-cross = %#v", got)
 	}
-	if got := e.Evaluate("alde", "Alde", 8, now.Add(7*time.Minute)); len(got) != 0 {
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(2*time.Minute)); len(got) != 0 {
 		t.Fatalf("re-cross within debounce window = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(5*time.Minute)); len(got) != 0 {
+		t.Fatalf("repeat before debounce window = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(10*time.Minute)); len(got) != 1 {
+		t.Fatalf("repeat after debounce window = %#v", got)
+	}
+
+	if got := e.Evaluate("alde", "Alde", 12, now.Add(11*time.Minute)); len(got) != 0 {
+		t.Fatalf("re-arm after repeat alert = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(12*time.Minute)); len(got) != 0 {
+		t.Fatalf("second re-cross within debounce window = %#v", got)
 	}
 	if got := e.Evaluate("alde", "Alde", 12, now.Add(14*time.Minute)); len(got) != 0 {
 		t.Fatalf("re-arm after suppressed re-cross = %#v", got)
 	}
-	if got := e.Evaluate("alde", "Alde", 8, now.Add(15*time.Minute)); len(got) != 1 {
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(20*time.Minute)); len(got) != 1 {
 		t.Fatalf("re-cross after debounce window = %#v", got)
+	}
+}
+
+func TestEvaluatorHighAndLowSidesAreIndependent(t *testing.T) {
+	now := time.Unix(0, 0)
+	settings := Settings{Alerts: []Alert{{ID: "range", Name: "Cabin range", SensorID: "alde", HighCelsius: ptr(20), LowCelsius: ptr(10)}}}
+	e := NewEvaluator(settings)
+	got := e.Evaluate("alde", "Alde", 21, now)
+	if len(got) != 1 || got[0].Side != "high" {
+		t.Fatalf("high notification = %#v", got)
+	}
+	got = e.Evaluate("alde", "Alde", 8, now.Add(time.Minute))
+	if len(got) != 1 || got[0].Side != "low" {
+		t.Fatalf("low notification after high notification = %#v", got)
 	}
 }
 
