@@ -467,9 +467,15 @@ func (s *Store) persistLoadedCacheLocked() error {
 		return nil
 	}
 	if err := s.persistChartLocked(); err != nil {
+		if isPermission(err) {
+			return nil
+		}
 		return err
 	}
-	return s.persistRawSamplesLocked()
+	if err := s.persistRawSamplesLocked(); err != nil && !isPermission(err) {
+		return err
+	}
+	return nil
 }
 
 func isPermission(err error) bool {
