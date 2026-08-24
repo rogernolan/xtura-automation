@@ -9,6 +9,7 @@ import (
 )
 
 const RepeatInterval = 5 * time.Minute
+const DebounceInterval = 10 * time.Minute
 
 type DeliveryMode string
 
@@ -144,11 +145,11 @@ func (e *Evaluator) evaluateSide(alert Alert, sensorName string, temp float64, a
 	state := e.state[alert.ID][side]
 	if !violated {
 		state.violated = false
-		state.lastSent = time.Time{}
 		e.state[alert.ID][side] = state
 		return nil
 	}
-	shouldSend := !state.violated || (alert.Mode == DeliveryRepeat && !state.lastSent.IsZero() && !at.Before(state.lastSent.Add(RepeatInterval)))
+	shouldSend := (!state.violated && (state.lastSent.IsZero() || !at.Before(state.lastSent.Add(DebounceInterval))) ||
+		state.violated && alert.Mode == DeliveryRepeat && !state.lastSent.IsZero() && !at.Before(state.lastSent.Add(RepeatInterval)))
 	state.violated = true
 	if !shouldSend {
 		e.state[alert.ID][side] = state

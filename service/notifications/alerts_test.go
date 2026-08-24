@@ -21,8 +21,20 @@ func TestEvaluatorCrossingAndRearm(t *testing.T) {
 	if got := e.Evaluate("alde", "Alde", 19, now.Add(3*time.Minute)); len(got) != 0 {
 		t.Fatalf("rearm notifications = %#v", got)
 	}
-	if got := e.Evaluate("alde", "Alde", 21, now.Add(4*time.Minute)); len(got) != 1 {
-		t.Fatalf("second crossing notifications = %#v", got)
+	if got := e.Evaluate("alde", "Alde", 21, now.Add(4*time.Minute)); len(got) != 0 {
+		t.Fatalf("second crossing within debounce window = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 19, now.Add(5*time.Minute)); len(got) != 0 {
+		t.Fatalf("re-arm after suppressed crossing = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 21, now.Add(9*time.Minute)); len(got) != 0 {
+		t.Fatalf("third crossing within debounce window = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 19, now.Add(10*time.Minute)); len(got) != 0 {
+		t.Fatalf("re-arm after third crossing = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 21, now.Add(11*time.Minute)); len(got) != 1 {
+		t.Fatalf("second crossing after debounce window = %#v", got)
 	}
 }
 
@@ -35,6 +47,18 @@ func TestEvaluatorRepeatEveryFiveMinutes(t *testing.T) {
 		if len(got) != want {
 			t.Fatalf("minute %d notifications = %#v, want %d", i, got, want)
 		}
+	}
+	if got := e.Evaluate("alde", "Alde", 12, now.Add(6*time.Minute)); len(got) != 0 {
+		t.Fatalf("re-arm before re-cross = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(7*time.Minute)); len(got) != 0 {
+		t.Fatalf("re-cross within debounce window = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 12, now.Add(14*time.Minute)); len(got) != 0 {
+		t.Fatalf("re-arm after suppressed re-cross = %#v", got)
+	}
+	if got := e.Evaluate("alde", "Alde", 8, now.Add(15*time.Minute)); len(got) != 1 {
+		t.Fatalf("re-cross after debounce window = %#v", got)
 	}
 }
 
