@@ -693,6 +693,24 @@ test("plots at most one datum per four rendered chart columns for each tank line
   assert.equal((freshPath[1].match(/L/g) || []).length, 0);
 });
 
+test("smooths rounded chart readings with the configured moving average", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  const now = Date.now();
+  state.waterHistory = {
+    samples: [
+      { t: new Date(now - 60 * 1000).toISOString(), fresh_percent: 100, grey_percent: 0 },
+      { t: new Date(now).toISOString(), fresh_percent: 0, grey_percent: 0 },
+    ],
+    markers: [],
+  };
+
+  renderWaterHistory();
+
+  const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
+  assert.ok(freshPath);
+  assert.match(freshPath[1], /,123\.0$/);
+});
+
 test("renders water history during the normal water render", () => {
   const { renderWater, state, elements } = loadApp();
   state.water = {

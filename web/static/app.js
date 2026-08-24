@@ -173,6 +173,7 @@ const allDaysKey = [...allDays].sort().join(",");
 const scheduleSlotCount = 4;
 const minimumSlotMinutes = 5;
 const minutesPerDay = 24 * 60;
+const waterChartMovingAverageMinutes = 5;
 const fallbackVisibleSlots = [
   { start: "05:30", mode: "heat", target_celsius: 18 },
   { start: "08:00", mode: "off" },
@@ -1353,26 +1354,49 @@ function renderWaterHistory() {
   const start = end - 7 * 24 * 60 * 60 * 1000;
   const x = (at) => left + ((new Date(at).getTime() - start) / (end - start)) * plotWidth;
   const y = (value) => top + ((100 - Number(value)) / 100) * plotHeight;
+  const smoothedSamples = (field) => {
+    const source = history.samples
+      .map((sample) => ({
+        t: sample.t,
+        timestamp: new Date(sample.t).getTime(),
+        value: sample[field] === null || sample[field] === undefined
+          ? Number.NaN
+          : Math.round(Number(sample[field])),
+      }))
+      .filter((sample) => Number.isFinite(sample.timestamp) && Number.isFinite(sample.value))
+      .sort((a, b) => a.timestamp - b.timestamp);
+    const windowMilliseconds = waterChartMovingAverageMinutes * 60 * 1000;
+    const values = [];
+    let first = 0;
+    let sum = 0;
+    return source.map((sample) => {
+      values.push(sample.value);
+      sum += sample.value;
+      while (source[first].timestamp < sample.timestamp - windowMilliseconds) {
+        sum -= values[first];
+        first += 1;
+      }
+      return { t: sample.t, timestamp: sample.timestamp, value: sum / (values.length - first) };
+    });
+  };
   const lineSamples = (field) => {
     const byColumn = new Map();
     const chartSamplePixelWidth = 4;
     const columnDuration = (end - start) / (plotWidth / chartSamplePixelWidth);
-    history.samples.forEach((sample) => {
-      const timestamp = new Date(sample.t).getTime();
-      if (sample[field] === null || sample[field] === undefined || !Number.isFinite(timestamp) || timestamp < start || timestamp > end) {
+    smoothedSamples(field).forEach((sample) => {
+      if (sample.timestamp < start || sample.timestamp > end) {
         return;
       }
-      byColumn.set(Math.floor((timestamp - start) / columnDuration), sample);
+      byColumn.set(Math.floor((sample.timestamp - start) / columnDuration), sample);
     });
-    return [...byColumn.values()].sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+    return [...byColumn.values()].sort((a, b) => a.timestamp - b.timestamp);
   };
   const path = (field) => {
     let output = "";
     let connected = false;
     lineSamples(field).forEach((sample) => {
-      const value = Number(sample[field]);
-      const timestamp = new Date(sample.t).getTime();
-      if (!Number.isFinite(value) || !Number.isFinite(timestamp)) {
+      const value = sample.value;
+      if (!Number.isFinite(value) || !Number.isFinite(sample.timestamp)) {
         connected = false;
         return;
       }
