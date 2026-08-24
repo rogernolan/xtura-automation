@@ -3,7 +3,9 @@ package waterhistory
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
@@ -441,7 +443,7 @@ func (s *Store) initializeChartCacheLocked() error {
 		s.seedChartWindowsLocked()
 		s.trimRawSamplesLocked(s.latestSampleAtLocked())
 		return s.persistLoadedCacheLocked()
-	} else if !os.IsNotExist(err) && !os.IsPermission(err) {
+	} else if !os.IsNotExist(err) && !isPermission(err) {
 		return err
 	}
 	s.resetChartCacheLocked()
@@ -455,18 +457,22 @@ func (s *Store) persistLoadedCacheLocked() error {
 		return nil
 	}
 	if _, err := os.Stat(s.options.Directory); err != nil {
-		if os.IsNotExist(err) || os.IsPermission(err) {
+		if os.IsNotExist(err) || isPermission(err) {
 			return nil
 		}
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(s.options.Directory, chartCacheFile)); os.IsPermission(err) {
+	if _, err := os.Stat(filepath.Join(s.options.Directory, chartCacheFile)); isPermission(err) {
 		return nil
 	}
 	if err := s.persistChartLocked(); err != nil {
 		return err
 	}
 	return s.persistRawSamplesLocked()
+}
+
+func isPermission(err error) bool {
+	return os.IsPermission(err) || errors.Is(err, fs.ErrPermission)
 }
 
 func (s *Store) latestSampleAtLocked() time.Time {
