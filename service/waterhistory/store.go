@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -472,7 +473,7 @@ func (s *Store) persistLoadedCacheLocked() error {
 }
 
 func isPermission(err error) bool {
-	return os.IsPermission(err) || errors.Is(err, fs.ErrPermission)
+	return err != nil && (os.IsPermission(err) || errors.Is(err, fs.ErrPermission) || strings.Contains(strings.ToLower(err.Error()), "permission denied"))
 }
 
 func (s *Store) latestSampleAtLocked() time.Time {
