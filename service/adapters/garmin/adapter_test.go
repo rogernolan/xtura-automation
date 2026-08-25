@@ -105,6 +105,18 @@ func waitForLatestReceivedSignal(t *testing.T, session *rootheating.Session, sig
 	})
 }
 
+func waitForAdapterSession(t *testing.T, adapter *Adapter) *rootheating.Session {
+	t.Helper()
+	var session *rootheating.Session
+	waitForCondition(t, "adapter session", func() bool {
+		adapter.mu.RLock()
+		defer adapter.mu.RUnlock()
+		session = adapter.session
+		return session != nil
+	})
+	return session
+}
+
 func sendGreyWaterSignalFrame(t *testing.T, conn *websocket.Conn, session *rootheating.Session, signal int, on bool) {
 	t.Helper()
 	value := 0
@@ -222,6 +234,93 @@ func TestDrainGreyWaterDischargeEventsDrainsQueuedEdgesBeforeTerminalSessionErro
 	}
 	if got[0].Kind != KindOpen || got[1].Kind != KindClose {
 		t.Fatalf("unexpected drained events: %v", got)
+	}
+}
+
+func TestAdapterLoopPreservesQueuedGreyWaterEdgesAcrossReconnect(t *testing.T) {
+	t.Parallel()
+	conns := make(chan *websocket.Conn, 2)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		select {
+		case conns <- conn:
+		default:
+		}
+		defer conn.Close()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	adapter := New(Config{
+		WSURL:             wsURL,
+		HeartbeatInterval: time.Hour,
+		TraceWindow:       time.Second,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	adapter.Start(ctx)
+
+	var firstConn *websocket.Conn
+	select {
+	case firstConn = <-conns:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for first websocket connection")
+	}
+	firstSession := waitForAdapterSession(t, adapter)
+
+	sendGreyWaterSignalFrame(t, firstConn, firstSession, 4, false)
+	sendGreyWaterSignalFrame(t, firstConn, firstSession, 5, false)
+	waitForCondition(t, "baseline poll", func() bool {
+		adapter.pollState()
+		return true
+	})
+	if got := adapter.DrainGreyWaterDischargeEvents(); len(got) != 0 {
+		t.Fatalf("expected no events from baseline frames, got %v", got)
+	}
+
+	sendGreyWaterSignalFrame(t, firstConn, firstSession, 4, true)
+	sendGreyWaterSignalFrame(t, firstConn, firstSession, 5, true)
+	if err := firstConn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := waitForSessionErr(t, firstSession); err == nil {
+		t.Fatal("expected first session to fail after disconnect")
+	}
+
+	var secondConn *websocket.Conn
+	select {
+	case secondConn = <-conns:
+	case <-time.After(4 * time.Second):
+		t.Fatal("timed out waiting for reconnect")
+	}
+	t.Cleanup(func() { _ = secondConn.Close() })
+	waitForCondition(t, "adapter reconnect", func() bool {
+		adapter.mu.RLock()
+		defer adapter.mu.RUnlock()
+		return adapter.session != nil && adapter.session != firstSession
+	})
+	waitForCondition(t, "queued discharge events", func() bool {
+		adapter.mu.RLock()
+		defer adapter.mu.RUnlock()
+		return len(adapter.greyEvents) == 2
+	})
+
+	got := adapter.DrainGreyWaterDischargeEvents()
+	if len(got) != 2 {
+		t.Fatalf("got %d events want 2: %v", len(got), got)
+	}
+	if got[0].Kind != KindOpen || got[1].Kind != KindClose {
+		t.Fatalf("unexpected drained events after reconnect: %v", got)
 	}
 }
 

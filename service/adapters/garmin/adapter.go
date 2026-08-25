@@ -112,6 +112,9 @@ func (a *Adapter) tryConnect(parent context.Context) {
 		return
 	}
 	a.mu.Lock()
+	if a.session != nil {
+		a.queueGreyWaterDischargeEventsLocked(a.session.DrainReceivedSignalEdges())
+	}
 	a.closeSessionLocked()
 	a.session = session
 	a.client = rootheating.NewClient(session)

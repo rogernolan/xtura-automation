@@ -165,7 +165,7 @@ func (s *Store) RecordGreyEmpty(at time.Time) (bool, error) {
 	defer s.mu.Unlock()
 	at = at.UTC()
 	if s.hasGreyEmptyEventAtLocked(at) {
-		if s.clearGreyDischargeStateLocked() {
+		if s.clearGreyDischargeStateLocked(at) {
 			if err := s.persistObservationLocked(Point{}, len(s.events), false); err != nil {
 				return false, err
 			}
@@ -182,7 +182,7 @@ func (s *Store) RecordGreyEmpty(at time.Time) (bool, error) {
 	}
 	to := 0.0
 	s.events = append(s.events, Event{At: at, Tank: TankGrey, Kind: KindEmpty, From: from, To: to, Used: from})
-	s.clearGreyDischargeStateLocked()
+	s.clearGreyDischargeStateLocked(at)
 	if err := s.persistObservationLocked(Point{}, eventStart, false); err != nil {
 		return false, err
 	}
@@ -208,15 +208,24 @@ func sameLevel(a, b *float64) bool {
 }
 
 func (s *Store) observeGreySampleLocked(value float64) {
-	if s.state.Grey == nil || s.state.GreyDischargeOpenAt != nil {
+	if s.state.GreyDischargeOpenAt != nil {
 		return
 	}
-	if *s.state.Grey-value < s.options.Threshold {
+	if s.state.GreyBase == nil {
+		s.state.GreyBase = cloneFloat(&value)
+		return
+	}
+	if value > *s.state.GreyBase {
+		s.state.GreyBase = cloneFloat(&value)
+		return
+	}
+	if *s.state.GreyBase-value < s.options.Threshold {
 		return
 	}
 	if s.options.Logf != nil {
-		s.options.Logf("grey level dropped from %.1f to %.1f without a pending discharge open", *s.state.Grey, value)
+		s.options.Logf("grey level dropped from %.1f to %.1f without a pending discharge open", *s.state.GreyBase, value)
 	}
+	s.state.GreyBase = cloneFloat(&value)
 }
 
 func (s *Store) hasGreyEmptyEventAtLocked(at time.Time) bool {
@@ -229,16 +238,21 @@ func (s *Store) hasGreyEmptyEventAtLocked(at time.Time) bool {
 	return false
 }
 
-func (s *Store) clearGreyDischargeStateLocked() bool {
-	changed := s.state.GreyDischargeOpenAt != nil
-	s.state.GreyDischargeOpenAt = nil
-	to := 0.0
-	if s.state.Grey == nil || *s.state.Grey != to {
+func (s *Store) clearGreyDischargeStateLocked(completedAt time.Time) bool {
+	changed := false
+	if s.state.GreyDischargeOpenAt != nil && !s.state.GreyDischargeOpenAt.After(completedAt) {
+		s.state.GreyDischargeOpenAt = nil
 		changed = true
 	}
-	s.state.Grey = cloneFloat(&to)
-	s.state.GreyBase = cloneFloat(&to)
-	s.state.GreyCand = nil
+	if s.state.LastSampleAt == nil || !s.state.LastSampleAt.After(completedAt) {
+		to := 0.0
+		if s.state.Grey == nil || *s.state.Grey != to {
+			changed = true
+		}
+		s.state.Grey = cloneFloat(&to)
+		s.state.GreyBase = cloneFloat(&to)
+		s.state.GreyCand = nil
+	}
 	return changed
 }
 

@@ -159,6 +159,76 @@ func TestGreyEmptyCloseIsIdempotentAcrossReloadAfterPersistedEventReplay(t *test
 	}
 }
 
+func TestGreyEmptyReplayDoesNotClearNewerGreySample(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	openAt := base.Add(time.Minute)
+	closeAt := base.Add(2 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(openAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(closeAt); err != nil {
+		t.Fatal(err)
+	}
+	observeBoth(t, store, base.Add(3*time.Minute), 50, 16)
+
+	changed, err := store.RecordGreyEmpty(closeAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("replayed close should not report a history change")
+	}
+	if store.state.Grey == nil || *store.state.Grey != 16 {
+		t.Fatalf("replayed close should preserve newer grey state, got %#v", store.state.Grey)
+	}
+	if store.state.GreyDischargeOpenAt != nil {
+		t.Fatalf("replayed close should not leave a pending open, got %v", store.state.GreyDischargeOpenAt)
+	}
+}
+
+func TestGreyEmptyReplayDoesNotClearNewerPendingOpen(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	firstOpenAt := base.Add(time.Minute)
+	firstCloseAt := base.Add(2 * time.Minute)
+	secondOpenAt := base.Add(4 * time.Minute)
+	secondCloseAt := base.Add(5 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(firstOpenAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(firstCloseAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyDischargeOpen(secondOpenAt); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := store.RecordGreyEmpty(firstCloseAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("replayed close should not report a history change")
+	}
+	if store.state.GreyDischargeOpenAt == nil || !store.state.GreyDischargeOpenAt.Equal(secondOpenAt) {
+		t.Fatalf("replayed close should preserve newer pending open, got %v", store.state.GreyDischargeOpenAt)
+	}
+	observeBoth(t, store, secondCloseAt, 50, 22)
+	changed, err = store.RecordGreyEmpty(secondCloseAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected newer pending open to remain active for its own close")
+	}
+	if got := len(store.Document(secondCloseAt).Events); got != 2 {
+		t.Fatalf("expected both grey-empty events, got %d", got)
+	}
+}
+
 func TestGreyPendingOpenPersistsAcrossReload(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
@@ -351,6 +421,35 @@ func TestGreyLevelDropWithoutOpenLogsAndCreatesNoEvent(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(logs[0]), "grey") || !strings.Contains(strings.ToLower(logs[0]), "open") {
 		t.Fatalf("unexpected log message: %q", logs[0])
+	}
+}
+
+func TestGreyLevelCumulativeDropWithoutOpenLogsOnceAtThreshold(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	var logs []string
+	store := New(Options{
+		Directory:      t.TempDir(),
+		Threshold:      5,
+		SettlingPeriod: 10 * time.Minute,
+		GroupingWindow: time.Hour,
+		Retention:      7 * 24 * time.Hour,
+		Logf: func(format string, args ...interface{}) {
+			logs = append(logs, fmt.Sprintf(format, args...))
+		},
+	}, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 80)
+	observeBoth(t, store, base.Add(time.Minute), 50, 77)
+	observeBoth(t, store, base.Add(2*time.Minute), 50, 74)
+	observeBoth(t, store, base.Add(3*time.Minute), 50, 71)
+
+	if got := len(store.Document(base.Add(3 * time.Minute)).Events); got != 0 {
+		t.Fatalf("unexpected grey heuristic event: %+v", store.Document(base.Add(3*time.Minute)).Events)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected one cumulative anomaly log, got %v", logs)
+	}
+	if !strings.Contains(logs[0], "80.0") || !strings.Contains(logs[0], "74.0") {
+		t.Fatalf("expected cumulative log to reference threshold-crossing drop, got %q", logs[0])
 	}
 }
 
