@@ -22,3 +22,26 @@ Tests:
 
 Concerns:
 - None.
+
+---
+
+# Task 1 Fix Report
+
+Status: DONE
+
+Fix applied:
+- Restricted `Session.ingest` so only received 0->1 transitions append a `SignalEdge`.
+- Kept received 1->0 transitions as baseline state updates only, with no queued edge.
+- Updated `heating/heating_test.go` to assert the off transition is absent while preserving drain idempotence coverage.
+
+Fix commit:
+- `6a1d8ab` - `fix: restrict received signal edges to on transitions`
+
+Tests:
+- `rtk test go test ./heating -run 'TestSession.*Signal.*Edge'`
+  - `ok  	empirebus-tests/heating	0.636s`
+- `rtk test go test ./heating`
+  - `ok  	empirebus-tests/heating	0.480s`
+
+Concerns:
+- None.
