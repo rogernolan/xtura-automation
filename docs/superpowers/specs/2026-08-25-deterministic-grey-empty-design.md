@@ -16,6 +16,9 @@ continues to use the existing percentage heuristic.
   one-minute collapse or suppression rule.
 - Grey percentage samples remain available for the current level and chart,
   but a level change alone cannot create a grey-empty event.
+- A downward grey-level change at or above the configured movement threshold
+  without a corresponding discharge-open sequence is logged as an error, but
+  does not create an event. Grey-level increases (filling) are not errors.
 
 ## Design
 
@@ -46,6 +49,10 @@ can create a completion.
 
 - Malformed or unavailable signal frames do not create a discharge event.
 - An unmatched close is ignored without affecting fresh-water detection.
+- A large downward grey-level change without a corresponding open signal is
+  diagnostic evidence of an unexpected or missing EmpirBus event: log it as
+  an error and suppress event creation. Upward changes remain ordinary tank
+  filling and are not errors.
 - Existing percentage validation and persistence errors remain unchanged.
 - A water-history recording error is logged by the runtime loop and does not
   stop telemetry polling.
@@ -60,5 +67,6 @@ Add focused tests for:
 4. a grey level drop alone produces no event;
 5. fresh-water fills retain the existing threshold and settling behavior;
 6. reconnect/reset does not turn a stale close state into a new event;
-7. event metadata uses the latest known grey percentage when present.
-
+7. a threshold-sized downward grey-level change without an open signal logs an
+   error and produces no event, while an upward change does not log an error;
+8. event metadata uses the latest known grey percentage when present.
