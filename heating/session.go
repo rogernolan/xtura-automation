@@ -318,7 +318,7 @@ func (s *Session) ingest(frame Frame) {
 	if frame.Direction == DirectionReceive && len(frame.Wire.Data) >= 3 {
 		signalID := frame.SignalID()
 		on := frame.Wire.Data[2]&0x01 != 0
-		if known := s.signalKnown[signalID]; known && s.signalOn[signalID] != on {
+		if known := s.signalKnown[signalID]; known && !s.signalOn[signalID] && on {
 			s.signalEdges = append(s.signalEdges, SignalEdge{
 				Signal: signalID,
 				At:     frame.At,

@@ -319,9 +319,11 @@ func TestSessionDrainReceivedSignalEdgesTracksStateChanges(t *testing.T) {
 		Direction: DirectionReceive,
 		Wire:      WireFrame{Data: []int{5, 0, 1}},
 	})
-
-	if got := session.DrainReceivedSignalEdges(); len(got) != 0 {
-		t.Fatalf("expected baseline receives to produce no edges, got %v", got)
+	if on, known, at := session.SignalIsOn(4); !known || on || !at.Equal(baseAt) {
+		t.Fatalf("expected signal 4 baseline off, got on=%t known=%t at=%v", on, known, at)
+	}
+	if on, known, at := session.SignalIsOn(5); !known || !on || !at.Equal(baseAt.Add(time.Second)) {
+		t.Fatalf("expected signal 5 baseline on, got on=%t known=%t at=%v", on, known, at)
 	}
 
 	onAt := baseAt.Add(2 * time.Second)
@@ -338,6 +340,10 @@ func TestSessionDrainReceivedSignalEdgesTracksStateChanges(t *testing.T) {
 		Wire:      WireFrame{Data: []int{5, 0, 0}},
 	})
 
+	if on, known, at := session.SignalIsOn(5); !known || on || !at.Equal(offAt) {
+		t.Fatalf("expected signal 5 to update to off, got on=%t known=%t at=%v", on, known, at)
+	}
+
 	session.ingest(Frame{
 		At:        offAt.Add(time.Second),
 		Direction: DirectionSend,
@@ -345,14 +351,11 @@ func TestSessionDrainReceivedSignalEdgesTracksStateChanges(t *testing.T) {
 	})
 
 	got := session.DrainReceivedSignalEdges()
-	if len(got) != 2 {
-		t.Fatalf("got %d edges want 2: %v", len(got), got)
+	if len(got) != 1 {
+		t.Fatalf("got %d edges want 1: %v", len(got), got)
 	}
 	if got[0].Signal != 4 || !got[0].On || !got[0].At.Equal(onAt) {
 		t.Fatalf("got first edge %+v want signal=4 on at %v", got[0], onAt)
-	}
-	if got[1].Signal != 5 || got[1].On || !got[1].At.Equal(offAt) {
-		t.Fatalf("got second edge %+v want signal=5 off at %v", got[1], offAt)
 	}
 
 	if got := session.DrainReceivedSignalEdges(); len(got) != 0 {
