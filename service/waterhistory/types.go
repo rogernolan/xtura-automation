@@ -8,6 +8,7 @@ type Options struct {
 	SettlingPeriod time.Duration
 	GroupingWindow time.Duration
 	Retention      time.Duration
+	Logf           func(format string, args ...interface{})
 }
 
 type Sample struct {
