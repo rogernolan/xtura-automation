@@ -1,6 +1,8 @@
 package waterhistory
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -23,30 +25,256 @@ func TestObserveValidSample(t *testing.T) {
 	}
 }
 
-func TestFillRequiresFivePointsAndTenMinutesSettled(t *testing.T) {
+func TestFillRequiresConfiguredThresholdAndSettling(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	store := testStore(t, base)
+	store := New(Options{
+		Directory:      t.TempDir(),
+		Threshold:      10,
+		SettlingPeriod: 15 * time.Minute,
+		GroupingWindow: time.Hour,
+		Retention:      7 * 24 * time.Hour,
+	}, func() time.Time { return base })
 	observeBoth(t, store, base, 50, 80)
-	observeBoth(t, store, base.Add(time.Minute), 56, 80)
-	if got := len(store.Document(base.Add(5 * time.Minute)).Events); got != 0 {
+	observeBoth(t, store, base.Add(time.Minute), 59, 80)
+	if got := len(store.Document(base.Add(14 * time.Minute)).Events); got != 0 {
+		t.Fatalf("event before threshold/settling: %d", got)
+	}
+	observeBoth(t, store, base.Add(2*time.Minute), 60, 80)
+	if got := len(store.Document(base.Add(14 * time.Minute)).Events); got != 0 {
 		t.Fatalf("event before settling: %d", got)
 	}
-	observeBoth(t, store, base.Add(11*time.Minute), 56, 80)
-	doc := store.Document(base.Add(11 * time.Minute))
+	observeBoth(t, store, base.Add(17*time.Minute), 60, 80)
+	doc := store.Document(base.Add(17 * time.Minute))
 	if len(doc.Events) != 1 || doc.Events[0].Kind != KindFill {
 		t.Fatalf("unexpected events: %+v", doc.Events)
 	}
 }
 
-func TestGreyEmptyRequiresFivePointsAndTenMinutesSettled(t *testing.T) {
+func TestGreyEmptyIgnoresUnmatchedClose(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
 	observeBoth(t, store, base, 50, 80)
-	observeBoth(t, store, base.Add(time.Minute), 50, 74)
-	observeBoth(t, store, base.Add(11*time.Minute), 50, 74)
-	doc := store.Document(base.Add(11 * time.Minute))
+	changed, err := store.RecordGreyEmpty(base.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("unmatched close should not change state")
+	}
+	if got := len(store.Document(base.Add(time.Minute)).Events); got != 0 {
+		t.Fatalf("unexpected events: %+v", store.Document(base.Add(time.Minute)).Events)
+	}
+}
+
+func TestGreyEmptyOpenThenCloseRecordsEvent(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	changed, err := store.RecordGreyDischargeOpen(base.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected open to persist")
+	}
+	changed, err = store.RecordGreyEmpty(base.Add(2 * time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected close to record an event")
+	}
+	doc := store.Document(base.Add(2 * time.Minute))
 	if len(doc.Events) != 1 || doc.Events[0].Kind != KindEmpty {
 		t.Fatalf("unexpected events: %+v", doc.Events)
+	}
+	if doc.Events[0].Tank != TankGrey || doc.Events[0].From != 80 || doc.Events[0].To != 0 || doc.Events[0].Used != 80 {
+		t.Fatalf("unexpected grey empty event: %+v", doc.Events[0])
+	}
+}
+
+func TestGreyEmptyCloseIsIdempotent(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	if _, err := store.RecordGreyDischargeOpen(base.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(base.Add(2 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := store.RecordGreyEmpty(base.Add(3 * time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("second close should be ignored")
+	}
+	if got := len(store.Document(base.Add(3 * time.Minute)).Events); got != 1 {
+		t.Fatalf("got %d events", got)
+	}
+}
+
+func TestGreyEmptyCloseIsIdempotentAcrossReloadAfterPersistedEventReplay(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	options := Options{Directory: dir, Threshold: 5, SettlingPeriod: 10 * time.Minute, GroupingWindow: time.Hour, Retention: 7 * 24 * time.Hour}
+	store := New(options, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 80)
+	openAt := base.Add(time.Minute)
+	closeAt := base.Add(2 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(openAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(closeAt); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state persistedState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	state.GreyDischargeOpenAt = timePtr(openAt)
+	if err := writeState(filepath.Join(dir, "state.json"), state); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := New(options, func() time.Time { return closeAt.Add(time.Minute) })
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := reloaded.RecordGreyEmpty(closeAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("replayed close should not append a duplicate event")
+	}
+	if got := len(reloaded.Document(closeAt.Add(time.Minute)).Events); got != 1 {
+		t.Fatalf("expected one persisted grey-empty event after replay, got %d", got)
+	}
+}
+
+func TestGreyEmptyReplayDoesNotClearNewerGreySample(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	openAt := base.Add(time.Minute)
+	closeAt := base.Add(2 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(openAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(closeAt); err != nil {
+		t.Fatal(err)
+	}
+	observeBoth(t, store, base.Add(3*time.Minute), 50, 16)
+
+	changed, err := store.RecordGreyEmpty(closeAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("replayed close should not report a history change")
+	}
+	if store.state.Grey == nil || *store.state.Grey != 16 {
+		t.Fatalf("replayed close should preserve newer grey state, got %#v", store.state.Grey)
+	}
+	if store.state.GreyDischargeOpenAt != nil {
+		t.Fatalf("replayed close should not leave a pending open, got %v", store.state.GreyDischargeOpenAt)
+	}
+}
+
+func TestGreyEmptyReplayDoesNotClearNewerPendingOpen(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	firstOpenAt := base.Add(time.Minute)
+	firstCloseAt := base.Add(2 * time.Minute)
+	secondOpenAt := base.Add(4 * time.Minute)
+	secondCloseAt := base.Add(5 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(firstOpenAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(firstCloseAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyDischargeOpen(secondOpenAt); err != nil {
+		t.Fatal(err)
+	}
+
+	changed, err := store.RecordGreyEmpty(firstCloseAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("replayed close should not report a history change")
+	}
+	if store.state.GreyDischargeOpenAt == nil || !store.state.GreyDischargeOpenAt.Equal(secondOpenAt) {
+		t.Fatalf("replayed close should preserve newer pending open, got %v", store.state.GreyDischargeOpenAt)
+	}
+	observeBoth(t, store, secondCloseAt, 50, 22)
+	changed, err = store.RecordGreyEmpty(secondCloseAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected newer pending open to remain active for its own close")
+	}
+	if got := len(store.Document(secondCloseAt).Events); got != 2 {
+		t.Fatalf("expected both grey-empty events, got %d", got)
+	}
+}
+
+func TestGreySampleOlderThanEmptyIsIgnored(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	openAt := base.Add(time.Minute)
+	closeAt := base.Add(2 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(openAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(closeAt); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGrey := 40.0
+	if _, err := store.Observe(Sample{At: openAt, GreyPercent: &staleGrey}, closeAt); err != nil {
+		t.Fatal(err)
+	}
+	if store.state.Grey == nil || *store.state.Grey != 0 {
+		t.Fatalf("stale pre-close grey sample overwrote empty state: %#v", store.state.Grey)
+	}
+}
+
+func TestGreyPendingOpenPersistsAcrossReload(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	options := Options{Directory: dir, Threshold: 5, SettlingPeriod: 10 * time.Minute, GroupingWindow: time.Hour, Retention: 7 * 24 * time.Hour}
+	store := New(options, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 80)
+	if _, err := store.RecordGreyDischargeOpen(base.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := New(options, func() time.Time { return base.Add(2 * time.Minute) })
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := reloaded.RecordGreyEmpty(base.Add(2 * time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected persisted open to allow close")
+	}
+	doc := reloaded.Document(base.Add(2 * time.Minute))
+	if len(doc.Events) != 1 || doc.Events[0].Tank != TankGrey || doc.Events[0].Kind != KindEmpty {
+		t.Fatalf("unexpected reload events: %+v", doc.Events)
 	}
 }
 
@@ -60,29 +288,6 @@ func TestLongFillProducesOneEvent(t *testing.T) {
 	observeBoth(t, store, base.Add(16*time.Minute), 90, 80)
 	if got := len(store.Document(base.Add(16 * time.Minute)).Events); got != 1 {
 		t.Fatalf("got %d events", got)
-	}
-}
-
-func TestSubthresholdMovementDoesNotCreateEvent(t *testing.T) {
-	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	store := testStore(t, base)
-	observeBoth(t, store, base, 50, 80)
-	observeBoth(t, store, base.Add(20*time.Minute), 54, 80)
-	if got := len(store.Document(base.Add(31 * time.Minute)).Events); got != 0 {
-		t.Fatalf("got %d events", got)
-	}
-}
-
-func TestNormalUsageAdvancesSettledBaseline(t *testing.T) {
-	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	store := testStore(t, base)
-	observeBoth(t, store, base, 100, 0)
-	observeBoth(t, store, base.Add(time.Minute), 20, 80)
-	observeBoth(t, store, base.Add(2*time.Minute), 90, 70)
-	observeBoth(t, store, base.Add(13*time.Minute), 90, 70)
-	doc := store.Document(base.Add(13 * time.Minute))
-	if len(doc.Events) != 2 {
-		t.Fatalf("expected fill and empty after normal usage, got %+v", doc.Events)
 	}
 }
 
@@ -214,6 +419,85 @@ func TestOppositeMovementClosesCandidate(t *testing.T) {
 	}
 }
 
+func TestGreyLevelDropWithoutOpenLogsAndCreatesNoEvent(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	var logs []string
+	store := New(Options{
+		Directory:      t.TempDir(),
+		Threshold:      5,
+		SettlingPeriod: 10 * time.Minute,
+		GroupingWindow: time.Hour,
+		Retention:      7 * 24 * time.Hour,
+		Logf: func(format string, args ...interface{}) {
+			logs = append(logs, fmt.Sprintf(format, args...))
+		},
+	}, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 80)
+	observeBoth(t, store, base.Add(time.Minute), 50, 74)
+	doc := store.Document(base.Add(time.Minute))
+	if len(doc.Events) != 0 {
+		t.Fatalf("unexpected grey heuristic event: %+v", doc.Events)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected one anomaly log, got %v", logs)
+	}
+	if !strings.Contains(strings.ToLower(logs[0]), "grey") || !strings.Contains(strings.ToLower(logs[0]), "open") {
+		t.Fatalf("unexpected log message: %q", logs[0])
+	}
+}
+
+func TestGreyLevelCumulativeDropWithoutOpenLogsOnceAtThreshold(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	var logs []string
+	store := New(Options{
+		Directory:      t.TempDir(),
+		Threshold:      5,
+		SettlingPeriod: 10 * time.Minute,
+		GroupingWindow: time.Hour,
+		Retention:      7 * 24 * time.Hour,
+		Logf: func(format string, args ...interface{}) {
+			logs = append(logs, fmt.Sprintf(format, args...))
+		},
+	}, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 80)
+	observeBoth(t, store, base.Add(time.Minute), 50, 77)
+	observeBoth(t, store, base.Add(2*time.Minute), 50, 74)
+	observeBoth(t, store, base.Add(3*time.Minute), 50, 71)
+
+	if got := len(store.Document(base.Add(3 * time.Minute)).Events); got != 0 {
+		t.Fatalf("unexpected grey heuristic event: %+v", store.Document(base.Add(3*time.Minute)).Events)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected one cumulative anomaly log, got %v", logs)
+	}
+	if !strings.Contains(logs[0], "80.0") || !strings.Contains(logs[0], "74.0") {
+		t.Fatalf("expected cumulative log to reference threshold-crossing drop, got %q", logs[0])
+	}
+}
+
+func TestGreyLevelRiseWithoutOpenIsNormal(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	var logs []string
+	store := New(Options{
+		Directory:      t.TempDir(),
+		Threshold:      5,
+		SettlingPeriod: 10 * time.Minute,
+		GroupingWindow: time.Hour,
+		Retention:      7 * 24 * time.Hour,
+		Logf: func(format string, args ...interface{}) {
+			logs = append(logs, fmt.Sprintf(format, args...))
+		},
+	}, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 20)
+	observeBoth(t, store, base.Add(time.Minute), 50, 26)
+	if len(store.Document(base.Add(time.Minute)).Events) != 0 {
+		t.Fatalf("unexpected events after upward grey change: %+v", store.Document(base.Add(time.Minute)).Events)
+	}
+	if len(logs) != 0 {
+		t.Fatalf("unexpected anomaly logs: %v", logs)
+	}
+}
+
 func TestReconnectObservedEventUsesObservationTime(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
@@ -281,8 +565,14 @@ func TestGroupedMarkersKeepIndependentEvents(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
 	observeBoth(t, store, base, 50, 80)
-	observeBoth(t, store, base.Add(time.Minute), 56, 74)
-	observeBoth(t, store, base.Add(11*time.Minute), 56, 74)
+	if _, err := store.RecordGreyDischargeOpen(base.Add(10 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(base.Add(11 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	observeBoth(t, store, base.Add(time.Minute), 56, 80)
+	observeBoth(t, store, base.Add(11*time.Minute), 56, 80)
 	doc := store.Document(base.Add(11 * time.Minute))
 	if len(doc.Events) != 2 || len(doc.Markers) != 1 || len(doc.Markers[0].Events) != 2 {
 		t.Fatalf("unexpected grouping: %+v", doc)
@@ -306,9 +596,15 @@ func TestSummaryUsage(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
 	observeBoth(t, store, base, 50, 80)
-	observeBoth(t, store, base.Add(time.Minute), 56, 74)
-	observeBoth(t, store, base.Add(11*time.Minute), 56, 74)
-	fresh, grey := 40.0, 90.0
+	if _, err := store.RecordGreyDischargeOpen(base.Add(10 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(base.Add(11 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	observeBoth(t, store, base.Add(time.Minute), 56, 80)
+	observeBoth(t, store, base.Add(11*time.Minute), 56, 80)
+	fresh, grey := 40.0, 16.0
 	if _, err := store.Observe(Sample{At: base.Add(12 * time.Minute), FreshPercent: &fresh, GreyPercent: &grey}, base.Add(12*time.Minute)); err != nil {
 		t.Fatal(err)
 	}

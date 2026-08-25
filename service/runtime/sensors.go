@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"empirebus-tests/service/adapters/btle"
+	"empirebus-tests/service/adapters/garmin"
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/config"
 	"empirebus-tests/service/domains/overview"
@@ -132,6 +133,43 @@ func (a *App) observeAldeTelemetry() {
 	temp := *telemetry.AldeTemperatureC
 	at := telemetry.UpdatedAt.UTC()
 	a.recordSensorReading(sensors.AldeID, "Alde", "garmin", temp, nil, nil, at)
+}
+
+func (a *App) observeWaterHistory() {
+	changed := a.observeGreyWaterDischargeEvents()
+	if a.observeWaterTelemetry() {
+		changed = true
+	}
+	if changed && a.broker != nil {
+		a.broker.Publish(events.Event{Type: "water.history_changed", Timestamp: a.nowUTC(), Payload: a.WaterHistory()})
+	}
+}
+
+func (a *App) observeGreyWaterDischargeEvents() bool {
+	if a.greyWaterDischarge == nil || a.waterHistory == nil {
+		return false
+	}
+	changed := false
+	for _, event := range a.greyWaterDischarge.DrainGreyWaterDischargeEvents() {
+		var (
+			eventChanged bool
+			err          error
+		)
+		switch event.Kind {
+		case garmin.KindOpen:
+			eventChanged, err = a.waterHistory.RecordGreyDischargeOpen(event.At)
+		case garmin.KindClose:
+			eventChanged, err = a.waterHistory.RecordGreyEmpty(event.At)
+		}
+		if err != nil {
+			a.logger.Printf("water history grey discharge %s: %v", event.Kind, err)
+			continue
+		}
+		if eventChanged {
+			changed = true
+		}
+	}
+	return changed
 }
 
 func (a *App) observeWaterTelemetry() bool {

@@ -74,6 +74,10 @@ type OverviewTelemetryProvider interface {
 	OverviewTelemetry() overview.Telemetry
 }
 
+type GreyWaterDischargeProvider interface {
+	DrainGreyWaterDischargeEvents() []garmin.GreyWaterDischargeEvent
+}
+
 type App struct {
 	startedAt             time.Time
 	cfg                   config.NormalizedConfig
@@ -95,6 +99,7 @@ type App struct {
 	host                  *host.Manager
 	tracking              *tracking.Manager
 	overviewTelemetry     func() overview.Telemetry
+	greyWaterDischarge    GreyWaterDischargeProvider
 	sleep                 func(time.Duration)
 	now                   func() time.Time
 	sensorsStore          *history.Store
@@ -224,6 +229,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		Threshold:      cfg.WaterHistory.ThresholdPercent,
 		SettlingPeriod: cfg.WaterHistory.SettlingPeriod,
 		GroupingWindow: cfg.WaterHistory.GroupingWindow,
+		Logf:           logger.Printf,
 	}, time.Now)
 	if err := waterStore.Load(); err != nil {
 		return nil, fmt.Errorf("load water history: %w", err)
@@ -249,6 +255,10 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	if provider, ok := interface{}(adapter).(OverviewTelemetryProvider); ok {
 		overviewTelemetry = provider.OverviewTelemetry
 	}
+	var greyWaterDischarge GreyWaterDischargeProvider
+	if provider, ok := interface{}(adapter).(GreyWaterDischargeProvider); ok {
+		greyWaterDischarge = provider
+	}
 	app := &App{
 		startedAt:             time.Now().UTC(),
 		cfg:                   cfg,
@@ -267,6 +277,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		host:                  hostManager,
 		tracking:              trackingManager,
 		overviewTelemetry:     overviewTelemetry,
+		greyWaterDischarge:    greyWaterDischarge,
 		now:                   time.Now,
 		sensorsStore:          sensorStore,
 		waterHistory:          waterStore,
@@ -870,9 +881,7 @@ func (a *App) publishStateLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 			a.observeAldeTelemetry()
-			if a.observeWaterTelemetry() {
-				a.broker.Publish(events.Event{Type: "water.history_changed", Timestamp: a.nowUTC(), Payload: a.WaterHistory()})
-			}
+			a.observeWaterHistory()
 			a.evaluateOfflineNotifications()
 			currentOverview := a.Overview()
 			if !reflect.DeepEqual(currentOverview, lastOverview) {

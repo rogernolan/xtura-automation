@@ -1,43 +1,119 @@
-# Task 4 Report
+# Task 4 Report: runtime grey discharge wiring
 
-## Implementation Summary
+## Status
 
-Updated `web/static/styles.css` to style the mobile page shell and navigation drawer using the existing Xtura palette and card treatment. The change adds visible, keyboard-usable styles for the menu button, drawer, backdrop, active drawer link state, and page panels. I also removed the obsolete bottom-navigation spacing/rules and reduced the shell bottom padding so content no longer reserves space for the old nav bar.
+Complete.
 
-## Files Changed
+Task 4 wires Task 2's Garmin discharge-event queue and Task 3's deterministic
+water-history store into the runtime polling path:
 
-- `/Users/rog/Development/xtura-automation/.worktrees/codex-overview-dashboard/web/static/styles.css`
+- runtime now captures an optional `GreyWaterDischargeProvider` from the Garmin
+  adapter during `New`.
+- runtime passes `logger.Printf` into `waterhistory.New(...)` so unexpected
+  grey-level drops surface through the normal runtime logger.
+- each water-history tick now drains Garmin open/close events before sampling
+  overview telemetry, so a discharge open suppresses false anomaly logs on the
+  following grey drop.
+- the tick publishes exactly one `water.history_changed` event after either a
+  discharge event or a telemetry sample changes history.
+- `observeWaterTelemetry` remains responsible for sample ingestion and fresh
+  fill detection only.
+
+## Files changed
+
+- `service/runtime/app.go`
+- `service/runtime/sensors.go`
+- `service/runtime/sensors_test.go`
 
 ## Verification
 
-- `rtk npm test`
-  Result: passed, 14/14 tests green.
-- `rtk npm run lint`
-  Result: passed, no lint errors.
-- Browser inspection on `http://127.0.0.1/` at `390x844`
-  Result: navigation drawer opened, backdrop appeared, active link styled, and focus moved into the drawer.
-- Browser inspection on `http://127.0.0.1/` at `1280x900`
-  Result: drawer rendered at the expected fixed width and remained usable at desktop size.
+### RED
 
-## Self-Review
+Command:
 
-- Confirmed the drawer and backdrop respect the JS `hidden` state.
-- Confirmed the active page link uses `aria-current="page"` styling.
-- Confirmed keyboard focus lands in the drawer after opening.
-- Confirmed the old bottom-nav spacing was removed from the shell.
+```bash
+go test ./service/runtime -run TestGreyWaterHistoryDrainsProviderEventsBeforeSamplesAndPublishesClose
+```
+
+Result:
+
+- `FAIL    empirebus-tests/service/runtime [build failed]`
+- compiler failures matched the missing Task 4 surface:
+  - `unknown field greyWaterDischarge in struct literal of type App`
+  - `app.observeWaterHistory undefined`
+
+### GREEN
+
+Command:
+
+```bash
+go test ./service/runtime -run 'TestGreyWaterHistoryDrainsProviderEventsBeforeSamplesAndPublishesClose|TestObserveWaterTelemetryLogsGreyDropWithoutDischargeOpen|TestObserveWaterTelemetryKeepsFreshFillDetection'
+```
+
+Result:
+
+- `ok      empirebus-tests/service/runtime  0.697s`
+
+### Required package verification
+
+Command:
+
+```bash
+rtk test go test ./heating ./service/adapters/garmin ./service/waterhistory ./service/runtime
+```
+
+Result:
+
+- `ok   empirebus-tests/heating (cached)`
+- `ok   empirebus-tests/service/adapters/garmin (cached)`
+- `ok   empirebus-tests/service/waterhistory (cached)`
+- `ok   empirebus-tests/service/runtime 2.503s`
+
+### Full repository verification
+
+Command:
+
+```bash
+rtk test go test ./...
+```
+
+Result:
+
+- repo-wide test run passed
+- included:
+  - `ok   empirebus-tests/cmd/servsim 2.827s`
+  - `ok   empirebus-tests/heating (cached)`
+  - `ok   empirebus-tests/service/runtime (cached)`
+  - `ok   empirebus-tests/service/waterhistory (cached)`
+
+### Patch hygiene
+
+Commands:
+
+```bash
+rtk proxy gofmt -w service/runtime/app.go service/runtime/sensors.go service/runtime/sensors_test.go
+rtk git diff --check
+```
+
+Result:
+
+- formatting applied cleanly
+- diff check clean
+
+## Notes
+
+- The runtime helper is `observeWaterHistory()`: it drains discharge events
+  first, then samples telemetry, then publishes once if either side changed the
+  water-history document.
+- The runtime tests cover:
+  - open-before-sample ordering via the absence of a false grey-drop log
+  - deterministic close-to-empty event recording
+  - runtime logging when grey drops without an open event
+  - preservation of fresh fill detection through `observeWaterTelemetry`
+- A pre-existing modification to `.superpowers/sdd/task-2-report.md` was left
+  untouched and is not part of Task 4.
 
 ## Concerns
 
-- No blocking concerns. The drawer text color follows the brief exactly; if the design system changes later, that contrast should be rechecked.
-
-## Commit
-
-- `8dd0aa0` — `style: make page navigation mobile friendly`
-
-## Fix Follow-Up
-
-Adjusted drawer link styling to use a light-on-dark palette against the near-black navigation drawer. The default links now use a readable light text color with a subtle fill, and the active, hover, and focus-visible states all keep white text with stronger contrast so keyboard users and touch users can clearly distinguish the current page.
-
-## Additional Verification
-
-- Visual review of the updated drawer styling in `web/static/styles.css` confirmed the link foreground and active background now contrast with the drawer surface.
+None for this task. The requested runtime wiring is in place, focused tests are
+green, package verification passed, and the full repository suite passed.

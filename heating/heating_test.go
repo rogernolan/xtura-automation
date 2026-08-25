@@ -304,6 +304,65 @@ func TestSessionSignalIsOnUsesTheStatusOnBit(t *testing.T) {
 	}
 }
 
+func TestSessionDrainReceivedSignalEdgesTracksStateChanges(t *testing.T) {
+	t.Parallel()
+	session := NewSession(SessionConfig{TraceWindow: time.Second})
+
+	baseAt := time.Unix(1710000000, 0).UTC()
+	session.ingest(Frame{
+		At:        baseAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{4, 0, 0}},
+	})
+	session.ingest(Frame{
+		At:        baseAt.Add(time.Second),
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{5, 0, 1}},
+	})
+	if on, known, at := session.SignalIsOn(4); !known || on || !at.Equal(baseAt) {
+		t.Fatalf("expected signal 4 baseline off, got on=%t known=%t at=%v", on, known, at)
+	}
+	if on, known, at := session.SignalIsOn(5); !known || !on || !at.Equal(baseAt.Add(time.Second)) {
+		t.Fatalf("expected signal 5 baseline on, got on=%t known=%t at=%v", on, known, at)
+	}
+
+	onAt := baseAt.Add(2 * time.Second)
+	session.ingest(Frame{
+		At:        onAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{4, 0, 1}},
+	})
+
+	offAt := baseAt.Add(3 * time.Second)
+	session.ingest(Frame{
+		At:        offAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{5, 0, 0}},
+	})
+
+	if on, known, at := session.SignalIsOn(5); !known || on || !at.Equal(offAt) {
+		t.Fatalf("expected signal 5 to update to off, got on=%t known=%t at=%v", on, known, at)
+	}
+
+	session.ingest(Frame{
+		At:        offAt.Add(time.Second),
+		Direction: DirectionSend,
+		Wire:      WireFrame{Data: []int{4, 0, 0}},
+	})
+
+	got := session.DrainReceivedSignalEdges()
+	if len(got) != 1 {
+		t.Fatalf("got %d edges want 1: %v", len(got), got)
+	}
+	if got[0].Signal != 4 || !got[0].On || !got[0].At.Equal(onAt) {
+		t.Fatalf("got first edge %+v want signal=4 on at %v", got[0], onAt)
+	}
+
+	if got := session.DrainReceivedSignalEdges(); len(got) != 0 {
+		t.Fatalf("expected drain to empty queue, got %v", got)
+	}
+}
+
 func TestFrameSignalIDUsesLittleEndianUint16(t *testing.T) {
 	t.Parallel()
 	frame := Frame{Wire: WireFrame{Data: []int{38, 1, 0}}}

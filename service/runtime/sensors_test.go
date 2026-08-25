@@ -1,16 +1,35 @@
 package runtime
 
 import (
+	"bytes"
+	"log"
+	"strings"
 	"testing"
 	"time"
 
+	"empirebus-tests/service/adapters/garmin"
+	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/domains/overview"
 	"empirebus-tests/service/domains/sensors"
 	"empirebus-tests/service/history"
+	"empirebus-tests/service/waterhistory"
 )
 
 const testMACMain = "c5:65:68:81:84:32"
 const testMACOutside = "d6:66:69:92:95:43"
+
+type stubGreyWaterDischargeProvider struct {
+	batches [][]garmin.GreyWaterDischargeEvent
+}
+
+func (s *stubGreyWaterDischargeProvider) DrainGreyWaterDischargeEvents() []garmin.GreyWaterDischargeEvent {
+	if len(s.batches) == 0 {
+		return nil
+	}
+	batch := append([]garmin.GreyWaterDischargeEvent(nil), s.batches[0]...)
+	s.batches = s.batches[1:]
+	return batch
+}
 
 func newSensorApp(t *testing.T, settings sensors.Settings) (*App, *history.Store) {
 	t.Helper()
@@ -51,6 +70,180 @@ func setState(app *App, id, name, source string, temp float64) {
 		name:   name,
 		source: source,
 		temp:   &temp,
+	}
+}
+
+func waitRuntimeEvent(t *testing.T, stream <-chan events.Event) events.Event {
+	t.Helper()
+	select {
+	case event := <-stream:
+		return event
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for runtime event")
+		return events.Event{}
+	}
+}
+
+func TestGreyWaterHistoryDrainsProviderEventsBeforeSamplesAndPublishesClose(t *testing.T) {
+	base := time.Date(2026, 8, 25, 10, 0, 0, 0, time.UTC)
+	now := base
+	var logs bytes.Buffer
+	logger := log.New(&logs, "", 0)
+	store := waterhistory.New(waterhistory.Options{
+		Directory:      t.TempDir(),
+		Threshold:      5,
+		SettlingPeriod: time.Second,
+		GroupingWindow: time.Hour,
+		Logf:           logger.Printf,
+	}, func() time.Time { return now })
+	baselineGrey := 75.0
+	if changed, err := store.Observe(waterhistory.Sample{At: base, GreyPercent: &baselineGrey}, base); err != nil || !changed {
+		t.Fatalf("seed baseline changed=%t err=%v", changed, err)
+	}
+	openAt := base.Add(time.Minute)
+	closeAt := base.Add(2 * time.Minute)
+	greyDuringDischarge := 40.0
+	greyAfterClose := 0.0
+	telemetry := []overview.Telemetry{
+		{GreyWaterPercent: &greyDuringDischarge, UpdatedAt: &openAt},
+		{GreyWaterPercent: &greyAfterClose, UpdatedAt: &closeAt},
+	}
+	telemetryCalls := 0
+	app := &App{
+		now:          func() time.Time { return now },
+		logger:       logger,
+		broker:       events.NewBroker(8),
+		waterHistory: store,
+		overviewTelemetry: func() overview.Telemetry {
+			current := telemetry[telemetryCalls]
+			telemetryCalls++
+			return current
+		},
+		greyWaterDischarge: &stubGreyWaterDischargeProvider{batches: [][]garmin.GreyWaterDischargeEvent{
+			{{Kind: garmin.KindOpen, At: openAt}},
+			{{Kind: garmin.KindClose, At: closeAt}},
+		}},
+	}
+	stream, unsubscribe := app.Broker().Subscribe()
+	t.Cleanup(unsubscribe)
+
+	app.observeWaterHistory()
+	first := waitRuntimeEvent(t, stream)
+	if first.Type != "water.history_changed" {
+		t.Fatalf("first event type = %q, want water.history_changed", first.Type)
+	}
+	if got := app.WaterHistory().Events; len(got) != 0 {
+		t.Fatalf("expected no empty event after open, got %#v", got)
+	}
+
+	now = closeAt
+	app.observeWaterHistory()
+	second := waitRuntimeEvent(t, stream)
+	if second.Type != "water.history_changed" {
+		t.Fatalf("second event type = %q, want water.history_changed", second.Type)
+	}
+	doc := app.WaterHistory()
+	if len(doc.Events) != 1 {
+		t.Fatalf("expected one grey empty event, got %#v", doc.Events)
+	}
+	event := doc.Events[0]
+	if event.Tank != waterhistory.TankGrey || event.Kind != waterhistory.KindEmpty {
+		t.Fatalf("unexpected water history event %#v", event)
+	}
+	if event.From != greyDuringDischarge || event.To != 0 {
+		t.Fatalf("unexpected grey empty event %#v", event)
+	}
+	if got := strings.TrimSpace(logs.String()); got != "" {
+		t.Fatalf("expected no grey-drop log with discharge open, got %q", got)
+	}
+}
+
+func TestObserveWaterTelemetryLogsGreyDropWithoutDischargeOpen(t *testing.T) {
+	base := time.Date(2026, 8, 25, 10, 0, 0, 0, time.UTC)
+	now := base
+	var logs bytes.Buffer
+	logger := log.New(&logs, "", 0)
+	store := waterhistory.New(waterhistory.Options{
+		Directory:      t.TempDir(),
+		Threshold:      5,
+		SettlingPeriod: time.Second,
+		GroupingWindow: time.Hour,
+		Logf:           logger.Printf,
+	}, func() time.Time { return now })
+	baselineGrey := 70.0
+	if changed, err := store.Observe(waterhistory.Sample{At: base, GreyPercent: &baselineGrey}, base); err != nil || !changed {
+		t.Fatalf("seed baseline changed=%t err=%v", changed, err)
+	}
+	nextAt := base.Add(time.Minute)
+	nextGrey := 60.0
+	app := &App{
+		now:          func() time.Time { return now },
+		logger:       logger,
+		waterHistory: store,
+		overviewTelemetry: func() overview.Telemetry {
+			return overview.Telemetry{GreyWaterPercent: &nextGrey, UpdatedAt: &nextAt}
+		},
+	}
+
+	now = nextAt
+	if !app.observeWaterTelemetry() {
+		t.Fatal("expected grey drop sample to be stored")
+	}
+	if got := app.WaterHistory().Events; len(got) != 0 {
+		t.Fatalf("expected no water-history events, got %#v", got)
+	}
+	if got := logs.String(); !strings.Contains(got, "grey level dropped from 70.0 to 60.0 without a pending discharge open") {
+		t.Fatalf("expected grey-drop log, got %q", got)
+	}
+}
+
+func TestObserveWaterTelemetryKeepsFreshFillDetection(t *testing.T) {
+	base := time.Date(2026, 8, 25, 10, 0, 0, 0, time.UTC)
+	now := base
+	store := waterhistory.New(waterhistory.Options{
+		Directory:      t.TempDir(),
+		Threshold:      5,
+		SettlingPeriod: time.Second,
+		GroupingWindow: time.Hour,
+	}, func() time.Time { return now })
+	baselineFresh := 45.0
+	if changed, err := store.Observe(waterhistory.Sample{At: base, FreshPercent: &baselineFresh}, base); err != nil || !changed {
+		t.Fatalf("seed baseline changed=%t err=%v", changed, err)
+	}
+	fillAt := base.Add(time.Minute)
+	steadyAt := fillAt.Add(2 * time.Second)
+	filledFresh := 55.0
+	telemetry := []overview.Telemetry{
+		{FreshWaterPercent: &filledFresh, UpdatedAt: &fillAt},
+		{FreshWaterPercent: &filledFresh, UpdatedAt: &steadyAt},
+	}
+	telemetryCalls := 0
+	app := &App{
+		now:          func() time.Time { return now },
+		logger:       log.New(&bytes.Buffer{}, "", 0),
+		waterHistory: store,
+		overviewTelemetry: func() overview.Telemetry {
+			current := telemetry[telemetryCalls]
+			telemetryCalls++
+			return current
+		},
+	}
+
+	now = fillAt
+	if !app.observeWaterTelemetry() {
+		t.Fatal("expected first fresh-water fill sample to be stored")
+	}
+	now = steadyAt
+	if !app.observeWaterTelemetry() {
+		t.Fatal("expected settling fresh-water fill sample to change history")
+	}
+	doc := app.WaterHistory()
+	if len(doc.Events) != 1 {
+		t.Fatalf("expected one fresh-water event, got %#v", doc.Events)
+	}
+	event := doc.Events[0]
+	if event.Tank != waterhistory.TankFresh || event.Kind != waterhistory.KindFill {
+		t.Fatalf("unexpected water history event %#v", event)
 	}
 }
 
