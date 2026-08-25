@@ -23,6 +23,16 @@ type Config struct {
 	RecordFrame       func(time.Time, rootheating.Direction, string)
 }
 
+const (
+	KindOpen  = "open"
+	KindClose = "close"
+)
+
+type GreyWaterDischargeEvent struct {
+	Kind string
+	At   time.Time
+}
+
 type Adapter struct {
 	cfg    Config
 	logger *log.Logger
@@ -35,6 +45,7 @@ type Adapter struct {
 	waterState  domainwater.State
 	overview    domainoverview.Telemetry
 	health      domainheating.AdapterHealth
+	greyEvents  []GreyWaterDischargeEvent
 }
 
 func New(cfg Config) *Adapter {
@@ -138,11 +149,23 @@ func (a *Adapter) pollState() {
 	lights := lightsSnapshotFromSession(session, currentLights)
 	water := waterSnapshotFromSession(session, currentWater)
 	overview := overviewTelemetryFromSession(session)
+	edges := session.DrainReceivedSignalEdges()
 	a.mu.Lock()
 	a.state = snapshot
 	a.lightsState = lights
 	a.waterState = water
 	a.overview = overview
+	for _, edge := range edges {
+		if !edge.On {
+			continue
+		}
+		switch edge.Signal {
+		case 4:
+			a.greyEvents = append(a.greyEvents, GreyWaterDischargeEvent{Kind: KindOpen, At: edge.At})
+		case 5:
+			a.greyEvents = append(a.greyEvents, GreyWaterDischargeEvent{Kind: KindClose, At: edge.At})
+		}
+	}
 	if !state.LastUpdated.IsZero() {
 		last := state.LastUpdated
 		a.health.LastFrameAt = &last
@@ -150,6 +173,17 @@ func (a *Adapter) pollState() {
 	a.health.Connected = true
 	a.health.LastError = ""
 	a.mu.Unlock()
+}
+
+func (a *Adapter) DrainGreyWaterDischargeEvents() []GreyWaterDischargeEvent {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.greyEvents) == 0 {
+		return nil
+	}
+	events := append([]GreyWaterDischargeEvent(nil), a.greyEvents...)
+	a.greyEvents = nil
+	return events
 }
 
 func (a *Adapter) CurrentState() domainheating.State {

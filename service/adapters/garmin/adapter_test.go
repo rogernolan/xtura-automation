@@ -15,6 +15,146 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func newGreyWaterDischargeTestAdapter(t *testing.T) (*Adapter, *rootheating.Session, *websocket.Conn) {
+	t.Helper()
+	conns := make(chan *websocket.Conn, 1)
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		select {
+		case conns <- conn:
+		default:
+		}
+		defer conn.Close()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	session := rootheating.NewSession(rootheating.SessionConfig{
+		WSURL:             "ws" + strings.TrimPrefix(server.URL, "http"),
+		HeartbeatInterval: time.Hour,
+		TraceWindow:       time.Second,
+		BootstrapMessages: []string{`{"messagetype":96,"messagecmd":0,"size":0,"data":[]}`},
+	})
+	if err := session.Connect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = session.Close()
+	})
+
+	var conn *websocket.Conn
+	select {
+	case conn = <-conns:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for websocket connection")
+	}
+
+	adapter := &Adapter{
+		session: session,
+		client:  rootheating.NewClient(session),
+	}
+	return adapter, session, conn
+}
+
+func sendGreyWaterSignalFrame(t *testing.T, conn *websocket.Conn, signal int, on bool) {
+	t.Helper()
+	value := 0
+	if on {
+		value = 1
+	}
+	if err := conn.WriteJSON(rootheating.WireFrame{
+		MessageType: 16,
+		MessageCmd:  0,
+		Size:        3,
+		Data:        []int{signal, 0, value},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(20 * time.Millisecond)
+}
+
+func TestDrainGreyWaterDischargeEventsEmitsOpenEventOnSignal4OnEdge(t *testing.T) {
+	t.Parallel()
+	adapter, _, conn := newGreyWaterDischargeTestAdapter(t)
+
+	sendGreyWaterSignalFrame(t, conn, 4, false)
+	adapter.pollState()
+	if got := adapter.DrainGreyWaterDischargeEvents(); len(got) != 0 {
+		t.Fatalf("expected no events from baseline off frame, got %v", got)
+	}
+
+	sendGreyWaterSignalFrame(t, conn, 4, true)
+	adapter.pollState()
+	got := adapter.DrainGreyWaterDischargeEvents()
+	if len(got) != 1 {
+		t.Fatalf("got %d events want 1: %v", len(got), got)
+	}
+	if got[0].Kind != KindOpen {
+		t.Fatalf("got kind %q want %q", got[0].Kind, KindOpen)
+	}
+	if got[0].At.IsZero() {
+		t.Fatal("expected open event to carry a timestamp")
+	}
+}
+
+func TestDrainGreyWaterDischargeEventsEmitsCloseEventOnSignal5OnEdge(t *testing.T) {
+	t.Parallel()
+	adapter, _, conn := newGreyWaterDischargeTestAdapter(t)
+
+	sendGreyWaterSignalFrame(t, conn, 5, false)
+	adapter.pollState()
+	if got := adapter.DrainGreyWaterDischargeEvents(); len(got) != 0 {
+		t.Fatalf("expected no events from baseline off frame, got %v", got)
+	}
+
+	sendGreyWaterSignalFrame(t, conn, 5, true)
+	adapter.pollState()
+	got := adapter.DrainGreyWaterDischargeEvents()
+	if len(got) != 1 {
+		t.Fatalf("got %d events want 1: %v", len(got), got)
+	}
+	if got[0].Kind != KindClose {
+		t.Fatalf("got kind %q want %q", got[0].Kind, KindClose)
+	}
+	if got[0].At.IsZero() {
+		t.Fatal("expected close event to carry a timestamp")
+	}
+}
+
+func TestDrainGreyWaterDischargeEventsIgnoresOffTransitionsAndDuplicates(t *testing.T) {
+	t.Parallel()
+	adapter, _, conn := newGreyWaterDischargeTestAdapter(t)
+
+	sendGreyWaterSignalFrame(t, conn, 4, false)
+	adapter.pollState()
+	sendGreyWaterSignalFrame(t, conn, 4, true)
+	adapter.pollState()
+	sendGreyWaterSignalFrame(t, conn, 4, true)
+	adapter.pollState()
+	sendGreyWaterSignalFrame(t, conn, 4, false)
+	adapter.pollState()
+
+	got := adapter.DrainGreyWaterDischargeEvents()
+	if len(got) != 1 {
+		t.Fatalf("got %d events want 1: %v", len(got), got)
+	}
+	if got[0].Kind != KindOpen {
+		t.Fatalf("got kind %q want %q", got[0].Kind, KindOpen)
+	}
+	if again := adapter.DrainGreyWaterDischargeEvents(); len(again) != 0 {
+		t.Fatalf("expected drain to empty queue, got %v", again)
+	}
+}
+
 func TestEnsureExteriorOnWaitsForReceivedConfirmation(t *testing.T) {
 	t.Parallel()
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
