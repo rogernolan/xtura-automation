@@ -35,18 +35,21 @@ type SessionConfig struct {
 }
 
 type Session struct {
-	cfg       SessionConfig
-	conn      *websocket.Conn
-	mu        sync.Mutex
-	writeMu   sync.Mutex
-	cond      *sync.Cond
-	state     HeaterState
-	signals   map[int]int
-	signalAt  map[int]time.Time
-	received  map[int]receivedSignal
-	closed    bool
-	readErr   error
-	traceTill time.Time
+	cfg         SessionConfig
+	conn        *websocket.Conn
+	mu          sync.Mutex
+	writeMu     sync.Mutex
+	cond        *sync.Cond
+	state       HeaterState
+	signals     map[int]int
+	signalAt    map[int]time.Time
+	signalKnown map[int]bool
+	signalOn    map[int]bool
+	signalEdges []SignalEdge
+	received    map[int]receivedSignal
+	closed      bool
+	readErr     error
+	traceTill   time.Time
 }
 
 func NewSession(cfg SessionConfig) *Session {
@@ -68,6 +71,8 @@ func NewSession(cfg SessionConfig) *Session {
 	s := &Session{cfg: cfg}
 	s.signals = make(map[int]int)
 	s.signalAt = make(map[int]time.Time)
+	s.signalKnown = make(map[int]bool)
+	s.signalOn = make(map[int]bool)
 	s.received = make(map[int]receivedSignal)
 	s.cond = sync.NewCond(&s.mu)
 	return s
@@ -132,6 +137,17 @@ func (s *Session) SignalIsOn(signal int) (bool, bool, time.Time) {
 		return false, false, time.Time{}
 	}
 	return value&0x01 != 0, true, s.signalAt[signal]
+}
+
+func (s *Session) DrainReceivedSignalEdges() []SignalEdge {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.signalEdges) == 0 {
+		return nil
+	}
+	edges := append([]SignalEdge(nil), s.signalEdges...)
+	s.signalEdges = nil
+	return edges
 }
 
 // LatestReceivedSignal returns the latest received raw frame for signal and
@@ -300,8 +316,19 @@ func (s *Session) ingest(frame Frame) {
 	s.mu.Lock()
 	changed := updateState(&s.state, frame)
 	if frame.Direction == DirectionReceive && len(frame.Wire.Data) >= 3 {
-		s.signals[frame.SignalID()] = frame.Wire.Data[2]
-		s.signalAt[frame.SignalID()] = frame.At
+		signalID := frame.SignalID()
+		on := frame.Wire.Data[2]&0x01 != 0
+		if known := s.signalKnown[signalID]; known && s.signalOn[signalID] != on {
+			s.signalEdges = append(s.signalEdges, SignalEdge{
+				Signal: signalID,
+				At:     frame.At,
+				On:     on,
+			})
+		}
+		s.signalKnown[signalID] = true
+		s.signalOn[signalID] = on
+		s.signals[signalID] = frame.Wire.Data[2]
+		s.signalAt[signalID] = frame.At
 	}
 	if frame.Direction == DirectionReceive && len(frame.Wire.Data) >= 2 {
 		wire := frame.Wire
@@ -322,6 +349,12 @@ func (s *Session) ingest(frame Frame) {
 type receivedSignal struct {
 	wire WireFrame
 	at   time.Time
+}
+
+type SignalEdge struct {
+	Signal int
+	At     time.Time
+	On     bool
 }
 
 func (s *Session) logFrame(frame Frame) {

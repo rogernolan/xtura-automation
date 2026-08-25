@@ -304,6 +304,62 @@ func TestSessionSignalIsOnUsesTheStatusOnBit(t *testing.T) {
 	}
 }
 
+func TestSessionDrainReceivedSignalEdgesTracksStateChanges(t *testing.T) {
+	t.Parallel()
+	session := NewSession(SessionConfig{TraceWindow: time.Second})
+
+	baseAt := time.Unix(1710000000, 0).UTC()
+	session.ingest(Frame{
+		At:        baseAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{4, 0, 0}},
+	})
+	session.ingest(Frame{
+		At:        baseAt.Add(time.Second),
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{5, 0, 1}},
+	})
+
+	if got := session.DrainReceivedSignalEdges(); len(got) != 0 {
+		t.Fatalf("expected baseline receives to produce no edges, got %v", got)
+	}
+
+	onAt := baseAt.Add(2 * time.Second)
+	session.ingest(Frame{
+		At:        onAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{4, 0, 1}},
+	})
+
+	offAt := baseAt.Add(3 * time.Second)
+	session.ingest(Frame{
+		At:        offAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{Data: []int{5, 0, 0}},
+	})
+
+	session.ingest(Frame{
+		At:        offAt.Add(time.Second),
+		Direction: DirectionSend,
+		Wire:      WireFrame{Data: []int{4, 0, 0}},
+	})
+
+	got := session.DrainReceivedSignalEdges()
+	if len(got) != 2 {
+		t.Fatalf("got %d edges want 2: %v", len(got), got)
+	}
+	if got[0].Signal != 4 || !got[0].On || !got[0].At.Equal(onAt) {
+		t.Fatalf("got first edge %+v want signal=4 on at %v", got[0], onAt)
+	}
+	if got[1].Signal != 5 || got[1].On || !got[1].At.Equal(offAt) {
+		t.Fatalf("got second edge %+v want signal=5 off at %v", got[1], offAt)
+	}
+
+	if got := session.DrainReceivedSignalEdges(); len(got) != 0 {
+		t.Fatalf("expected drain to empty queue, got %v", got)
+	}
+}
+
 func TestFrameSignalIDUsesLittleEndianUint16(t *testing.T) {
 	t.Parallel()
 	frame := Frame{Wire: WireFrame{Data: []int{38, 1, 0}}}
