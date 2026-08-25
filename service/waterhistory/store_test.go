@@ -229,6 +229,28 @@ func TestGreyEmptyReplayDoesNotClearNewerPendingOpen(t *testing.T) {
 	}
 }
 
+func TestGreySampleOlderThanEmptyIsIgnored(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	store := testStore(t, base)
+	observeBoth(t, store, base, 50, 80)
+	openAt := base.Add(time.Minute)
+	closeAt := base.Add(2 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(openAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(closeAt); err != nil {
+		t.Fatal(err)
+	}
+
+	staleGrey := 40.0
+	if _, err := store.Observe(Sample{At: openAt, GreyPercent: &staleGrey}, closeAt); err != nil {
+		t.Fatal(err)
+	}
+	if store.state.Grey == nil || *store.state.Grey != 0 {
+		t.Fatalf("stale pre-close grey sample overwrote empty state: %#v", store.state.Grey)
+	}
+}
+
 func TestGreyPendingOpenPersistsAcrossReload(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	dir := t.TempDir()

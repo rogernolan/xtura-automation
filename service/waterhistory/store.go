@@ -99,6 +99,9 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 	}
 	sample.At = sample.At.UTC()
 	observedAt = observedAt.UTC()
+	if sample.GreyPercent != nil && s.greySampleIsBeforeLatestEmptyLocked(sample.At) {
+		sample.GreyPercent = nil
+	}
 	if sample.FreshPercent == nil && sample.GreyPercent == nil {
 		return false, nil
 	}
@@ -233,6 +236,16 @@ func (s *Store) hasGreyEmptyEventAtLocked(at time.Time) bool {
 		event := s.events[index]
 		if event.Tank == TankGrey && event.Kind == KindEmpty && event.At.Equal(at) {
 			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) greySampleIsBeforeLatestEmptyLocked(at time.Time) bool {
+	for index := len(s.events) - 1; index >= 0; index-- {
+		event := s.events[index]
+		if event.Tank == TankGrey && event.Kind == KindEmpty {
+			return at.Before(event.At)
 		}
 	}
 	return false
