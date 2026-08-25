@@ -163,10 +163,18 @@ func (s *Store) RecordGreyDischargeOpen(at time.Time) (bool, error) {
 func (s *Store) RecordGreyEmpty(at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	at = at.UTC()
+	if s.hasGreyEmptyEventAtLocked(at) {
+		if s.clearGreyDischargeStateLocked() {
+			if err := s.persistObservationLocked(Point{}, len(s.events), false); err != nil {
+				return false, err
+			}
+		}
+		return false, nil
+	}
 	if s.state.GreyDischargeOpenAt == nil {
 		return false, nil
 	}
-	at = at.UTC()
 	eventStart := len(s.events)
 	from := 0.0
 	if s.state.Grey != nil {
@@ -174,10 +182,7 @@ func (s *Store) RecordGreyEmpty(at time.Time) (bool, error) {
 	}
 	to := 0.0
 	s.events = append(s.events, Event{At: at, Tank: TankGrey, Kind: KindEmpty, From: from, To: to, Used: from})
-	s.state.GreyDischargeOpenAt = nil
-	s.state.Grey = cloneFloat(&to)
-	s.state.GreyBase = cloneFloat(&to)
-	s.state.GreyCand = nil
+	s.clearGreyDischargeStateLocked()
 	if err := s.persistObservationLocked(Point{}, eventStart, false); err != nil {
 		return false, err
 	}
@@ -212,6 +217,29 @@ func (s *Store) observeGreySampleLocked(value float64) {
 	if s.options.Logf != nil {
 		s.options.Logf("grey level dropped from %.1f to %.1f without a pending discharge open", *s.state.Grey, value)
 	}
+}
+
+func (s *Store) hasGreyEmptyEventAtLocked(at time.Time) bool {
+	for index := len(s.events) - 1; index >= 0; index-- {
+		event := s.events[index]
+		if event.Tank == TankGrey && event.Kind == KindEmpty && event.At.Equal(at) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) clearGreyDischargeStateLocked() bool {
+	changed := s.state.GreyDischargeOpenAt != nil
+	s.state.GreyDischargeOpenAt = nil
+	to := 0.0
+	if s.state.Grey == nil || *s.state.Grey != to {
+		changed = true
+	}
+	s.state.Grey = cloneFloat(&to)
+	s.state.GreyBase = cloneFloat(&to)
+	s.state.GreyCand = nil
+	return changed
 }
 
 func (s *Store) commitCandidate(tank string, at time.Time) {

@@ -1,6 +1,7 @@
 package waterhistory
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -111,6 +112,50 @@ func TestGreyEmptyCloseIsIdempotent(t *testing.T) {
 	}
 	if got := len(store.Document(base.Add(3 * time.Minute)).Events); got != 1 {
 		t.Fatalf("got %d events", got)
+	}
+}
+
+func TestGreyEmptyCloseIsIdempotentAcrossReloadAfterPersistedEventReplay(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	options := Options{Directory: dir, Threshold: 5, SettlingPeriod: 10 * time.Minute, GroupingWindow: time.Hour, Retention: 7 * 24 * time.Hour}
+	store := New(options, func() time.Time { return base })
+	observeBoth(t, store, base, 50, 80)
+	openAt := base.Add(time.Minute)
+	closeAt := base.Add(2 * time.Minute)
+	if _, err := store.RecordGreyDischargeOpen(openAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecordGreyEmpty(closeAt); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state persistedState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	state.GreyDischargeOpenAt = timePtr(openAt)
+	if err := writeState(filepath.Join(dir, "state.json"), state); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := New(options, func() time.Time { return closeAt.Add(time.Minute) })
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := reloaded.RecordGreyEmpty(closeAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("replayed close should not append a duplicate event")
+	}
+	if got := len(reloaded.Document(closeAt.Add(time.Minute)).Events); got != 1 {
+		t.Fatalf("expected one persisted grey-empty event after replay, got %d", got)
 	}
 }
 

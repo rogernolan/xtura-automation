@@ -130,8 +130,10 @@ func (a *Adapter) pollState() {
 	if session == nil {
 		return
 	}
+	edges := session.DrainReceivedSignalEdges()
 	if err := session.Err(); err != nil {
 		a.mu.Lock()
+		a.queueGreyWaterDischargeEventsLocked(edges)
 		a.health.Connected = false
 		a.health.LastError = err.Error()
 		a.mu.Unlock()
@@ -149,12 +151,22 @@ func (a *Adapter) pollState() {
 	lights := lightsSnapshotFromSession(session, currentLights)
 	water := waterSnapshotFromSession(session, currentWater)
 	overview := overviewTelemetryFromSession(session)
-	edges := session.DrainReceivedSignalEdges()
 	a.mu.Lock()
 	a.state = snapshot
 	a.lightsState = lights
 	a.waterState = water
 	a.overview = overview
+	a.queueGreyWaterDischargeEventsLocked(edges)
+	if !state.LastUpdated.IsZero() {
+		last := state.LastUpdated
+		a.health.LastFrameAt = &last
+	}
+	a.health.Connected = true
+	a.health.LastError = ""
+	a.mu.Unlock()
+}
+
+func (a *Adapter) queueGreyWaterDischargeEventsLocked(edges []rootheating.SignalEdge) {
 	for _, edge := range edges {
 		if !edge.On {
 			continue
@@ -166,13 +178,6 @@ func (a *Adapter) pollState() {
 			a.greyEvents = append(a.greyEvents, GreyWaterDischargeEvent{Kind: KindClose, At: edge.At})
 		}
 	}
-	if !state.LastUpdated.IsZero() {
-		last := state.LastUpdated
-		a.health.LastFrameAt = &last
-	}
-	a.health.Connected = true
-	a.health.LastError = ""
-	a.mu.Unlock()
 }
 
 func (a *Adapter) DrainGreyWaterDischargeEvents() []GreyWaterDischargeEvent {
