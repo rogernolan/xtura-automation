@@ -315,7 +315,7 @@ func (s *Session) record(at time.Time, direction Direction, raw string) {
 func (s *Session) ingest(frame Frame) {
 	s.mu.Lock()
 	changed := updateState(&s.state, frame)
-	if frame.Direction == DirectionReceive && len(frame.Wire.Data) >= 3 {
+	if frame.Direction == DirectionReceive && isMFDStatusFrame(frame) {
 		signalID := frame.SignalID()
 		on := frame.Wire.Data[2]&0x01 != 0
 		if known := s.signalKnown[signalID]; known && !s.signalOn[signalID] && on {
@@ -344,6 +344,10 @@ func (s *Session) ingest(frame Frame) {
 	if frame.Direction == DirectionReceive && frame.Wire.MessageType == 0x30 && frame.Wire.MessageCmd == 0x05 {
 		_ = s.sendCommand(WireFrame{MessageType: 0x80, MessageCmd: 0x00, Size: 1, Data: []int{0x00}})
 	}
+}
+
+func isMFDStatusFrame(frame Frame) bool {
+	return frame.Wire.MessageType == 16 && len(frame.Wire.Data) >= 3
 }
 
 type receivedSignal struct {

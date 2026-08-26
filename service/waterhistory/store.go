@@ -265,6 +265,12 @@ func (s *Store) clearGreyDischargeStateLocked(completedAt time.Time) bool {
 		s.state.Grey = cloneFloat(&to)
 		s.state.GreyBase = cloneFloat(&to)
 		s.state.GreyCand = nil
+	} else {
+		// A sample received after the close belongs to the current tank state.
+		// Keep that state, but rebase anomaly detection so the next sample is
+		// compared with it rather than with the pre-discharge level.
+		s.state.GreyBase = cloneFloat(s.state.Grey)
+		s.state.GreyCand = nil
 	}
 	return changed
 }

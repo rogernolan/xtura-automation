@@ -183,6 +183,9 @@ func TestGreyEmptyReplayDoesNotClearNewerGreySample(t *testing.T) {
 	if store.state.Grey == nil || *store.state.Grey != 16 {
 		t.Fatalf("replayed close should preserve newer grey state, got %#v", store.state.Grey)
 	}
+	if store.state.GreyBase == nil || *store.state.GreyBase != 16 {
+		t.Fatalf("replayed close should rebase grey anomaly detection, got %#v", store.state.GreyBase)
+	}
 	if store.state.GreyDischargeOpenAt != nil {
 		t.Fatalf("replayed close should not leave a pending open, got %v", store.state.GreyDischargeOpenAt)
 	}
