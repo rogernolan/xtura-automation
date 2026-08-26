@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,10 +20,12 @@ const (
 	defaultThreshold   = 5
 	defaultSettling    = 10 * time.Minute
 	defaultGrouping    = time.Hour
-	defaultRetention   = 7 * 24 * time.Hour
+	defaultRetention   = 30 * 24 * time.Hour
 	sampleHeartbeat    = time.Minute
 	chartAverageWindow = 5 * time.Minute
 	chartDisplayBucket = time.Hour
+	recentBucket       = 10 * time.Minute
+	hourlyBucket       = time.Hour
 	chartCacheFile     = "chart-samples.json"
 )
 
@@ -568,13 +571,24 @@ func (s *Store) Compact(now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cutoff := now.UTC().Add(-s.options.Retention)
-	kept := s.samples[:0]
-	for _, sample := range s.samples {
-		if !sample.At.Before(cutoff) {
-			kept = append(kept, sample)
+	var all []Point
+	if s.options.Directory != "" {
+		if err := readNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), &all); err != nil {
+			return err
 		}
 	}
-	s.samples = compactSamples(kept)
+	if len(all) == 0 {
+		all = append(all, s.samples...)
+	}
+	recent := bucketPoints(all, cutoff, recentBucket)
+	if s.options.Directory != "" {
+		if err := s.archivePointsLocked(all, cutoff); err != nil {
+			return err
+		}
+	}
+	s.samples = recent
+	s.resetChartCacheLocked()
+	s.chartSamplesLocked()
 	chartCutoff := cutoff
 	chartKept := s.chart.samples[:0]
 	for _, sample := range s.chart.samples {
@@ -590,7 +604,108 @@ func (s *Store) Compact(now time.Time) error {
 	if err := s.persistChartLocked(); err != nil {
 		return err
 	}
-	return s.persistLocked()
+	if s.options.Directory != "" {
+		if err := s.persistLocked(); err != nil {
+			return err
+		}
+	}
+	s.trimRawSamplesLocked(s.latestSampleAtLocked())
+	return nil
+}
+
+func (s *Store) archivePointsLocked(points []Point, cutoff time.Time) error {
+	dir := filepath.Join(s.options.Directory, "hourly")
+	archives := make(map[string][]Point)
+	entries, err := os.ReadDir(dir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasPrefix(entry.Name(), "samples-") || filepath.Ext(entry.Name()) != ".ndjson" {
+				continue
+			}
+			var stored []Point
+			if err := readNDJSON(filepath.Join(dir, entry.Name()), &stored); err != nil {
+				return err
+			}
+			archives[entry.Name()] = stored
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	for _, point := range points {
+		if point.At.Before(cutoff) {
+			name := "samples-" + point.At.UTC().Format("2006-01") + ".ndjson"
+			archives[name] = append(archives[name], point)
+		}
+	}
+	for name, points := range archives {
+		if err := writePointsAtomic(filepath.Join(dir, name), bucketPoints(points, time.Time{}, hourlyBucket)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func bucketPoints(points []Point, cutoff time.Time, bucket time.Duration) []Point {
+	buckets := make(map[int64]Point)
+	for _, point := range points {
+		if !cutoff.IsZero() && point.At.Before(cutoff) {
+			continue
+		}
+		key := point.At.Truncate(bucket).UnixNano()
+		previous, ok := buckets[key]
+		if !ok {
+			buckets[key] = point
+			continue
+		}
+		if point.At.After(previous.At) {
+			previous.At = point.At
+		}
+		if point.FreshPercent != nil {
+			previous.FreshPercent = cloneFloat(point.FreshPercent)
+		}
+		if point.GreyPercent != nil {
+			previous.GreyPercent = cloneFloat(point.GreyPercent)
+		}
+		buckets[key] = previous
+	}
+	out := make([]Point, 0, len(buckets))
+	for _, point := range buckets {
+		out = append(out, point)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+	return out
+}
+
+func writePointsAtomic(path string, points []Point) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	var data bytes.Buffer
+	for _, point := range points {
+		encoded, err := json.Marshal(point)
+		if err != nil {
+			return err
+		}
+		data.Write(encoded)
+		data.WriteByte('\n')
+	}
+	return writeFileAtomic(path, data.Bytes(), 0o644)
+}
+
+func writeEventsAtomic(path string, events []Event) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	var data bytes.Buffer
+	for _, event := range events {
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		data.Write(encoded)
+		data.WriteByte('\n')
+	}
+	return writeFileAtomic(path, data.Bytes(), 0o644)
 }
 
 func compactSamples(samples []Point) []Point {
@@ -615,10 +730,10 @@ func (s *Store) persistLocked() error {
 	if err := os.MkdirAll(s.options.Directory, 0o755); err != nil {
 		return err
 	}
-	if err := writeNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), s.samples); err != nil {
+	if err := writePointsAtomic(filepath.Join(s.options.Directory, "samples.ndjson"), s.samples); err != nil {
 		return err
 	}
-	if err := writeNDJSON(filepath.Join(s.options.Directory, "events.ndjson"), s.events); err != nil {
+	if err := writeEventsAtomic(filepath.Join(s.options.Directory, "events.ndjson"), s.events); err != nil {
 		return err
 	}
 	data, err := json.Marshal(s.state)

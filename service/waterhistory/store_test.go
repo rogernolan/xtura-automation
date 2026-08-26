@@ -101,6 +101,106 @@ func TestObservationAppendsSamples(t *testing.T) {
 	}
 }
 
+func TestCompactRetainsThirtyDayTenMinuteSamplesAndArchivesHourly(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	fresh, grey := 70.0, 30.0
+	old := base.Add(-31 * 24 * time.Hour)
+	if err := writeNDJSON(filepath.Join(dir, "samples.ndjson"), []Point{
+		{At: old, FreshPercent: &fresh, GreyPercent: &grey},
+		{At: base.Add(-20 * time.Minute), FreshPercent: &fresh, GreyPercent: &grey},
+		{At: base.Add(-19 * time.Minute), FreshPercent: &fresh, GreyPercent: &grey},
+	}); err != nil {
+		t.Fatalf("write samples: %v", err)
+	}
+	store := New(Options{Directory: dir, Retention: 30 * 24 * time.Hour}, func() time.Time { return base })
+	if err := store.Compact(base); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "samples.ndjson"))
+	if err != nil {
+		t.Fatalf("read recent samples: %v", err)
+	}
+	if got := strings.Count(string(data), "\n"); got != 1 {
+		t.Fatalf("expected one ten-minute recent sample, got %d: %s", got, data)
+	}
+	archives, _ := filepath.Glob(filepath.Join(dir, "hourly", "samples-*.ndjson"))
+	if len(archives) != 1 {
+		t.Fatalf("expected one hourly archive, got %v", archives)
+	}
+	archive, _ := os.ReadFile(archives[0])
+	if !strings.Contains(string(archive), "2026-07-23T12:00:00Z") {
+		t.Fatalf("expected old point in hourly archive, got %s", archive)
+	}
+}
+
+func TestCompactPreservesWaterHourlyArchiveAcrossRuns(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	fresh, grey := 70.0, 30.0
+	old := base.Add(-31 * 24 * time.Hour)
+	if err := writeNDJSON(filepath.Join(dir, "samples.ndjson"), []Point{{At: old, FreshPercent: &fresh, GreyPercent: &grey}}); err != nil {
+		t.Fatalf("write samples: %v", err)
+	}
+	store := New(Options{Directory: dir, Retention: 30 * 24 * time.Hour}, func() time.Time { return base })
+	if err := store.Compact(base); err != nil {
+		t.Fatalf("first Compact: %v", err)
+	}
+	if err := store.Compact(base); err != nil {
+		t.Fatalf("second Compact: %v", err)
+	}
+	archives, _ := filepath.Glob(filepath.Join(dir, "hourly", "samples-*.ndjson"))
+	archive, _ := os.ReadFile(archives[0])
+	if got := strings.Count(string(archive), "\n"); got != 1 {
+		t.Fatalf("expected one archived point after repeated compaction, got %d", got)
+	}
+}
+
+func TestCompactMergesSparseTankValuesInHourlyArchive(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	fresh, grey := 70.0, 30.0
+	if err := writeNDJSON(filepath.Join(dir, "samples.ndjson"), []Point{
+		{At: base.Add(-31 * 24 * time.Hour), FreshPercent: &fresh},
+		{At: base.Add(-31*24*time.Hour + 30*time.Minute), GreyPercent: &grey},
+	}); err != nil {
+		t.Fatalf("write samples: %v", err)
+	}
+	store := New(Options{Directory: dir, Retention: 30 * 24 * time.Hour}, func() time.Time { return base })
+	if err := store.Compact(base); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	archives, _ := filepath.Glob(filepath.Join(dir, "hourly", "samples-*.ndjson"))
+	var points []Point
+	if err := readNDJSON(archives[0], &points); err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	if len(points) != 1 || points[0].FreshPercent == nil || points[0].GreyPercent == nil {
+		t.Fatalf("expected both sparse tank values in one point, got %+v", points)
+	}
+}
+
+func TestCompactPrunesInMemoryChartWithoutPersistence(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	fresh, grey := 70.0, 30.0
+	store := New(Options{Retention: 30 * 24 * time.Hour}, func() time.Time { return base })
+	if _, err := store.Observe(Sample{At: base.Add(-31 * 24 * time.Hour), FreshPercent: &fresh, GreyPercent: &grey}, base); err != nil {
+		t.Fatalf("old Observe: %v", err)
+	}
+	if _, err := store.Observe(Sample{At: base, FreshPercent: &fresh, GreyPercent: &grey}, base); err != nil {
+		t.Fatalf("recent Observe: %v", err)
+	}
+	if len(store.chart.samples) != 2 {
+		t.Fatalf("expected two in-memory chart samples before compact, got %d", len(store.chart.samples))
+	}
+	if err := store.Compact(base); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if len(store.chart.samples) != 1 {
+		t.Fatalf("expected old in-memory chart sample pruned, got %d", len(store.chart.samples))
+	}
+}
+
 func TestDocumentBuildsAppendOnlyChartCache(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
