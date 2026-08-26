@@ -650,9 +650,20 @@ func bucketPoints(points []Point, cutoff time.Time, bucket time.Duration) []Poin
 		}
 		key := point.At.Truncate(bucket).UnixNano()
 		previous, ok := buckets[key]
-		if !ok || point.At.After(previous.At) {
+		if !ok {
 			buckets[key] = point
+			continue
 		}
+		if point.At.After(previous.At) {
+			previous.At = point.At
+		}
+		if point.FreshPercent != nil {
+			previous.FreshPercent = cloneFloat(point.FreshPercent)
+		}
+		if point.GreyPercent != nil {
+			previous.GreyPercent = cloneFloat(point.GreyPercent)
+		}
+		buckets[key] = previous
 	}
 	out := make([]Point, 0, len(buckets))
 	for _, point := range buckets {
@@ -669,6 +680,22 @@ func writePointsAtomic(path string, points []Point) error {
 	var data bytes.Buffer
 	for _, point := range points {
 		encoded, err := json.Marshal(point)
+		if err != nil {
+			return err
+		}
+		data.Write(encoded)
+		data.WriteByte('\n')
+	}
+	return writeFileAtomic(path, data.Bytes(), 0o644)
+}
+
+func writeEventsAtomic(path string, events []Event) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	var data bytes.Buffer
+	for _, event := range events {
+		encoded, err := json.Marshal(event)
 		if err != nil {
 			return err
 		}
@@ -700,10 +727,10 @@ func (s *Store) persistLocked() error {
 	if err := os.MkdirAll(s.options.Directory, 0o755); err != nil {
 		return err
 	}
-	if err := writeNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), s.samples); err != nil {
+	if err := writePointsAtomic(filepath.Join(s.options.Directory, "samples.ndjson"), s.samples); err != nil {
 		return err
 	}
-	if err := writeNDJSON(filepath.Join(s.options.Directory, "events.ndjson"), s.events); err != nil {
+	if err := writeEventsAtomic(filepath.Join(s.options.Directory, "events.ndjson"), s.events); err != nil {
 		return err
 	}
 	data, err := json.Marshal(s.state)

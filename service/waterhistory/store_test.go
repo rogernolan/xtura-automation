@@ -156,6 +156,30 @@ func TestCompactPreservesWaterHourlyArchiveAcrossRuns(t *testing.T) {
 	}
 }
 
+func TestCompactMergesSparseTankValuesInHourlyArchive(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	fresh, grey := 70.0, 30.0
+	if err := writeNDJSON(filepath.Join(dir, "samples.ndjson"), []Point{
+		{At: base.Add(-31 * 24 * time.Hour), FreshPercent: &fresh},
+		{At: base.Add(-31*24*time.Hour + 30*time.Minute), GreyPercent: &grey},
+	}); err != nil {
+		t.Fatalf("write samples: %v", err)
+	}
+	store := New(Options{Directory: dir, Retention: 30 * 24 * time.Hour}, func() time.Time { return base })
+	if err := store.Compact(base); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	archives, _ := filepath.Glob(filepath.Join(dir, "hourly", "samples-*.ndjson"))
+	var points []Point
+	if err := readNDJSON(archives[0], &points); err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	if len(points) != 1 || points[0].FreshPercent == nil || points[0].GreyPercent == nil {
+		t.Fatalf("expected both sparse tank values in one point, got %+v", points)
+	}
+}
+
 func TestDocumentBuildsAppendOnlyChartCache(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)
