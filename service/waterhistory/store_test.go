@@ -180,6 +180,27 @@ func TestCompactMergesSparseTankValuesInHourlyArchive(t *testing.T) {
 	}
 }
 
+func TestCompactPrunesInMemoryChartWithoutPersistence(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	fresh, grey := 70.0, 30.0
+	store := New(Options{Retention: 30 * 24 * time.Hour}, func() time.Time { return base })
+	if _, err := store.Observe(Sample{At: base.Add(-31 * 24 * time.Hour), FreshPercent: &fresh, GreyPercent: &grey}, base); err != nil {
+		t.Fatalf("old Observe: %v", err)
+	}
+	if _, err := store.Observe(Sample{At: base, FreshPercent: &fresh, GreyPercent: &grey}, base); err != nil {
+		t.Fatalf("recent Observe: %v", err)
+	}
+	if len(store.chart.samples) != 2 {
+		t.Fatalf("expected two in-memory chart samples before compact, got %d", len(store.chart.samples))
+	}
+	if err := store.Compact(base); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if len(store.chart.samples) != 1 {
+		t.Fatalf("expected old in-memory chart sample pruned, got %d", len(store.chart.samples))
+	}
+}
+
 func TestDocumentBuildsAppendOnlyChartCache(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base)

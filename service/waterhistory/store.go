@@ -570,20 +570,21 @@ func (s *Store) compactLoadedSamplesLocked() error {
 func (s *Store) Compact(now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.options.Directory == "" {
-		return nil
-	}
 	cutoff := now.UTC().Add(-s.options.Retention)
 	var all []Point
-	if err := readNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), &all); err != nil {
-		return err
+	if s.options.Directory != "" {
+		if err := readNDJSON(filepath.Join(s.options.Directory, "samples.ndjson"), &all); err != nil {
+			return err
+		}
 	}
 	if len(all) == 0 {
 		all = append(all, s.samples...)
 	}
 	recent := bucketPoints(all, cutoff, recentBucket)
-	if err := s.archivePointsLocked(all, cutoff); err != nil {
-		return err
+	if s.options.Directory != "" {
+		if err := s.archivePointsLocked(all, cutoff); err != nil {
+			return err
+		}
 	}
 	s.samples = recent
 	s.resetChartCacheLocked()
@@ -603,8 +604,10 @@ func (s *Store) Compact(now time.Time) error {
 	if err := s.persistChartLocked(); err != nil {
 		return err
 	}
-	if err := s.persistLocked(); err != nil {
-		return err
+	if s.options.Directory != "" {
+		if err := s.persistLocked(); err != nil {
+			return err
+		}
 	}
 	s.trimRawSamplesLocked(s.latestSampleAtLocked())
 	return nil
