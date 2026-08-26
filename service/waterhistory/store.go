@@ -55,13 +55,14 @@ type candidate struct {
 }
 
 type persistedState struct {
-	LastSampleAt *time.Time `json:"last_sample_at,omitempty"`
-	FreshBase    *float64   `json:"fresh_base,omitempty"`
-	GreyBase     *float64   `json:"grey_base,omitempty"`
-	Fresh        *float64   `json:"fresh,omitempty"`
-	Grey         *float64   `json:"grey,omitempty"`
-	FreshCand    *candidate `json:"fresh_candidate,omitempty"`
-	GreyCand     *candidate `json:"grey_candidate,omitempty"`
+	LastSampleAt        *time.Time `json:"last_sample_at,omitempty"`
+	FreshBase           *float64   `json:"fresh_base,omitempty"`
+	GreyBase            *float64   `json:"grey_base,omitempty"`
+	Fresh               *float64   `json:"fresh,omitempty"`
+	Grey                *float64   `json:"grey,omitempty"`
+	FreshCand           *candidate `json:"fresh_candidate,omitempty"`
+	GreyCand            *candidate `json:"grey_candidate,omitempty"`
+	GreyDischargeOpenAt *time.Time `json:"grey_discharge_open_at,omitempty"`
 }
 
 type Store struct {
@@ -101,6 +102,9 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 	}
 	sample.At = sample.At.UTC()
 	observedAt = observedAt.UTC()
+	if sample.GreyPercent != nil && s.greySampleIsBeforeLatestEmptyLocked(sample.At) {
+		sample.GreyPercent = nil
+	}
 	if sample.FreshPercent == nil && sample.GreyPercent == nil {
 		return false, nil
 	}
@@ -131,10 +135,7 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 		}
 	}
 	if sample.GreyPercent != nil {
-		s.observeTank(TankGrey, KindEmpty, *sample.GreyPercent, observedAt)
-		if offlineObservation {
-			s.commitCandidate(TankGrey, observedAt)
-		}
+		s.observeGreySampleLocked(*sample.GreyPercent)
 	}
 	s.state.Fresh = cloneFloat(sample.FreshPercentOr(s.state.Fresh))
 	s.state.Grey = cloneFloat(sample.GreyPercentOr(s.state.Grey))
@@ -149,6 +150,49 @@ func (s *Store) Observe(sample Sample, observedAt time.Time) (bool, error) {
 		}
 	}
 	return storeSample || len(s.events) > eventCount, nil
+}
+
+func (s *Store) RecordGreyDischargeOpen(at time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	at = at.UTC()
+	if s.state.GreyDischargeOpenAt != nil && s.state.GreyDischargeOpenAt.Equal(at) {
+		return false, nil
+	}
+	s.state.GreyDischargeOpenAt = timePtr(at)
+	if err := s.persistObservationLocked(Point{}, len(s.events), false); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Store) RecordGreyEmpty(at time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	at = at.UTC()
+	if s.hasGreyEmptyEventAtLocked(at) {
+		if s.clearGreyDischargeStateLocked(at) {
+			if err := s.persistObservationLocked(Point{}, len(s.events), false); err != nil {
+				return false, err
+			}
+		}
+		return false, nil
+	}
+	if s.state.GreyDischargeOpenAt == nil {
+		return false, nil
+	}
+	eventStart := len(s.events)
+	from := 0.0
+	if s.state.Grey != nil {
+		from = *s.state.Grey
+	}
+	to := 0.0
+	s.events = append(s.events, Event{At: at, Tank: TankGrey, Kind: KindEmpty, From: from, To: to, Used: from})
+	s.clearGreyDischargeStateLocked(at)
+	if err := s.persistObservationLocked(Point{}, eventStart, false); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Store) shouldStoreSample(point Point) bool {
@@ -167,6 +211,71 @@ func sameLevel(a, b *float64) bool {
 		return a == nil && b == nil
 	}
 	return *a == *b
+}
+
+func (s *Store) observeGreySampleLocked(value float64) {
+	if s.state.GreyDischargeOpenAt != nil {
+		return
+	}
+	if s.state.GreyBase == nil {
+		s.state.GreyBase = cloneFloat(&value)
+		return
+	}
+	if value > *s.state.GreyBase {
+		s.state.GreyBase = cloneFloat(&value)
+		return
+	}
+	if *s.state.GreyBase-value < s.options.Threshold {
+		return
+	}
+	if s.options.Logf != nil {
+		s.options.Logf("grey level dropped from %.1f to %.1f without a pending discharge open", *s.state.GreyBase, value)
+	}
+	s.state.GreyBase = cloneFloat(&value)
+}
+
+func (s *Store) hasGreyEmptyEventAtLocked(at time.Time) bool {
+	for index := len(s.events) - 1; index >= 0; index-- {
+		event := s.events[index]
+		if event.Tank == TankGrey && event.Kind == KindEmpty && event.At.Equal(at) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Store) greySampleIsBeforeLatestEmptyLocked(at time.Time) bool {
+	for index := len(s.events) - 1; index >= 0; index-- {
+		event := s.events[index]
+		if event.Tank == TankGrey && event.Kind == KindEmpty {
+			return at.Before(event.At)
+		}
+	}
+	return false
+}
+
+func (s *Store) clearGreyDischargeStateLocked(completedAt time.Time) bool {
+	changed := false
+	if s.state.GreyDischargeOpenAt != nil && !s.state.GreyDischargeOpenAt.After(completedAt) {
+		s.state.GreyDischargeOpenAt = nil
+		changed = true
+	}
+	if s.state.LastSampleAt == nil || !s.state.LastSampleAt.After(completedAt) {
+		to := 0.0
+		if s.state.Grey == nil || *s.state.Grey != to {
+			changed = true
+		}
+		s.state.Grey = cloneFloat(&to)
+		s.state.GreyBase = cloneFloat(&to)
+		s.state.GreyCand = nil
+	} else {
+		// A sample received after the close belongs to the current tank state.
+		// Keep that state, but rebase anomaly detection so the next sample is
+		// compared with it rather than with the pre-discharge level.
+		s.state.GreyBase = cloneFloat(s.state.Grey)
+		s.state.GreyCand = nil
+	}
+	return changed
 }
 
 func (s *Store) commitCandidate(tank string, at time.Time) {

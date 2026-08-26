@@ -247,7 +247,7 @@ func TestSessionSignalIsOnTracksLatestReceivedSignal(t *testing.T) {
 	session.ingest(Frame{
 		At:        receiveAt,
 		Direction: DirectionReceive,
-		Wire:      WireFrame{Data: []int{47, 0, 1}},
+		Wire:      WireFrame{MessageType: 16, Data: []int{47, 0, 1}},
 	})
 
 	on, known, at := session.SignalIsOn(47)
@@ -277,7 +277,7 @@ func TestSessionSignalIsOnTracksLatestReceivedSignal(t *testing.T) {
 	session.ingest(Frame{
 		At:        offAt,
 		Direction: DirectionReceive,
-		Wire:      WireFrame{Data: []int{47, 0, 0}},
+		Wire:      WireFrame{MessageType: 16, Data: []int{47, 0, 0}},
 	})
 
 	on, known, at = session.SignalIsOn(47)
@@ -295,12 +295,95 @@ func TestSessionSignalIsOnUsesTheStatusOnBit(t *testing.T) {
 	session.ingest(Frame{
 		At:        time.Unix(1710000000, 0).UTC(),
 		Direction: DirectionReceive,
-		Wire:      WireFrame{Data: []int{47, 0, 3}},
+		Wire:      WireFrame{MessageType: 16, Data: []int{47, 0, 3}},
 	})
 
 	on, known, _ := session.SignalIsOn(47)
 	if !known || !on {
 		t.Fatalf("expected bit-0 on status to be on, got on=%t known=%t", on, known)
+	}
+}
+
+func TestSessionDrainReceivedSignalEdgesTracksStateChanges(t *testing.T) {
+	t.Parallel()
+	session := NewSession(SessionConfig{TraceWindow: time.Second})
+
+	baseAt := time.Unix(1710000000, 0).UTC()
+	session.ingest(Frame{
+		At:        baseAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{MessageType: 16, Data: []int{4, 0, 0}},
+	})
+	session.ingest(Frame{
+		At:        baseAt.Add(time.Second),
+		Direction: DirectionReceive,
+		Wire:      WireFrame{MessageType: 16, Data: []int{5, 0, 1}},
+	})
+	if on, known, at := session.SignalIsOn(4); !known || on || !at.Equal(baseAt) {
+		t.Fatalf("expected signal 4 baseline off, got on=%t known=%t at=%v", on, known, at)
+	}
+	if on, known, at := session.SignalIsOn(5); !known || !on || !at.Equal(baseAt.Add(time.Second)) {
+		t.Fatalf("expected signal 5 baseline on, got on=%t known=%t at=%v", on, known, at)
+	}
+
+	onAt := baseAt.Add(2 * time.Second)
+	session.ingest(Frame{
+		At:        onAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{MessageType: 16, Data: []int{4, 0, 1}},
+	})
+
+	offAt := baseAt.Add(3 * time.Second)
+	session.ingest(Frame{
+		At:        offAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{MessageType: 16, Data: []int{5, 0, 0}},
+	})
+
+	if on, known, at := session.SignalIsOn(5); !known || on || !at.Equal(offAt) {
+		t.Fatalf("expected signal 5 to update to off, got on=%t known=%t at=%v", on, known, at)
+	}
+
+	session.ingest(Frame{
+		At:        offAt.Add(time.Second),
+		Direction: DirectionSend,
+		Wire:      WireFrame{Data: []int{4, 0, 0}},
+	})
+
+	got := session.DrainReceivedSignalEdges()
+	if len(got) != 1 {
+		t.Fatalf("got %d edges want 1: %v", len(got), got)
+	}
+	if got[0].Signal != 4 || !got[0].On || !got[0].At.Equal(onAt) {
+		t.Fatalf("got first edge %+v want signal=4 on at %v", got[0], onAt)
+	}
+
+	if got := session.DrainReceivedSignalEdges(); len(got) != 0 {
+		t.Fatalf("expected drain to empty queue, got %v", got)
+	}
+}
+
+func TestSessionSignalStateIgnoresNonMFDStatusFrames(t *testing.T) {
+	t.Parallel()
+	session := NewSession(SessionConfig{TraceWindow: time.Second})
+	baseAt := time.Unix(1710000000, 0).UTC()
+
+	session.ingest(Frame{
+		At:        baseAt,
+		Direction: DirectionReceive,
+		Wire:      WireFrame{MessageType: 17, Data: []int{4, 0, 0}},
+	})
+	session.ingest(Frame{
+		At:        baseAt.Add(time.Second),
+		Direction: DirectionReceive,
+		Wire:      WireFrame{MessageType: 16, Data: []int{4, 0, 1}},
+	})
+
+	if got := session.DrainReceivedSignalEdges(); len(got) != 0 {
+		t.Fatalf("got edge from non-status baseline: %v", got)
+	}
+	if _, known, _ := session.SignalIsOn(4); !known {
+		t.Fatal("expected valid status frame to establish signal state")
 	}
 }
 
@@ -513,7 +596,7 @@ func TestWaitForSignalIsOnWaitsForReceivedUpdate(t *testing.T) {
 	session.ingest(Frame{
 		At:        wantAt,
 		Direction: DirectionReceive,
-		Wire:      WireFrame{Data: []int{47, 0, 1}},
+		Wire:      WireFrame{MessageType: 16, Data: []int{47, 0, 1}},
 	})
 
 	<-done
