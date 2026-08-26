@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,8 +20,15 @@ import (
 // DefaultWindow is how much recent history the store keeps in memory.
 const DefaultWindow = 2 * time.Hour
 
-// DefaultRetention is how long persisted history is kept before compaction.
-const DefaultRetention = 7 * 24 * time.Hour
+// DefaultRetention is how long ten-minute persisted history is kept before
+// samples are moved to the indefinite hourly archive.
+const DefaultRetention = 30 * 24 * time.Hour
+
+const (
+	recentBucket = 10 * time.Minute
+	hourlyBucket = time.Hour
+	hourlyDir    = "hourly"
+)
 
 // Store keeps per-sensor sample history.
 type Store struct {
@@ -193,7 +201,7 @@ func (s *Store) LoadTail(id string, now time.Time) ([]sensors.Sample, error) {
 // Compact rewrites every history file keeping only samples within the
 // retention window.
 func (s *Store) Compact() error {
-	cutoff := s.now().Add(-s.retention)
+	cutoff := s.now().UTC().Add(-s.retention)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -220,17 +228,67 @@ func (s *Store) Compact() error {
 			s.logger.Printf("sensor history: compact %s: %v", path, err)
 			continue
 		}
-		kept := samples[:0]
-		for _, sample := range samples {
-			if sample.At.After(cutoff) || sample.At.Equal(cutoff) {
-				kept = append(kept, sample)
-			}
-		}
-		if err := rewrite(path, kept); err != nil {
+		id := strings.TrimSuffix(entry.Name(), ".ndjson")
+		if err := s.compactSensorFileLocked(id, path, samples, cutoff); err != nil {
 			s.logger.Printf("sensor history: rewrite %s: %v", path, err)
 		}
 	}
 	return nil
+}
+
+func (s *Store) compactSensorFileLocked(id, path string, samples []sensors.Sample, cutoff time.Time) error {
+	recent := bucketSensorSamples(samples, cutoff, recentBucket)
+	archive := make(map[string][]sensors.Sample)
+	archiveDir := filepath.Join(s.dir, hourlyDir)
+	if entries, err := os.ReadDir(archiveDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasPrefix(entry.Name(), id+"-") || filepath.Ext(entry.Name()) != ".ndjson" {
+				continue
+			}
+			stored, readErr := s.readAllLocked(filepath.Join(archiveDir, entry.Name()))
+			if readErr != nil {
+				return readErr
+			}
+			archive[entry.Name()] = stored
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	for _, sample := range samples {
+		if sample.At.Before(cutoff) {
+			name := archiveFileName(id, sample.At)
+			archive[name] = append(archive[name], sample)
+		}
+	}
+	for name, stored := range archive {
+		if err := rewrite(filepath.Join(archiveDir, name), bucketSensorSamples(stored, time.Time{}, hourlyBucket)); err != nil {
+			return err
+		}
+	}
+	return rewrite(path, recent)
+}
+
+func bucketSensorSamples(samples []sensors.Sample, cutoff time.Time, bucket time.Duration) []sensors.Sample {
+	buckets := make(map[int64]sensors.Sample)
+	for _, sample := range samples {
+		if !cutoff.IsZero() && sample.At.Before(cutoff) {
+			continue
+		}
+		key := sample.At.Truncate(bucket).UnixNano()
+		if previous, ok := buckets[key]; !ok || sample.At.After(previous.At) {
+			buckets[key] = sample
+		}
+	}
+	out := make([]sensors.Sample, 0, len(buckets))
+	for _, sample := range buckets {
+		out = append(out, sample)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+	return out
+}
+
+func archiveFileName(id string, at time.Time) string {
+	return id + "-" + at.UTC().Format("2006-01") + ".ndjson"
 }
 
 func (s *Store) readAllLocked(path string) ([]sensors.Sample, error) {
@@ -255,6 +313,9 @@ func (s *Store) readAllLocked(path string) ([]sensors.Sample, error) {
 
 func rewrite(path string, samples []sensors.Sample) error {
 	tmp := path + ".tmp"
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err

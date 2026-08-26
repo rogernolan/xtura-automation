@@ -1,6 +1,7 @@
 package history
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,11 +72,11 @@ func TestLoadTailAndSeedRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCompactRetainsWindow(t *testing.T) {
+func TestCompactRetainsThirtyDayWindowAndArchivesHourly(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
-	store := New(dir, 2*time.Hour, 7*24*time.Hour, func() time.Time { return now }, nil)
-	old := now.Add(-10 * 24 * time.Hour)
+	store := New(dir, 2*time.Hour, 30*24*time.Hour, func() time.Time { return now }, nil)
+	old := now.Add(-31 * 24 * time.Hour)
 	new := now.Add(-time.Hour)
 	if err := store.Append("abc", sensors.Sample{At: old, Temp: 1}); err != nil {
 		t.Fatalf("Append: %v", err)
@@ -91,8 +92,75 @@ func TestCompactRetainsWindow(t *testing.T) {
 		t.Fatalf("ReadFile: %v", err)
 	}
 	if got := string(data); len(got) == 0 || contains(got, "Temp\":1") || contains(got, "temp\":1") {
-		t.Fatalf("expected old sample removed, got %q", got)
+		t.Fatalf("expected old sample removed from recent file, got %q", got)
 	}
+	archives, err := filepath.Glob(filepath.Join(dir, "hourly", "abc-*.ndjson"))
+	if err != nil || len(archives) != 1 {
+		t.Fatalf("expected one hourly archive, got %v (%v)", archives, err)
+	}
+	archive, err := os.ReadFile(archives[0])
+	if err != nil {
+		t.Fatalf("ReadFile archive: %v", err)
+	}
+	if !contains(string(archive), "temp\":1") {
+		t.Fatalf("expected old sample in hourly archive, got %q", archive)
+	}
+}
+
+func TestCompactDownsamplesRecentSamplesToTenMinutes(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
+	store := New(dir, 2*time.Hour, 30*24*time.Hour, func() time.Time { return now }, nil)
+	for i := 0; i < 6; i++ {
+		at := now.Add(-30 * time.Minute).Add(time.Duration(i) * time.Minute)
+		if err := store.Append("abc", sensors.Sample{At: at, Temp: float64(i)}); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+	if err := store.Compact(); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "abc.ndjson"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if got := len(testSplitLines(data)); got != 1 {
+		t.Fatalf("expected one ten-minute bucket, got %d: %s", got, data)
+	}
+}
+
+func TestCompactPreservesHourlyArchiveAcrossRuns(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
+	store := New(dir, 2*time.Hour, 30*24*time.Hour, func() time.Time { return now }, nil)
+	old := now.Add(-31 * 24 * time.Hour)
+	if err := store.Append("abc", sensors.Sample{At: old, Temp: 1}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := store.Compact(); err != nil {
+		t.Fatalf("first Compact: %v", err)
+	}
+	if err := store.Compact(); err != nil {
+		t.Fatalf("second Compact: %v", err)
+	}
+	archives, _ := filepath.Glob(filepath.Join(dir, "hourly", "abc-*.ndjson"))
+	if len(archives) != 1 {
+		t.Fatalf("expected one archive after repeated compaction, got %v", archives)
+	}
+	data, _ := os.ReadFile(archives[0])
+	if got := len(testSplitLines(data)); got != 1 {
+		t.Fatalf("expected one archived sample after repeated compaction, got %d", got)
+	}
+}
+
+func testSplitLines(data []byte) [][]byte {
+	var lines [][]byte
+	for _, line := range bytes.Split(data, []byte{'\n'}) {
+		if len(line) != 0 {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func contains(haystack, needle string) bool {
