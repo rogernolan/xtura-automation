@@ -210,6 +210,67 @@ func TestEngineOnlySessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestEngineSessionsOnSameDayShareTrackAndRecordEvents(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
+	clock := newFakeClock(start)
+	poll := newFakePoll()
+	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
+	poll.add(fix(51.0, 0.86, nil, time.Time{}), nil)
+	poll.add(fix(51.0, 0.87, nil, time.Time{}), nil)
+	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
+	clock.set(start.Add(5 * time.Second))
+	manager.Sample(context.Background())
+	clock.set(start.Add(10 * time.Second))
+	manager.Sample(context.Background())
+	manager.ObserveFrame(start.Add(15*time.Second), heating.DirectionReceive, engineFrame(11, 0))
+
+	name := manager.State().CurrentFile
+	if name == "" {
+		name = "track-20260813T094000Z.geojson"
+	}
+	manager.ObserveFrame(start.Add(30*time.Minute), heating.DirectionReceive, engineFrame(11, 1))
+	clock.set(start.Add(30*time.Minute + 5*time.Second))
+	manager.Sample(context.Background())
+
+	var collection struct {
+		Type     string `json:"type"`
+		Features []struct {
+			Properties struct {
+				Event string `json:"event"`
+			} `json:"properties"`
+			Geometry struct {
+				Type        string          `json:"type"`
+				Coordinates json.RawMessage `json:"coordinates"`
+			} `json:"geometry"`
+		} `json:"features"`
+	}
+	if err := json.Unmarshal(readFile(t, filepath.Join(dir, name)), &collection); err != nil {
+		t.Fatal(err)
+	}
+	if collection.Type != "FeatureCollection" || len(collection.Features) != 3 {
+		t.Fatalf("collection = %+v", collection)
+	}
+	var events []string
+	linePoints := 0
+	for _, feature := range collection.Features {
+		if feature.Geometry.Type == "Point" {
+			events = append(events, feature.Properties.Event)
+		} else if feature.Geometry.Type == "LineString" {
+			var coordinates [][]float64
+			if err := json.Unmarshal(feature.Geometry.Coordinates, &coordinates); err != nil {
+				t.Fatal(err)
+			}
+			linePoints = len(coordinates)
+		}
+	}
+	if strings.Join(events, ",") != "engine_off,engine_on" || linePoints != 3 {
+		t.Fatalf("events=%v line points=%d", events, linePoints)
+	}
+}
+
 func TestManualSessionWritesSessionFileAndIgnoresFrames(t *testing.T) {
 	dir := t.TempDir()
 	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
