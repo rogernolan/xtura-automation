@@ -59,6 +59,7 @@ const engineSignalID = 11
 type activeTrack struct {
 	name   string
 	day    string
+	daily  bool
 	times  []time.Time
 	points [][]float64
 	events []trackEvent
@@ -130,7 +131,7 @@ func (m *Manager) StartRecording(at time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.track == nil {
-		m.beginSessionLocked(at)
+		m.beginSessionLocked(at, false)
 	}
 	m.notifyLocked(m.snapshotLocked())
 }
@@ -173,7 +174,7 @@ func (m *Manager) ObserveFrame(at time.Time, direction heating.Direction, raw st
 	m.engineOn = on
 	if m.settings.WhenEngineOn {
 		if on {
-			m.beginSessionLocked(at.UTC())
+			m.beginSessionLocked(at.UTC(), true)
 			m.appendEventLocked(at.UTC(), "engine_on")
 		} else {
 			m.appendEventLocked(at.UTC(), "engine_off")
@@ -348,14 +349,15 @@ func (m *Manager) Delete(name string) error {
 
 func (m *Manager) appendSampleLocked(fix domainlocation.Fix, at time.Time) {
 	if m.settings.WhenEngineOn && m.track == nil {
-		m.beginSessionLocked(at)
+		m.beginSessionLocked(at, true)
 	}
 	if m.track == nil {
 		return
 	}
 	if at.UTC().Format("20060102") != m.track.day {
+		daily := m.track.daily
 		m.finalizeLocked()
-		m.beginSessionLocked(at)
+		m.beginSessionLocked(at, daily)
 	}
 	position := []float64{fix.Longitude, fix.Latitude}
 	if fix.Altitude != nil {
@@ -375,17 +377,20 @@ func (m *Manager) appendSampleLocked(fix domainlocation.Fix, at time.Time) {
 	m.lastErrorAt = nil
 }
 
-func (m *Manager) beginSessionLocked(at time.Time) {
+func (m *Manager) beginSessionLocked(at time.Time, daily bool) {
 	day := at.UTC().Format("20060102")
 	name := fmt.Sprintf("track-%s.geojson", at.UTC().Format("20060102T150405Z"))
-	if existing := m.findDayTrack(day); existing != "" {
-		name = existing
+	if daily {
+		if existing := m.findDayTrack(day); existing != "" {
+			name = existing
+		}
 	}
-	m.track = &activeTrack{name: name, day: day}
+	m.track = &activeTrack{name: name, day: day, daily: daily}
 	if data, err := os.ReadFile(filepath.Join(m.dir, name)); err == nil {
 		if loaded, ok := parseActiveTrack(data); ok {
 			loaded.name = name
 			loaded.day = day
+			loaded.daily = daily
 			m.track = loaded
 		}
 	}
@@ -407,11 +412,11 @@ func (m *Manager) findDayTrack(day string) string {
 
 func (m *Manager) appendEventLocked(at time.Time, kind string) {
 	if m.track == nil {
-		m.beginSessionLocked(at)
+		m.beginSessionLocked(at, true)
 	}
 	if at.UTC().Format("20060102") != m.track.day {
 		m.finalizeLocked()
-		m.beginSessionLocked(at)
+		m.beginSessionLocked(at, true)
 	}
 	if len(m.track.points) == 0 {
 		return
@@ -539,6 +544,12 @@ type eventFeature struct {
 	Geometry   pointGeometry   `json:"geometry"`
 }
 
+type singlePointFeature struct {
+	Type       string          `json:"type"`
+	Properties trackProperties `json:"properties"`
+	Geometry   pointGeometry   `json:"geometry"`
+}
+
 type trackCollection struct {
 	Type     string            `json:"type"`
 	Features []json.RawMessage `json:"features"`
@@ -576,6 +587,13 @@ func buildGeoJSON(track *activeTrack, settings Settings) any {
 	if len(track.points) >= 2 {
 		line, _ := json.Marshal(buildFeature(track, settings))
 		features = append(features, line)
+	} else if len(track.points) == 1 {
+		feature := buildFeature(track, settings)
+		point, _ := json.Marshal(singlePointFeature{
+			Type: "Feature", Properties: feature.Properties,
+			Geometry: pointGeometry{Type: "Point", Coordinates: track.points[0]},
+		})
+		features = append(features, point)
 	}
 	for _, event := range track.events {
 		point, _ := json.Marshal(eventFeature{
@@ -627,6 +645,13 @@ func parseAnyTrackFile(data []byte) ([]time.Time, [][]float64, bool) {
 		if times, points, ok := parseTrackFile(raw); ok {
 			return times, points, true
 		}
+		var point singlePointFeature
+		if json.Unmarshal(raw, &point) == nil && point.Geometry.Type == "Point" && len(point.Properties.Times) == 1 {
+			at, err := time.Parse(time.RFC3339, point.Properties.Times[0])
+			if err == nil && (len(point.Geometry.Coordinates) == 2 || len(point.Geometry.Coordinates) == 3) {
+				return []time.Time{at}, [][]float64{point.Geometry.Coordinates}, true
+			}
+		}
 	}
 	return nil, nil, false
 }
@@ -657,6 +682,16 @@ func parseActiveTrack(data []byte) (*activeTrack, bool) {
 			at, err := time.Parse(time.RFC3339, event.Properties.Time)
 			if err == nil {
 				track.events = append(track.events, trackEvent{Type: event.Properties.Event, Time: at, Position: event.Geometry.Coordinates})
+			}
+			continue
+		}
+		var point singlePointFeature
+		if json.Unmarshal(raw, &point) == nil && point.Geometry.Type == "Point" && len(point.Properties.Times) == 1 {
+			at, err := time.Parse(time.RFC3339, point.Properties.Times[0])
+			if err == nil && (len(point.Geometry.Coordinates) == 2 || len(point.Geometry.Coordinates) == 3) {
+				track.name = point.Properties.Name
+				track.times = []time.Time{at}
+				track.points = [][]float64{point.Geometry.Coordinates}
 			}
 		}
 	}
