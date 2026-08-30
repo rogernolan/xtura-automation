@@ -7,13 +7,25 @@ InstaBlog agent). It describes the on-disk format and the HTTP API only; a consu
 should not need to read the Go code.
 
 The feature samples the GPS provider into GeoJSON track files whenever a
-session is active. It is controlled from the Settings tab ("GPS trails" panel) or
+session is active. Engine-gated sessions on the same UTC day are combined into
+one daily track, with engine transitions recorded as map waypoints. It is controlled from the Settings tab ("GPS trails" panel) or
 directly through the settings API below. There is no master on/off switch:
 sessions are started by the engine signal or by the manual Start recording button.
 
 ## Track file format
 
-Each track file is a single valid GeoJSON (RFC 7946) `Feature`:
+Each legacy track file is a single valid GeoJSON (RFC 7946) `Feature`. When
+engine transition markers are present, the file is a `FeatureCollection` with a
+route `LineString` feature and `Point` features whose `properties.event` is
+`engine_on` or `engine_off`; `properties.time` contains the UTC transition
+time. Event points use the most recently sampled position available.
+
+The manager still reads legacy line-only files. A daily file keeps the existing
+timestamped name of the first session on that UTC day (for example
+`track-20260813T094000Z.geojson`), so its name remains stable as later engine
+cycles are added.
+
+The route feature has this shape:
 
 - `type` is `"Feature"`.
 - `geometry.type` is `"LineString"`.
@@ -81,10 +93,10 @@ Files are written atomically: the manager writes `<name>.tmp` and renames it ove
 `<name>`, so a crash never leaves a truncated or corrupt track file. A leftover
 `.tmp` file does not match the track name pattern and is ignored by the API.
 
-A track is only written once it has at least two positions: RFC 7946 requires a
-`LineString` geometry to contain two or more positions, so a session with a
-single fix produces no file. A session that ends after one fix therefore
-leaves nothing on disk.
+A route is only written once it has at least two positions: RFC 7946 requires a
+`LineString` geometry to contain two or more positions. A transition waypoint
+is only emitted when a sampled position exists, so a session with no usable
+location fixes leaves nothing on disk.
 
 ## Lifecycle
 
@@ -92,9 +104,12 @@ leaves nothing on disk.
 
 - **Engine-gated** (`when_engine_on: true`, the default):
   - Nothing is sampled while engine state is unknown or the engine is off.
-  - A received engine-on frame starts a new session; sampling appends to it.
-  - A received engine-off frame finalizes the session. The last sampled point
-    stands; no forced final sample is taken.
+  - A received engine-on frame starts or resumes that UTC day's track; sampling
+    appends to it.
+  - A received engine-off frame stops sampling and adds an `engine_off` Point
+    waypoint. The last sampled point stands; no forced final sample is taken.
+  - A later engine-on frame adds an `engine_on` waypoint and continues the same
+    daily route.
   - An engine-on → engine-off session with no successful samples produces no file.
   - A service restart with the engine already running starts a fresh session on the
     next engine-on frame (or on the first sample if the engine state is already
@@ -106,8 +121,8 @@ leaves nothing on disk.
   - Engine frames do not start or stop a session in this mode.
   - Sessions are runtime-only: a service restart stops manual recording (press
     Start again to resume).
-- File names are the same in both modes: `track-20260813T094000Z.geojson` (UTC
-  session start).
+- File names are timestamped from the first session on each UTC day and remain
+  stable as additional engine cycles are merged into that day's file.
 - Switching `when_engine_on` in the settings finalizes whatever session is active,
   so a session never leaks across a mode change.
 
@@ -214,9 +229,11 @@ data: {"type":"tracking.state_changed","timestamp":"2026-08-13T09:40:05Z","paylo
 
 ## Parsing checklist for a consumer
 
-1. Parse the file with a standard GeoJSON / RFC 7946 parser — it is a `Feature`
-   whose `geometry` is a `LineString`.
-2. Read `geometry.coordinates` for the route; each position is `[lon, lat]` or
+1. Parse the file with a standard GeoJSON / RFC 7946 parser.
+2. If it is a `FeatureCollection`, select the `LineString` feature for the
+   route and the `Point` features for engine events. A legacy file is itself the
+   route feature.
+3. Read `geometry.coordinates` for the route; each position is `[lon, lat]` or
    `[lon, lat, alt]` (altitude in metres).
 3. Read `properties.times` and pair it index-for-index with the coordinates for
    per-point timing.
