@@ -667,7 +667,7 @@ h2 {
 .track-actions {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -691,6 +691,50 @@ h2 {
 
 .track-delete {
   color: var(--danger);
+}
+
+.track-disclose {
+  color: var(--accent);
+}
+
+.track-map-view {
+  display: grid;
+  gap: 8px;
+}
+
+.track-map-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.track-map-heading h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.track-map-back {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.track-map {
+  min-height: 58vh;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #dfe8ef;
 }
 
 .pi-stats {
