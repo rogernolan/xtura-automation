@@ -49,6 +49,9 @@ test("parses and writes a track detail route", () => {
 
 test("overview markup uses page panels and drawer navigation", () => {
   const html = fs.readFileSync(require("node:path").join(__dirname, "index.html"), "utf8");
+  assert.match(html, /vendor\/leaflet\/leaflet\.css/);
+  assert.match(html, /vendor\/leaflet\/leaflet\.js/);
+  assert.doesNotMatch(html, /unpkg\.com\/leaflet/);
   for (const page of navigation.pages) {
     assert.match(html, new RegExp(`id="${page}Panel"`));
   }

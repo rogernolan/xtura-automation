@@ -1092,11 +1092,7 @@ function openTrackMap(name) {
 }
 
 function closeTrackMap() {
-  if (window.history && typeof window.history.back === "function") {
-    window.history.back();
-  } else {
-    navigate("location");
-  }
+  navigate("location");
 }
 
 function renderTrackMapRoute(name) {
