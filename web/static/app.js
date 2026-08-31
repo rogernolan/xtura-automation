@@ -180,6 +180,9 @@ const fallbackVisibleSlots = [
   { start: "22:30", mode: "off" },
 ];
 const api = new XturaApi();
+let trackMap = null;
+let trackMapLayer = null;
+let trackMapName = "";
 const state = {
   route: { page: "overview" },
   build: null,
@@ -361,11 +364,12 @@ function trapNavigationFocus(event) {
 
 function applyRoute(route) {
   const page = XturaNavigation.pages.includes(route && route.page) ? route.page : "overview";
-  const canonicalHash = XturaNavigation.toHash({ page });
+  const selectedTrack = page === "location" && route && route.track ? route.track : null;
+  const canonicalHash = XturaNavigation.toHash(selectedTrack ? { page, track: selectedTrack } : { page });
   if (window.location.hash !== canonicalHash) {
     window.location.hash = canonicalHash;
   }
-  state.route = { page };
+  state.route = selectedTrack ? { page, track: selectedTrack } : { page };
   const title = pageTitles[page] || "Xtura";
   byId("pageTitle").textContent = title;
   document.title = title;
@@ -386,6 +390,9 @@ function applyRoute(route) {
       link.removeAttribute("aria-current");
     }
   });
+  if (page === "location") {
+    renderTrackMapRoute(selectedTrack);
+  }
 }
 
 function navigate(page) {
@@ -972,6 +979,8 @@ function renderTracking() {
   startButton.disabled = state.requestInFlight || (tracking.tracking === true);
   stopButton.disabled = state.requestInFlight || (tracking.tracking !== true);
   byId("trackingDetail").textContent = trackingDetailText(tracking);
+  const mapOpen = state.route && state.route.track;
+  byId("trackList").hidden = Boolean(mapOpen);
   renderTrackList();
 }
 
@@ -1049,6 +1058,12 @@ function trackRow(track) {
   meta.textContent = trackMetaText(track);
   const actions = document.createElement("span");
   actions.className = "track-actions";
+  const disclose = document.createElement("button");
+  disclose.className = "track-action track-disclose";
+  disclose.type = "button";
+  disclose.setAttribute("aria-label", `Show map for ${track.name}`);
+  disclose.textContent = "▸ Map";
+  disclose.addEventListener("click", () => openTrackMap(track.name));
   const download = document.createElement("a");
   download.className = "track-action track-download";
   download.href = `/v1/tracks/${encodeURIComponent(track.name)}`;
@@ -1067,9 +1082,69 @@ function trackRow(track) {
       return;
     }
   });
-  actions.append(download, remove);
+  actions.append(disclose, download, remove);
   row.append(name, meta, actions);
   return row;
+}
+
+function openTrackMap(name) {
+  window.location.hash = XturaNavigation.toHash({ page: "location", track: name });
+}
+
+function closeTrackMap() {
+  navigate("location");
+}
+
+function renderTrackMapRoute(name) {
+  const view = byId("trackMapView");
+  const list = byId("trackList");
+  if (!view || !list) return;
+  if (!name) {
+    view.hidden = true;
+    list.hidden = false;
+    trackMapName = "";
+    return;
+  }
+  view.hidden = false;
+  list.hidden = true;
+  byId("trackMapTitle").textContent = name;
+  byId("trackMapStatus").textContent = "Loading map…";
+  trackMapName = name;
+  loadTrackMap(name);
+}
+
+async function loadTrackMap(name) {
+  try {
+    const geojson = await api.trackDownload(name);
+    if (trackMapName !== name) return;
+    const leaflet = window.L;
+    if (!leaflet) throw new Error("Map library is unavailable");
+    const container = byId("trackMap");
+    if (!trackMap) {
+      trackMap = leaflet.map(container);
+      leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 19,
+      }).addTo(trackMap);
+    }
+    if (trackMapLayer) trackMap.removeLayer(trackMapLayer);
+    trackMapLayer = leaflet.geoJSON(geojson, {
+      style: { color: "#1f5fd4", weight: 5, opacity: 0.85 },
+      pointToLayer: (_feature, latlng) => leaflet.circleMarker(latlng, {
+        radius: 7, color: "#b53030", fillColor: "#ffffff", fillOpacity: 1, weight: 3,
+      }),
+      onEachFeature: (feature, layer) => {
+        const event = feature.properties && feature.properties.event;
+        if (event) layer.bindTooltip(event.replace("_", " "));
+      },
+    }).addTo(trackMap);
+    const bounds = trackMapLayer.getBounds();
+    if (bounds.isValid()) trackMap.fitBounds(bounds, { padding: [20, 20] });
+    window.setTimeout(() => trackMap && trackMap.invalidateSize(), 0);
+    byId("trackMapStatus").textContent = "Route and engine events";
+  } catch (error) {
+    if (trackMapName === name) byId("trackMapStatus").textContent = `Unable to load map: ${error.message}`;
+  }
 }
 
 function trackMetaText(track) {
@@ -2001,6 +2076,7 @@ function bindActions() {
       return;
     }
   });
+  byId("trackMapBack").addEventListener("click", closeTrackMap);
   byId("trackingInterval").addEventListener("change", () => {
     const input = byId("trackingInterval");
     const seconds = clampInteger(input.value, 1, 3600);

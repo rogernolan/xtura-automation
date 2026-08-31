@@ -41,8 +41,17 @@ test("writes canonical page hashes", () => {
   assert.equal(navigation.toHash({ page: "not-a-page" }), "#/overview");
 });
 
+test("parses and writes a track detail route", () => {
+  const route = navigation.parse("#/location/track/track-20260813T094000Z.geojson");
+  assert.deepEqual(route, { page: "location", track: "track-20260813T094000Z.geojson" });
+  assert.equal(navigation.toHash(route), "#/location/track/track-20260813T094000Z.geojson");
+});
+
 test("overview markup uses page panels and drawer navigation", () => {
   const html = fs.readFileSync(require("node:path").join(__dirname, "index.html"), "utf8");
+  assert.match(html, /vendor\/leaflet\/leaflet\.css/);
+  assert.match(html, /vendor\/leaflet\/leaflet\.js/);
+  assert.doesNotMatch(html, /unpkg\.com\/leaflet/);
   for (const page of navigation.pages) {
     assert.match(html, new RegExp(`id="${page}Panel"`));
   }
