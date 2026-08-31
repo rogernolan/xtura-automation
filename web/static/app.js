@@ -1949,8 +1949,12 @@ function connectEvents() {
     render();
   });
   events.addEventListener("tracking.state_changed", (event) => {
+    const previousFile = state.tracking && state.tracking.current_file;
     state.tracking = JSON.parse(event.data).payload;
     render();
+    if (previousFile !== state.tracking.current_file) {
+      refreshTracks();
+    }
   });
   events.addEventListener("pi.state_changed", (event) => {
     state.piStatus = JSON.parse(event.data).payload;

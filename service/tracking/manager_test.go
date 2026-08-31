@@ -371,6 +371,30 @@ func TestManualSessionWritesSessionFileAndIgnoresFrames(t *testing.T) {
 	}
 }
 
+func TestManualSessionsWithinSameMinuteGetUniqueNames(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
+	clock := newFakeClock(start)
+	poll := newFakePoll()
+	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
+	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 5 * time.Second})
+	manager.StartRecording(start)
+	manager.Sample(context.Background())
+	clock.set(start.Add(5 * time.Second))
+	manager.Sample(context.Background())
+	first := manager.State().CurrentFile
+	manager.StopRecording()
+	manager.StartRecording(start)
+	manager.Sample(context.Background())
+	clock.set(start.Add(5 * time.Second))
+	manager.Sample(context.Background())
+	second := manager.State().CurrentFile
+	if first == second || !strings.HasSuffix(second, "-2.geojson") {
+		t.Fatalf("session names = %q and %q", first, second)
+	}
+}
+
 func TestUnknownEngineStateBlocksSamplingInEngineOnlyMode(t *testing.T) {
 	dir := t.TempDir()
 	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
