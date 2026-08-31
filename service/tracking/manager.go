@@ -60,6 +60,7 @@ type activeTrack struct {
 	name   string
 	day    string
 	daily  bool
+	suffix string
 	times  []time.Time
 	points [][]float64
 	events []trackEvent
@@ -306,7 +307,12 @@ func (m *Manager) List() ([]FileInfo, error) {
 		}
 		infos = append(infos, fileInfo)
 	}
-	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].StartTime != nil && infos[j].StartTime != nil && !infos[i].StartTime.Equal(*infos[j].StartTime) {
+			return infos[i].StartTime.After(*infos[j].StartTime)
+		}
+		return infos[i].Name > infos[j].Name
+	})
 	return infos, nil
 }
 
@@ -379,21 +385,35 @@ func (m *Manager) appendSampleLocked(fix domainlocation.Fix, at time.Time) {
 
 func (m *Manager) beginSessionLocked(at time.Time, daily bool) {
 	day := at.UTC().Format("20060102")
-	name := fmt.Sprintf("track-%s.geojson", at.UTC().Format("20060102T150405Z"))
+	suffix := ""
+	name := humanTrackName(at, at, suffix)
 	if daily {
 		if existing := m.findDayTrack(day); existing != "" {
 			name = existing
 		}
-	}
-	m.track = &activeTrack{name: name, day: day, daily: daily}
-	if data, err := os.ReadFile(filepath.Join(m.dir, name)); err == nil {
-		if loaded, ok := parseActiveTrack(data); ok {
-			loaded.name = name
-			loaded.day = day
-			loaded.daily = daily
-			m.track = loaded
+	} else {
+		for n := 2; fileExists(filepath.Join(m.dir, name)); n++ {
+			suffix = fmt.Sprintf("-%d", n)
+			name = humanTrackName(at, at, suffix)
 		}
 	}
+	m.track = &activeTrack{name: name, day: day, daily: daily, suffix: suffix}
+	if daily {
+		if data, err := os.ReadFile(filepath.Join(m.dir, name)); err == nil {
+			if loaded, ok := parseActiveTrack(data); ok {
+				loaded.name = name
+				loaded.day = day
+				loaded.daily = daily
+				loaded.suffix = suffix
+				m.track = loaded
+			}
+		}
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func (m *Manager) findDayTrack(day string) string {
@@ -401,10 +421,16 @@ func (m *Manager) findDayTrack(day string) string {
 	if err != nil {
 		return ""
 	}
-	prefix := "track-" + day + "T"
+	humanDay := day[:4] + "-" + day[4:6] + "-" + day[6:]
+	prefixes := []string{"track-" + humanDay + "-", "track-" + day + "T"}
 	for _, entry := range entries {
-		if validTrackName(entry.Name()) && strings.HasPrefix(entry.Name(), prefix) {
-			return entry.Name()
+		if !validTrackName(entry.Name()) {
+			continue
+		}
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(entry.Name(), prefix) {
+				return entry.Name()
+			}
 		}
 	}
 	return ""
@@ -452,20 +478,70 @@ func (m *Manager) writeTrackLocked() error {
 	if err := os.MkdirAll(m.dir, 0o755); err != nil {
 		return fmt.Errorf("create track directory: %w", err)
 	}
+	start, end := trackTimeRange(m.track)
+	name := humanTrackName(start, end, m.track.suffix)
+	oldName := m.track.name
+	if oldName != name && fileExists(filepath.Join(m.dir, name)) {
+		for n := 2; ; n++ {
+			candidate := humanTrackName(start, end, fmt.Sprintf("-%d", n))
+			if !fileExists(filepath.Join(m.dir, candidate)) {
+				name = candidate
+				m.track.suffix = fmt.Sprintf("-%d", n)
+				break
+			}
+		}
+	}
+	oldTarget := filepath.Join(m.dir, oldName)
+	m.track.name = name
 	data, err := json.MarshalIndent(buildGeoJSON(m.track, m.settings), "", "  ")
 	if err != nil {
+		m.track.name = oldName
 		return fmt.Errorf("encode track: %w", err)
 	}
 	data = append(data, '\n')
-	target := filepath.Join(m.dir, m.track.name)
+	target := filepath.Join(m.dir, name)
 	tmp := target + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		m.track.name = oldName
 		return fmt.Errorf("write track: %w", err)
 	}
 	if err := os.Rename(tmp, target); err != nil {
+		m.track.name = oldName
 		return fmt.Errorf("rename track: %w", err)
 	}
+	if oldTarget != target {
+		if err := os.Remove(oldTarget); err != nil && !errors.Is(err, os.ErrNotExist) {
+			m.track.name = oldName
+			return fmt.Errorf("remove old track name: %w", err)
+		}
+		m.track.name = name
+	}
 	return nil
+}
+
+func humanTrackName(start, end time.Time, suffix string) string {
+	return fmt.Sprintf("track-%s-%s-%s%s.geojson", start.UTC().Format("2006-01-02"), start.UTC().Format("1504"), end.UTC().Format("1504"), suffix)
+}
+
+func trackTimeRange(track *activeTrack) (time.Time, time.Time) {
+	var start, end time.Time
+	if len(track.times) > 0 {
+		start = track.times[0]
+		end = track.times[len(track.times)-1]
+	}
+	for _, event := range track.events {
+		if start.IsZero() || event.Time.Before(start) {
+			start = event.Time
+		}
+		if event.Time.After(end) {
+			end = event.Time
+		}
+	}
+	if start.IsZero() {
+		start = time.Now().UTC()
+		end = start
+	}
+	return start, end
 }
 
 func (m *Manager) snapshotLocked() State {

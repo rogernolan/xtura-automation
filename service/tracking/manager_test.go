@@ -174,7 +174,7 @@ func TestEngineOnlySessionLifecycle(t *testing.T) {
 	if !state.EngineKnown || !state.EngineOn || !state.Tracking {
 		t.Fatalf("state after engine-on = %+v", state)
 	}
-	wantName := "track-" + onAt.Format("20060102T150405Z") + ".geojson"
+	wantName := "track-2026-08-13-0940-0940.geojson"
 	if state.CurrentFile != wantName {
 		t.Fatalf("current file = %q, want %q", state.CurrentFile, wantName)
 	}
@@ -229,7 +229,7 @@ func TestEngineSessionsOnSameDayShareTrackAndRecordEvents(t *testing.T) {
 
 	name := manager.State().CurrentFile
 	if name == "" {
-		name = "track-20260813T094000Z.geojson"
+		name = "track-2026-08-13-0940-1010.geojson"
 	}
 	manager.ObserveFrame(start.Add(30*time.Minute), heating.DirectionReceive, engineFrame(11, 1))
 	clock.set(start.Add(30*time.Minute + 5*time.Second))
@@ -287,7 +287,7 @@ func TestSingleFixEngineCycleIsRetainedForNextCycle(t *testing.T) {
 	clock.set(start.Add(time.Minute + 5*time.Second))
 	manager.Sample(context.Background())
 
-	name := "track-20260813T094000Z.geojson"
+	name := "track-2026-08-13-0940-0941.geojson"
 	data := readFile(t, filepath.Join(dir, name))
 	var collection struct {
 		Type     string            `json:"type"`
@@ -357,7 +357,7 @@ func TestManualSessionWritesSessionFileAndIgnoresFrames(t *testing.T) {
 	if !state.Tracking || state.PointCount != 2 {
 		t.Fatalf("expected active 2-point session, got %+v", state)
 	}
-	if !strings.HasPrefix(state.CurrentFile, "track-20260813T") {
+	if !strings.HasPrefix(state.CurrentFile, "track-2026-08-13-") {
 		t.Fatalf("expected session file name, got %q", state.CurrentFile)
 	}
 
@@ -368,6 +368,30 @@ func TestManualSessionWritesSessionFileAndIgnoresFrames(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Name() != state.CurrentFile {
 		t.Fatalf("expected exactly one session file %s, got %v", state.CurrentFile, entries)
+	}
+}
+
+func TestManualSessionsWithinSameMinuteGetUniqueNames(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
+	clock := newFakeClock(start)
+	poll := newFakePoll()
+	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
+	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
+	manager.Configure(tracking.Settings{WhenEngineOn: false, SampleInterval: 5 * time.Second})
+	manager.StartRecording(start)
+	manager.Sample(context.Background())
+	clock.set(start.Add(5 * time.Second))
+	manager.Sample(context.Background())
+	first := manager.State().CurrentFile
+	manager.StopRecording()
+	manager.StartRecording(start)
+	manager.Sample(context.Background())
+	clock.set(start.Add(5 * time.Second))
+	manager.Sample(context.Background())
+	second := manager.State().CurrentFile
+	if first == second || !strings.HasSuffix(second, "-2.geojson") {
+		t.Fatalf("session names = %q and %q", first, second)
 	}
 }
 
@@ -417,7 +441,7 @@ func TestSampleWritesValidGeoJSONWithAlignedTimes(t *testing.T) {
 		manager.Sample(context.Background())
 	}
 
-	name := "track-" + start.Format("20060102T150405Z") + ".geojson"
+	name := "track-2026-08-13-0940-0940.geojson"
 	data := readFile(t, filepath.Join(dir, name))
 	var raw struct {
 		Type       string         `json:"type"`
@@ -470,7 +494,7 @@ func TestAltitudeStoredAsThirdCoordinateElementWhenPresent(t *testing.T) {
 	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
 
-	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-"+start.Format("20060102T150405Z")+".geojson")))
+	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-2026-08-13-0940-0940.geojson")))
 	if len(track.Coords) != 2 {
 		t.Fatalf("coords = %v", track.Coords)
 	}
@@ -491,7 +515,7 @@ func TestAtomicRewriteLeavesValidFileAfterEachSample(t *testing.T) {
 	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
 	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
 	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
-	path := filepath.Join(dir, "track-"+start.Format("20060102T150405Z")+".geojson")
+	path := filepath.Join(dir, "track-2026-08-13-0940-0940.geojson")
 	for i := 0; i < 5; i++ {
 		clock.set(start.Add(time.Duration(i) * 5 * time.Second))
 		manager.Sample(context.Background())
@@ -530,7 +554,7 @@ func TestListReadDeleteAndPathTraversalRejection(t *testing.T) {
 	manager.Sample(context.Background())
 	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
-	name := "track-" + start.Format("20060102T150405Z") + ".geojson"
+	name := "track-2026-08-13-0940-0940.geojson"
 	expected := readFile(t, filepath.Join(dir, name))
 
 	for _, bad := range []string{"../track-x.geojson", "/etc/passwd", "track-x.txt", "other.geojson", "track-", "", "track-a.geojson/x"} {
@@ -596,8 +620,7 @@ func TestSampleGeneratesTrackFileInTempDirectory(t *testing.T) {
 		manager.Sample(context.Background())
 	}
 
-	sessionStart := start
-	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-"+sessionStart.Format("20060102T150405Z")+".geojson")))
+	track := parseFeature(t, readFile(t, filepath.Join(dir, "track-2026-08-13-0940-0940.geojson")))
 	if len(track.Times) != 3 || len(track.Coords) != 3 {
 		t.Fatalf("track has %d points", len(track.Times))
 	}
@@ -636,7 +659,7 @@ func TestPollFailureRecordsLastErrorAndContinues(t *testing.T) {
 	if state.LastError != "" || state.LastErrorAt != nil || state.PointCount != 2 {
 		t.Fatalf("state after recovery = %+v", state)
 	}
-	name := "track-" + start.Format("20060102T150405Z") + ".geojson"
+	name := "track-2026-08-13-0940-0940.geojson"
 	track := parseFeature(t, readFile(t, filepath.Join(dir, name)))
 	if len(track.Times) != 2 {
 		t.Fatalf("track split unexpectedly: %v", track.Times)
@@ -697,7 +720,7 @@ func TestSingleFixTrackIsNotWritten(t *testing.T) {
 	if state := manager.State(); !state.Tracking || state.PointCount != 1 {
 		t.Fatalf("state after single fix = %+v", state)
 	}
-	name := "track-" + start.Format("20060102T150405Z") + ".geojson"
+	name := "track-2026-08-13-0940-0940.geojson"
 	if _, err := os.Stat(filepath.Join(dir, name)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("single-fix track should not be written, err=%v", err)
 	}
@@ -722,7 +745,7 @@ func TestDeleteActiveTrackFinalizesAndDoesNotResurrect(t *testing.T) {
 	manager.Sample(context.Background())
 	clock.set(start.Add(5 * time.Second))
 	manager.Sample(context.Background())
-	name := "track-" + start.Format("20060102T150405Z") + ".geojson"
+	name := "track-2026-08-13-0940-0940.geojson"
 	if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 		t.Fatalf("track missing before delete: %v", err)
 	}
@@ -741,7 +764,7 @@ func TestDeleteActiveTrackFinalizesAndDoesNotResurrect(t *testing.T) {
 	manager.Sample(context.Background())
 	clock.set(start.Add(15 * time.Second))
 	manager.Sample(context.Background())
-	sessionName := "track-" + start.Add(10*time.Second).Format("20060102T150405Z") + ".geojson"
+	sessionName := "track-2026-08-13-0940-0940.geojson"
 	track := parseFeature(t, readFile(t, filepath.Join(dir, sessionName)))
 	if len(track.Coords) != 2 {
 		t.Fatalf("new session after delete has %d coords, want 2", len(track.Coords))
