@@ -21,9 +21,9 @@ route `LineString` feature and `Point` features whose `properties.event` is
 time. Event points use the most recently sampled position available.
 
 The manager still reads legacy line-only files. A daily file keeps the existing
-timestamped name of the first session on that UTC day (for example
-`track-20260813T094000Z.geojson`), so its name remains stable as later engine
-cycles are added.
+human-readable name containing the date and current start/end times (for example
+`track-2026-08-13-0940-1015.geojson`). The end portion advances as the track
+grows, so consumers should use the API-provided name rather than cache it.
 
 The route feature has this shape:
 
@@ -42,7 +42,7 @@ Example (a session file):
 {
   "type": "Feature",
   "properties": {
-    "name": "track-20260813T094000Z.geojson",
+    "name": "track-2026-08-13-0940-1015.geojson",
     "start_time": "2026-08-13T09:40:05Z",
     "end_time": "2026-08-13T09:40:20Z",
     "point_count": 4,
@@ -121,8 +121,9 @@ location fixes leaves nothing on disk.
   - Engine frames do not start or stop a session in this mode.
   - Sessions are runtime-only: a service restart stops manual recording (press
     Start again to resume).
-- File names are timestamped from the first session on each UTC day and remain
-  stable as additional engine cycles are merged into that day's file.
+- File names use `track-YYYY-MM-DD-HHMM-HHMM.geojson`; the first time is the
+  day's first recorded position and the second is the latest sample or engine
+  event. The name may change as an active day's track grows.
 - Switching `when_engine_on` in the settings finalizes whatever session is active,
   so a session never leaks across a mode change.
 
@@ -181,7 +182,7 @@ applies them live:
   "engine_known": true,
   "engine_on": true,
   "tracking": true,
-  "current_file": "track-20260813T094000Z.geojson",
+  "current_file": "track-2026-08-13-0940-1015.geojson",
   "point_count": 42,
   "last_sample_at": "2026-08-13T09:40:05Z"
 }
@@ -194,10 +195,10 @@ applies them live:
 
 ### Track files
 
-- `GET /v1/tracks` lists the track files, sorted by name:
+- `GET /v1/tracks` lists the track files, with the most recent tracks first:
 
   ```json
-  [{"name":"track-20260813T094000Z.geojson","bytes":3124,"start_time":"2026-08-13T09:40:05Z","end_time":"2026-08-13T09:40:20Z","point_count":4}]
+  [{"name":"track-2026-08-13-0940-1015.geojson","bytes":3124,"start_time":"2026-08-13T09:40:05Z","end_time":"2026-08-13T10:15:20Z","point_count":4}]
   ```
 
   `start_time` and `end_time` are parsed from each file and omitted when the file
