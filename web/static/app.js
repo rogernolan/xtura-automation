@@ -182,7 +182,7 @@ const fallbackVisibleSlots = [
 const api = new XturaApi();
 const trackMapState = { map: null, layer: null, interactive: true };
 let trackMapName = "";
-const todayMap = { map: null, layer: null, name: "", interactive: false };
+const todayMap = { map: null, layer: null, name: "", interactive: false, fitMaxZoom: 15 };
 const state = {
   route: { page: "overview" },
   build: null,
@@ -1036,8 +1036,8 @@ function renderTodayTrackMap(track, detailOpen) {
   const view = byId("todayTrackMapView");
   if (!view) return;
   if (!track || detailOpen) {
+    disposeTodayMap();
     view.hidden = true;
-    todayMap.name = "";
     return;
   }
   view.hidden = false;
@@ -1046,6 +1046,13 @@ function renderTodayTrackMap(track, detailOpen) {
     byId("todayTrackMapStatus").textContent = "Loading map…";
     loadGeoJsonMap(track.name, todayMap, "todayTrackMap", "todayTrackMapStatus");
   }
+}
+
+function disposeTodayMap() {
+  if (todayMap.map) todayMap.map.remove();
+  todayMap.map = null;
+  todayMap.layer = null;
+  todayMap.name = "";
 }
 
 function currentTrackingSettings() {
@@ -1189,7 +1196,11 @@ async function loadGeoJsonMap(name, mapState, containerId, statusId, isCurrent =
       },
     }).addTo(mapState.map);
     const bounds = mapState.layer.getBounds();
-    if (bounds.isValid()) mapState.map.fitBounds(bounds, { padding: [20, 20] });
+    if (bounds.isValid()) {
+      const fitOptions = { padding: [20, 20] };
+      if (mapState.fitMaxZoom !== undefined) fitOptions.maxZoom = mapState.fitMaxZoom;
+      mapState.map.fitBounds(bounds, fitOptions);
+    }
     window.setTimeout(() => mapState.map && mapState.map.invalidateSize(), 0);
     byId(statusId).textContent = "Route and engine events";
   } catch (error) {
