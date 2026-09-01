@@ -137,6 +137,26 @@ Tracks live in the configured directory, `/var/lib/xtura/tracks` by default, whi
 is created on demand. Only names matching `track-*.geojson` are treated as tracks by
 the API.
 
+### Migrating legacy tracks
+
+The one-time migration command combines old timestamp-named tracks into one
+track per UTC day and archives the source files with a `.legacy` suffix. It
+understands both legacy route `Feature` files and the earlier
+`FeatureCollection` files containing engine event waypoints. Each sample and
+event is assigned to the UTC day in its own timestamp, so a session crossing
+midnight is split correctly:
+
+```bash
+go run ./cmd/trackmigrate -dir /var/lib/xtura/tracks -dry-run
+sudo go run ./cmd/trackmigrate -dir /var/lib/xtura/tracks
+```
+
+Run the dry run first and stop the service before the write operation. The
+The migration concatenates each day’s positions in chronological order, which
+may draw a straight line across a parking gap when the old files have no engine
+transition markers. Existing engine event waypoints are retained. The `.legacy`
+files are retained for recovery.
+
 ## HTTP API
 
 ### Settings
