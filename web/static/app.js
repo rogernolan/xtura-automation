@@ -183,6 +183,7 @@ const api = new XturaApi();
 let trackMap = null;
 let trackMapLayer = null;
 let trackMapName = "";
+const todayMap = { map: null, layer: null, name: "" };
 const state = {
   route: { page: "overview" },
   build: null,
@@ -391,6 +392,7 @@ function applyRoute(route) {
     }
   });
   if (page === "location") {
+    renderTodayTrackMap(todayTrack(), Boolean(selectedTrack));
     renderTrackMapRoute(selectedTrack);
   }
 }
@@ -980,6 +982,7 @@ function renderTracking() {
   stopButton.disabled = state.requestInFlight || (tracking.tracking !== true);
   byId("trackingDetail").textContent = trackingDetailText(tracking);
   const mapOpen = state.route && state.route.track;
+  renderTodayTrackMap(todayTrack(), state.route.page !== "location" || Boolean(mapOpen));
   byId("trackList").hidden = Boolean(mapOpen);
   renderTrackList();
 }
@@ -1016,6 +1019,34 @@ function trackingDetailText(tracking) {
     parts.push(`Last error: ${tracking.last_error}`);
   }
   return parts.join(" ") || "No tracking is active.";
+}
+
+function todayTrack() {
+  if (!Array.isArray(state.tracks)) return null;
+  const now = new Date();
+  return state.tracks.find((track) => {
+    const start = new Date(track.start_time);
+    return Number.isFinite(start.getTime())
+      && start.getFullYear() === now.getFullYear()
+      && start.getMonth() === now.getMonth()
+      && start.getDate() === now.getDate();
+  }) || null;
+}
+
+function renderTodayTrackMap(track, detailOpen) {
+  const view = byId("todayTrackMapView");
+  if (!view) return;
+  if (!track || detailOpen) {
+    view.hidden = true;
+    todayMap.name = "";
+    return;
+  }
+  view.hidden = false;
+  if (todayMap.name !== track.name) {
+    todayMap.name = track.name;
+    byId("todayTrackMapStatus").textContent = "Loading map…";
+    loadGeoJsonMap(track.name, todayMap, "todayTrackMap", "todayTrackMapStatus");
+  }
 }
 
 function currentTrackingSettings() {
@@ -1114,21 +1145,30 @@ function renderTrackMapRoute(name) {
 }
 
 async function loadTrackMap(name) {
+  await loadGeoJsonMap(name, {
+    get map() { return trackMap; },
+    set map(value) { trackMap = value; },
+    get layer() { return trackMapLayer; },
+    set layer(value) { trackMapLayer = value; },
+  }, "trackMap", "trackMapStatus", () => trackMapName === name);
+}
+
+async function loadGeoJsonMap(name, mapState, containerId, statusId, isCurrent = () => mapState.name === name) {
   try {
     const geojson = await api.trackDownload(name);
-    if (trackMapName !== name) return;
+    if (!isCurrent()) return;
     const leaflet = window.L;
     if (!leaflet) throw new Error("Map library is unavailable");
-    const container = byId("trackMap");
-    if (!trackMap) {
-      trackMap = leaflet.map(container);
+    const container = byId(containerId);
+    if (!mapState.map) {
+      mapState.map = leaflet.map(container);
       leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
         maxZoom: 19,
-      }).addTo(trackMap);
+      }).addTo(mapState.map);
     }
-    if (trackMapLayer) trackMap.removeLayer(trackMapLayer);
-    trackMapLayer = leaflet.geoJSON(geojson, {
+    if (mapState.layer) mapState.map.removeLayer(mapState.layer);
+    mapState.layer = leaflet.geoJSON(geojson, {
       style: { color: "#1f5fd4", weight: 5, opacity: 0.85 },
       pointToLayer: (_feature, latlng) => leaflet.circleMarker(latlng, {
         radius: 7, color: "#b53030", fillColor: "#ffffff", fillOpacity: 1, weight: 3,
@@ -1137,13 +1177,13 @@ async function loadTrackMap(name) {
         const event = feature.properties && feature.properties.event;
         if (event) layer.bindTooltip(event.replace("_", " "));
       },
-    }).addTo(trackMap);
-    const bounds = trackMapLayer.getBounds();
-    if (bounds.isValid()) trackMap.fitBounds(bounds, { padding: [20, 20] });
-    window.setTimeout(() => trackMap && trackMap.invalidateSize(), 0);
-    byId("trackMapStatus").textContent = "Route and engine events";
+    }).addTo(mapState.map);
+    const bounds = mapState.layer.getBounds();
+    if (bounds.isValid()) mapState.map.fitBounds(bounds, { padding: [20, 20] });
+    window.setTimeout(() => mapState.map && mapState.map.invalidateSize(), 0);
+    byId(statusId).textContent = "Route and engine events";
   } catch (error) {
-    if (trackMapName === name) byId("trackMapStatus").textContent = `Unable to load map: ${error.message}`;
+    if (isCurrent()) byId(statusId).textContent = `Unable to load map: ${error.message}`;
   }
 }
 
