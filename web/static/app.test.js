@@ -153,7 +153,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     "flashLights", "flashCount", "lightsState", "lightsDetail",
     "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton", "waterState", "waterDetail", "greyScheduleMessage",
     "waterHistoryChart", "freshWaterUsage", "greyWaterUsage",
-    "recordingPanel", "recordingState", "recordingDetail", "recordingDuration", "trackingPanel", "trackingState", "trackingDetail", "trackingManualControls", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval", "trackList", "trackMapView", "trackMapBack", "trackMapTitle", "trackMapStatus", "trackMap",
+    "recordingPanel", "recordingState", "recordingDetail", "recordingDuration", "trackingPanel", "trackingState", "trackingDetail", "trackingManualControls", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval", "todayTrackMapView", "todayTrackMapStatus", "todayTrackMap", "trackList", "trackMapView", "trackMapBack", "trackMapTitle", "trackMapStatus", "trackMap",
     "modeOn", "modeSchedule", "modeOff", "modeState", "targetState", "modeDetail", "targetValue", "targetDown", "targetUp", "boostButton", "boostRunning", "cancelBoostButton",
     "scheduleForm", "scheduleState", "scheduleDetail", "scheduleSlots", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
     "overviewSettingsForm", "deploymentInfo", "piStatusPanel", "piPowerState", "piStats", "piDetail", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",

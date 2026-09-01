@@ -122,6 +122,9 @@ test("overview markup uses page panels and drawer navigation", () => {
     "trackingStopButton",
     "trackingInterval",
     "trackingDetail",
+    "todayTrackMapView",
+    "todayTrackMapStatus",
+    "todayTrackMap",
     "trackList",
   ]);
   assertPanelOwnsIds(html, "systemPanel", [
