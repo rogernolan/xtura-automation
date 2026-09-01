@@ -183,7 +183,7 @@ const api = new XturaApi();
 let trackMap = null;
 let trackMapLayer = null;
 let trackMapName = "";
-const todayMap = { map: null, layer: null, name: "" };
+const todayMap = { map: null, layer: null, name: "", interactive: false };
 const state = {
   route: { page: "overview" },
   build: null,
@@ -1161,7 +1161,15 @@ async function loadGeoJsonMap(name, mapState, containerId, statusId, isCurrent =
     if (!leaflet) throw new Error("Map library is unavailable");
     const container = byId(containerId);
     if (!mapState.map) {
-      mapState.map = leaflet.map(container);
+      mapState.map = leaflet.map(container, mapState.interactive === false ? {
+        zoomControl: false,
+        scrollWheelZoom: false,
+        dragging: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        touchZoom: false,
+      } : undefined);
       leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
         maxZoom: 19,
