@@ -180,8 +180,7 @@ const fallbackVisibleSlots = [
   { start: "22:30", mode: "off" },
 ];
 const api = new XturaApi();
-let trackMap = null;
-let trackMapLayer = null;
+const trackMapState = { map: null, layer: null, interactive: true };
 let trackMapName = "";
 const todayMap = { map: null, layer: null, name: "", interactive: false };
 const state = {
@@ -1131,11 +1130,13 @@ function renderTrackMapRoute(name) {
   const list = byId("trackList");
   if (!view || !list) return;
   if (!name) {
+    disposeTrackMap();
     view.hidden = true;
     list.hidden = false;
     trackMapName = "";
     return;
   }
+  if (trackMapName !== name) disposeTrackMap();
   view.hidden = false;
   list.hidden = true;
   byId("trackMapTitle").textContent = name;
@@ -1145,12 +1146,13 @@ function renderTrackMapRoute(name) {
 }
 
 async function loadTrackMap(name) {
-  await loadGeoJsonMap(name, {
-    get map() { return trackMap; },
-    set map(value) { trackMap = value; },
-    get layer() { return trackMapLayer; },
-    set layer(value) { trackMapLayer = value; },
-  }, "trackMap", "trackMapStatus", () => trackMapName === name);
+  await loadGeoJsonMap(name, trackMapState, "trackMap", "trackMapStatus", () => trackMapName === name);
+}
+
+function disposeTrackMap() {
+  if (trackMapState.map) trackMapState.map.remove();
+  trackMapState.map = null;
+  trackMapState.layer = null;
 }
 
 async function loadGeoJsonMap(name, mapState, containerId, statusId, isCurrent = () => mapState.name === name) {
