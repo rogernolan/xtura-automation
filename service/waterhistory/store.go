@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -929,33 +930,61 @@ func readNDJSON(path string, target interface{}) error {
 		return err
 	}
 	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
 	scanner := bufio.NewScanner(file)
 	var lines []json.RawMessage
+	lineStart := int64(0)
 	for scanner.Scan() {
-		lines = append(lines, append(json.RawMessage(nil), scanner.Bytes()...))
+		line := append(json.RawMessage(nil), scanner.Bytes()...)
+		lines = append(lines, line)
+		lineStart += int64(len(line)) + 1
 	}
 	if err := scanner.Err(); err != nil {
 		return err
 	}
 	switch out := target.(type) {
 	case *[]Point:
-		for _, line := range lines {
+		for index, line := range lines {
 			var value Point
 			if err := json.Unmarshal(line, &value); err != nil {
-				return err
+				log.Printf("water history: skipping unparsable line in %s: %v", path, err)
+				if index == len(lines)-1 && lineStart-1 == info.Size() {
+					if repairErr := truncateCorruptTail(path, lineStart-int64(len(line))-1); repairErr != nil {
+						log.Printf("water history: unable to repair corrupt tail in %s: %v", path, repairErr)
+					}
+				}
+				continue
 			}
 			*out = append(*out, value)
 		}
 	case *[]Event:
-		for _, line := range lines {
+		for index, line := range lines {
 			var value Event
 			if err := json.Unmarshal(line, &value); err != nil {
-				return err
+				log.Printf("water history: skipping unparsable line in %s: %v", path, err)
+				if index == len(lines)-1 && lineStart-1 == info.Size() {
+					if repairErr := truncateCorruptTail(path, lineStart-int64(len(line))-1); repairErr != nil {
+						log.Printf("water history: unable to repair corrupt tail in %s: %v", path, repairErr)
+					}
+				}
+				continue
 			}
 			*out = append(*out, value)
 		}
 	}
 	return nil
+}
+
+func truncateCorruptTail(path string, offset int64) error {
+	file, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return file.Truncate(offset)
 }
 
 func writeNDJSON(path string, values interface{}) error {
