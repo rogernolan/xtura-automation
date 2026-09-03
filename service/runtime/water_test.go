@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -116,6 +117,33 @@ func TestWaterCommandRecordsError(t *testing.T) {
 	}
 	if state := app.WaterState(); state.LastCommandError != "valve failed" {
 		t.Fatalf("expected command error, got %q", state.LastCommandError)
+	}
+}
+
+func TestLoadWaterRuntimeStateRecoveryClosesValveAndResetsState(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "water-runtime.yaml")
+	if err := os.WriteFile(path, []byte("scheduled_opening: [corrupt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	controller := &stubWaterController{}
+	app := &App{
+		water:                 controller,
+		waterRuntimeStatePath: path,
+		logger:                log.New(io.Discard, "", 0),
+	}
+	if err := app.loadWaterRuntimeState(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := controller.commands, []string{"close"}; !equalStrings(got, want) {
+		t.Fatalf("recovery commands: got=%v want=%v", got, want)
+	}
+	if app.currentWaterRuntimeState().ScheduledOpening != nil {
+		t.Fatal("recovered water state retained a schedule")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("safe replacement state missing: %v", err)
 	}
 }
 

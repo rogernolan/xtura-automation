@@ -52,12 +52,16 @@ func LoadHeatingRuntimeState(path string) (HeatingRuntimeState, error) {
 	}
 	var state HeatingRuntimeState
 	if err := yaml.Unmarshal(data, &state); err != nil {
-		return DefaultHeatingRuntimeState(), recoverCorruptState(path, "heating runtime state", err)
+		return recoveredHeatingRuntimeState(), recoverCorruptState(path, "heating runtime state", err)
 	}
 	if err := state.Validate(); err != nil {
-		return DefaultHeatingRuntimeState(), recoverCorruptState(path, "heating runtime state", err)
+		return recoveredHeatingRuntimeState(), recoverCorruptState(path, "heating runtime state", err)
 	}
 	return state, nil
+}
+
+func recoveredHeatingRuntimeState() HeatingRuntimeState {
+	return HeatingRuntimeState{Mode: HeatingModeOff, UpdatedAt: time.Now().UTC()}
 }
 
 func recoverCorruptState(path, kind string, cause error) error {

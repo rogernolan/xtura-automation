@@ -76,8 +76,8 @@ func TestHeatingRuntimeStateQuarantinesCorruptFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Mode != HeatingModeSchedule {
-		t.Fatalf("got mode %q, want default schedule", state.Mode)
+	if state.Mode != HeatingModeOff {
+		t.Fatalf("got mode %q, want safe off mode", state.Mode)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("corrupt state was not quarantined, stat error=%v", err)

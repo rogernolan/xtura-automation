@@ -34,21 +34,26 @@ type WaterRuntimeState struct {
 }
 
 func LoadWaterRuntimeState(path string) (WaterRuntimeState, error) {
+	state, _, err := LoadWaterRuntimeStateWithRecovery(path)
+	return state, err
+}
+
+func LoadWaterRuntimeStateWithRecovery(path string) (WaterRuntimeState, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return WaterRuntimeState{}, nil
+			return WaterRuntimeState{}, false, nil
 		}
-		return WaterRuntimeState{}, err
+		return WaterRuntimeState{}, false, err
 	}
 	var state WaterRuntimeState
 	if err := yaml.Unmarshal(data, &state); err != nil {
-		return WaterRuntimeState{}, recoverCorruptState(path, "water runtime state", err)
+		return WaterRuntimeState{}, true, recoverCorruptState(path, "water runtime state", err)
 	}
 	if err := state.Validate(); err != nil {
-		return WaterRuntimeState{}, recoverCorruptState(path, "water runtime state", err)
+		return WaterRuntimeState{}, true, recoverCorruptState(path, "water runtime state", err)
 	}
-	return state, nil
+	return state, false, nil
 }
 
 func SaveWaterRuntimeState(path string, state WaterRuntimeState) error {
