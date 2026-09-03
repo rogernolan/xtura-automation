@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -126,10 +127,21 @@ func (s *Store) persistLocked(id string, sample sensors.Sample) error {
 		return fmt.Errorf("marshal sensor sample: %w", err)
 	}
 	line = append(line, '\n')
-	if _, err := file.Write(line); err != nil {
+	n, err := file.Write(line)
+	if err != nil {
 		_ = file.Close()
 		delete(s.files, id)
 		return fmt.Errorf("write sensor history: %w", err)
+	}
+	if n != len(line) {
+		_ = file.Close()
+		delete(s.files, id)
+		return fmt.Errorf("write sensor history: %w", io.ErrShortWrite)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		delete(s.files, id)
+		return fmt.Errorf("sync sensor history: %w", err)
 	}
 	return nil
 }

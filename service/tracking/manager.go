@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -514,9 +515,26 @@ func (m *Manager) writeTrackLocked() error {
 	data = append(data, '\n')
 	target := filepath.Join(m.dir, name)
 	tmp := target + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
 		m.track.name = oldName
 		return fmt.Errorf("write track: %w", err)
+	}
+	n, writeErr := file.Write(data)
+	if writeErr == nil && n != len(data) {
+		writeErr = io.ErrShortWrite
+	}
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	closeErr := file.Close()
+	if writeErr != nil {
+		m.track.name = oldName
+		return fmt.Errorf("write track: %w", writeErr)
+	}
+	if closeErr != nil {
+		m.track.name = oldName
+		return fmt.Errorf("close track: %w", closeErr)
 	}
 	if err := os.Rename(tmp, target); err != nil {
 		m.track.name = oldName

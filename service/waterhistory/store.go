@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"math"
@@ -883,8 +884,15 @@ func appendNDJSON(path string, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	_, err = file.Write(append(data, '\n'))
-	return err
+	data = append(data, '\n')
+	n, err := file.Write(data)
+	if err != nil {
+		return err
+	}
+	if n != len(data) {
+		return io.ErrShortWrite
+	}
+	return file.Sync()
 }
 
 func writeState(path string, state persistedState) error {
