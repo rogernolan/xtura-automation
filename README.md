@@ -153,6 +153,11 @@ partitioned hourly NDJSON archives retained indefinitely. The live overview
 continues to use only its bounded recent window; archives are not loaded into
 the live in-memory ring.
 
+All file-backed history and runtime state must follow the crash-recovery
+guidance in [Persistence and crash recovery](docs/persistence.md). In
+particular, writes are flushed, rewrites are atomic, and malformed records are
+logged and cleaned without preventing startup.
+
 Recordings are written to `/var/lib/xtura/recordings/` as unique UTC filenames such as `garmin-ws-20260812T153045Z.ndjson` (a numeric suffix is added if needed). Each newline-delimited JSON record has `at`, `direction`, `message`, and `message_len`; parsed Garmin frames additionally include `frame`, `signal`, and `value` when available, while unparsable frames include `error`. Lifecycle records use `direction: "event"` and an `event` value: `recording_started`, `timeout`, `stopped`, or `service_shutdown`.
 
 A duration of `0` records until stopped or the service restarts. Armed and active recordings are not restored after restart; service shutdown cancels them and appends a `service_shutdown` lifecycle record to an active trace where possible.
