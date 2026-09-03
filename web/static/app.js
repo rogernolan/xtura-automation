@@ -1513,6 +1513,8 @@ function renderWaterHistory() {
         x: next.x - (afterNext.x - point.x) / 6,
         y: next.y - (afterNext.y - point.y) / 6,
       };
+      control1.y = Math.max(top, Math.min(top + plotHeight, control1.y));
+      control2.y = Math.max(top, Math.min(top + plotHeight, control2.y));
       output += ` C${control1.x.toFixed(1)},${control1.y.toFixed(1)} ${control2.x.toFixed(1)},${control2.y.toFixed(1)} ${next.x.toFixed(1)},${next.y.toFixed(1)}`;
     });
     return output;

@@ -792,7 +792,7 @@ func TestFreshPredictionUsesTwelveHourLinearFit(t *testing.T) {
 	current := 60.0
 	store.state.Fresh = &current
 	first, middle, last := 80.0, 70.0, 60.0
-	store.samples = []Point{
+	store.chart.samples = []Point{
 		{At: base, FreshPercent: &first},
 		{At: base.Add(6 * time.Hour), FreshPercent: &middle},
 		{At: base.Add(12 * time.Hour), FreshPercent: &last},

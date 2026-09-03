@@ -517,7 +517,7 @@ func (s *Store) freshPredictionLocked(fillAt time.Time, current float64, now tim
 	threshold := s.options.PredictionThreshold
 	type point struct{ hours, value float64 }
 	points := make([]point, 0)
-	for _, sample := range s.samples {
+	for _, sample := range s.chart.samples {
 		if sample.At.Before(fillAt) || sample.At.After(now) || sample.FreshPercent == nil {
 			continue
 		}
