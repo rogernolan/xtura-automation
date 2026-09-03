@@ -399,16 +399,29 @@ func (m *Manager) beginSessionLocked(at time.Time, daily bool) {
 	}
 	m.track = &activeTrack{name: name, day: day, daily: daily, suffix: suffix}
 	if daily {
-		if data, err := os.ReadFile(filepath.Join(m.dir, name)); err == nil {
+		path := filepath.Join(m.dir, name)
+		if data, err := os.ReadFile(path); err == nil {
 			if loaded, ok := parseActiveTrack(data); ok {
 				loaded.name = name
 				loaded.day = day
 				loaded.daily = daily
 				loaded.suffix = suffix
 				m.track = loaded
+			} else if backup, quarantineErr := quarantineCorruptTrack(path); quarantineErr != nil {
+				m.logger.Printf("tracking: unable to quarantine corrupt track %s: %v", path, quarantineErr)
+			} else {
+				m.logger.Printf("tracking: moved corrupt track %s to %s", path, backup)
 			}
 		}
 	}
+}
+
+func quarantineCorruptTrack(path string) (string, error) {
+	backup := fmt.Sprintf("%s.corrupt-%s", path, time.Now().UTC().Format("20060102T150405.000000000Z"))
+	if err := os.Rename(path, backup); err != nil {
+		return "", err
+	}
+	return backup, nil
 }
 
 func fileExists(path string) bool {
