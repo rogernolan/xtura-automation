@@ -81,6 +81,9 @@ func New(options Options, now func() time.Time) *Store {
 	if options.Threshold <= 0 {
 		options.Threshold = defaultThreshold
 	}
+	if options.PredictionThreshold <= 0 {
+		options.PredictionThreshold = 10
+	}
 	if options.SettlingPeriod <= 0 {
 		options.SettlingPeriod = defaultSettling
 	}
@@ -503,7 +506,65 @@ func (s *Store) summaryLocked(tank string, current float64, now time.Time) Summa
 	if used < 0 {
 		used = 0
 	}
-	return Summary{EventAt: &at, DaysSince: &days, UsedPercent: &used}
+	summary := Summary{EventAt: &at, DaysSince: &days, UsedPercent: &used}
+	if tank == TankFresh {
+		summary.Prediction = s.freshPredictionLocked(at, current, now)
+	}
+	return summary
+}
+
+func (s *Store) freshPredictionLocked(fillAt time.Time, current float64, now time.Time) string {
+	threshold := s.options.PredictionThreshold
+	type point struct{ hours, value float64 }
+	points := make([]point, 0)
+	for _, sample := range s.chart.samples {
+		if sample.At.Before(fillAt) || sample.At.After(now) || sample.FreshPercent == nil {
+			continue
+		}
+		points = append(points, point{hours: sample.At.Sub(fillAt).Hours(), value: *sample.FreshPercent})
+	}
+	if len(points) < 2 || points[len(points)-1].hours-points[0].hours < 12 {
+		return ""
+	}
+	meanX, meanY := 0.0, 0.0
+	for _, p := range points {
+		meanX += p.hours
+		meanY += p.value
+	}
+	meanX /= float64(len(points))
+	meanY /= float64(len(points))
+	var numerator, denominator float64
+	for _, p := range points {
+		dx := p.hours - meanX
+		numerator += dx * (p.value - meanY)
+		denominator += dx * dx
+	}
+	if denominator == 0 {
+		return ""
+	}
+	slope := numerator / denominator
+	if slope >= 0 || current <= threshold {
+		return ""
+	}
+	hoursToThreshold := (current - threshold) / -slope
+	if !math.IsInf(hoursToThreshold, 0) && !math.IsNaN(hoursToThreshold) && hoursToThreshold >= 0 {
+		days := int(hoursToThreshold / 24)
+		hours := int(math.Round(hoursToThreshold - float64(days*24)))
+		if hours == 24 {
+			days++
+			hours = 0
+		}
+		dayLabel := "days"
+		if days == 1 {
+			dayLabel = "day"
+		}
+		hourLabel := "hours"
+		if hours == 1 {
+			hourLabel = "hour"
+		}
+		return fmt.Sprintf("Based on %d hours fresh water usage data, predict %.0f%% in %d %s %d %s", int(math.Round(points[len(points)-1].hours-points[0].hours)), threshold, days, dayLabel, hours, hourLabel)
+	}
+	return ""
 }
 
 func (s *Store) groupMarkers(events []Event) []Marker {

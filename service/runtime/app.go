@@ -225,11 +225,12 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	sensorStore := history.New(sensorHistoryDirectory, history.DefaultWindow, history.DefaultRetention, time.Now, logger)
 	seedSensorHistory(sensorStore, time.Now().UTC())
 	waterStore := waterhistory.New(waterhistory.Options{
-		Directory:      waterHistoryDirectoryForConfig(configPath),
-		Threshold:      cfg.WaterHistory.ThresholdPercent,
-		SettlingPeriod: cfg.WaterHistory.SettlingPeriod,
-		GroupingWindow: cfg.WaterHistory.GroupingWindow,
-		Logf:           logger.Printf,
+		Directory:           waterHistoryDirectoryForConfig(configPath),
+		Threshold:           cfg.WaterHistory.ThresholdPercent,
+		PredictionThreshold: cfg.WaterHistory.PredictionThresholdPercent,
+		SettlingPeriod:      cfg.WaterHistory.SettlingPeriod,
+		GroupingWindow:      cfg.WaterHistory.GroupingWindow,
+		Logf:                logger.Printf,
 	}, time.Now)
 	if err := waterStore.Load(); err != nil {
 		return nil, fmt.Errorf("load water history: %w", err)

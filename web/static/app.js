@@ -1470,7 +1470,8 @@ function renderWaterHistory() {
     const used = Number(summary.used_percent);
     return `${Number.isFinite(days) ? formatElapsedDays(days) : "0 days"} since last ${label}, used ${Number.isFinite(used) ? Math.max(0, used).toFixed(0) : "0"}%`;
   };
-  freshUsage.textContent = summaryText(history && history.fresh, "fresh water fill", "No fresh water fill recorded.");
+  const freshSummary = history && history.fresh;
+  freshUsage.textContent = [summaryText(freshSummary, "fresh water fill", "No fresh water fill recorded."), freshSummary && freshSummary.prediction].filter(Boolean).join(". ");
   greyUsage.textContent = summaryText(history && history.grey, "grey water empty", "No grey water empty recorded.");
   const chartSamples = history && (Array.isArray(history.chart_samples) ? history.chart_samples : history.samples);
   if (!Array.isArray(chartSamples) || chartSamples.length === 0) {
@@ -1496,20 +1497,46 @@ function renderWaterHistory() {
       return timestamp >= start && timestamp <= end;
     }).sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
   };
+  const smoothPath = (points) => {
+    if (points.length === 0) return "";
+    if (points.length === 1) return `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+    let output = `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+    points.slice(0, -1).forEach((point, index) => {
+      const next = points[index + 1];
+      const previous = points[index - 1] || point;
+      const afterNext = points[index + 2] || next;
+      const control1 = {
+        x: point.x + (next.x - previous.x) / 6,
+        y: point.y + (next.y - previous.y) / 6,
+      };
+      const control2 = {
+        x: next.x - (afterNext.x - point.x) / 6,
+        y: next.y - (afterNext.y - point.y) / 6,
+      };
+      control1.y = Math.max(top, Math.min(top + plotHeight, control1.y));
+      control2.y = Math.max(top, Math.min(top + plotHeight, control2.y));
+      output += ` C${control1.x.toFixed(1)},${control1.y.toFixed(1)} ${control2.x.toFixed(1)},${control2.y.toFixed(1)} ${next.x.toFixed(1)},${next.y.toFixed(1)}`;
+    });
+    return output;
+  };
   const path = (field) => {
-    let output = "";
-    let connected = false;
+    const segments = [];
+    let points = [];
+    const flush = () => {
+      if (points.length > 0) segments.push(smoothPath(points));
+      points = [];
+    };
     lineSamples(field).forEach((sample) => {
       const timestamp = new Date(sample.t).getTime();
       const value = Number(sample[field]);
       if (!Number.isFinite(value) || !Number.isFinite(timestamp)) {
-        connected = false;
+        flush();
         return;
       }
-      output += `${connected ? "L" : "M"}${x(sample.t).toFixed(1)},${y(value).toFixed(1)} `;
-      connected = true;
+      points.push({ x: x(sample.t), y: y(value) });
     });
-    return output.trim();
+    flush();
+    return segments.join(" ");
   };
   const grid = [0, 25, 50, 75, 100].map((value) => `<line x1="${left}" x2="${width - right}" y1="${y(value)}" y2="${y(value)}" class="water-history-grid"/><text x="${left - 7}" y="${y(value) + 4}" text-anchor="end" class="water-history-axis">${value}%</text>`).join("");
   const weekdayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];

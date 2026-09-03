@@ -271,8 +271,8 @@ func TestExecuteDueGreyWaterOpeningClosesAfterDurationAndLeavesMessage(t *testin
 	if state.ScheduledOpening != nil {
 		t.Fatalf("expected schedule cleared, got %#v", state.ScheduledOpening)
 	}
-	if state.LastScheduleMessage == "" {
-		t.Fatal("expected completion message")
+	if got, want := state.LastScheduleMessage, "Grey water valve opened at 03:00 on 2026-05-06 for 30 minutes."; got != want {
+		t.Fatalf("completion message: got %q want %q", got, want)
 	}
 	loaded, err := config.LoadWaterRuntimeState(path)
 	if err != nil {
