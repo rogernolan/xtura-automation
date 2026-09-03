@@ -644,6 +644,65 @@ func TestRestartLoadsSamplesAndEvents(t *testing.T) {
 	}
 }
 
+func TestLoadSkipsCorruptNDJSONRecords(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	fresh, grey := 50.0, 80.0
+	sample, err := json.Marshal(Point{At: base, FreshPercent: &fresh, GreyPercent: &grey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := json.Marshal(Event{At: base.Add(time.Hour), Tank: TankGrey, Kind: KindEmpty, From: 80, Used: 80})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "samples.ndjson"), []byte(string(sample)+"\n\x00corrupt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "events.ndjson"), []byte(string(event)+"\n\x00corrupt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := New(Options{Directory: dir}, func() time.Time { return base.Add(2 * time.Hour) })
+	if err := store.Load(); err != nil {
+		t.Fatalf("Load should tolerate corrupt records: %v", err)
+	}
+	doc := store.Document(base.Add(2 * time.Hour))
+	if len(doc.Samples) != 1 || len(doc.Events) != 1 {
+		t.Fatalf("expected valid records to survive corrupt records, got %d samples and %d events", len(doc.Samples), len(doc.Events))
+	}
+}
+
+func TestLoadRepairsCorruptUnterminatedTailBeforeAppend(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	fresh, grey := 50.0, 80.0
+	sample, err := json.Marshal(Point{At: base, FreshPercent: &fresh, GreyPercent: &grey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "samples.ndjson"), []byte(string(sample)+"\n{\"t\":\"2026-08-23T12:01:00Z\""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := New(Options{Directory: dir}, func() time.Time { return base.Add(2 * time.Minute) })
+	if err := store.Load(); err != nil {
+		t.Fatalf("Load should tolerate and repair a truncated record: %v", err)
+	}
+	newFresh, newGrey := 51.0, 80.0
+	if _, err := store.Observe(Sample{At: base.Add(2 * time.Minute), FreshPercent: &newFresh, GreyPercent: &newGrey}, base.Add(2*time.Minute)); err != nil {
+		t.Fatalf("append after repair: %v", err)
+	}
+
+	reloaded := New(Options{Directory: dir}, func() time.Time { return base.Add(3 * time.Minute) })
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("reload after append: %v", err)
+	}
+	if got := len(reloaded.Document(base.Add(3 * time.Minute)).Samples); got != 2 {
+		t.Fatalf("expected original and appended samples after repair, got %d", got)
+	}
+}
+
 func TestLoadCompactsIdenticalSamples(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
