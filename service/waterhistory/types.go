@@ -3,12 +3,13 @@ package waterhistory
 import "time"
 
 type Options struct {
-	Directory      string
-	Threshold      float64
-	SettlingPeriod time.Duration
-	GroupingWindow time.Duration
-	Retention      time.Duration
-	Logf           func(format string, args ...interface{})
+	Directory           string
+	Threshold           float64
+	PredictionThreshold float64
+	SettlingPeriod      time.Duration
+	GroupingWindow      time.Duration
+	Retention           time.Duration
+	Logf                func(format string, args ...interface{})
 }
 
 type Sample struct {
@@ -41,6 +42,7 @@ type Summary struct {
 	EventAt     *time.Time `json:"event_at,omitempty"`
 	DaysSince   *float64   `json:"days_since,omitempty"`
 	UsedPercent *float64   `json:"used_percent,omitempty"`
+	Prediction  string     `json:"prediction,omitempty"`
 }
 
 type Document struct {

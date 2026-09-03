@@ -30,9 +30,10 @@ type Config struct {
 }
 
 type WaterHistoryConfig struct {
-	ThresholdPercent float64       `yaml:"threshold_percent,omitempty"`
-	SettlingPeriod   time.Duration `yaml:"settling_period,omitempty"`
-	GroupingWindow   time.Duration `yaml:"grouping_window,omitempty"`
+	ThresholdPercent           float64       `yaml:"threshold_percent,omitempty"`
+	PredictionThresholdPercent float64       `yaml:"prediction_threshold_percent,omitempty"`
+	SettlingPeriod             time.Duration `yaml:"settling_period,omitempty"`
+	GroupingWindow             time.Duration `yaml:"grouping_window,omitempty"`
 }
 
 type OverviewConfig struct {
@@ -331,6 +332,9 @@ func (c Config) Validate() error {
 	if c.WaterHistory.ThresholdPercent < 0 || c.WaterHistory.ThresholdPercent > 100 {
 		problems = append(problems, "water_history.threshold_percent must be between 0 and 100")
 	}
+	if c.WaterHistory.PredictionThresholdPercent < 0 || c.WaterHistory.PredictionThresholdPercent > 100 {
+		problems = append(problems, "water_history.prediction_threshold_percent must be between 0 and 100")
+	}
 	if c.WaterHistory.SettlingPeriod < 0 {
 		problems = append(problems, "water_history.settling_period must not be negative")
 	}
@@ -456,6 +460,9 @@ func normalizeWaterHistory(in WaterHistoryConfig) WaterHistoryConfig {
 	out := in
 	if out.ThresholdPercent == 0 {
 		out.ThresholdPercent = 5
+	}
+	if out.PredictionThresholdPercent == 0 {
+		out.PredictionThresholdPercent = 10
 	}
 	if out.SettlingPeriod == 0 {
 		out.SettlingPeriod = 10 * time.Minute

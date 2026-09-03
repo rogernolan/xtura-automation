@@ -14,7 +14,7 @@ func TestWaterHistoryDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if normalized.WaterHistory.ThresholdPercent != 5 || normalized.WaterHistory.SettlingPeriod != 10*time.Minute || normalized.WaterHistory.GroupingWindow != time.Hour {
+	if normalized.WaterHistory.ThresholdPercent != 5 || normalized.WaterHistory.PredictionThresholdPercent != 10 || normalized.WaterHistory.SettlingPeriod != 10*time.Minute || normalized.WaterHistory.GroupingWindow != time.Hour {
 		t.Fatalf("unexpected water history defaults: %+v", normalized.WaterHistory)
 	}
 }

@@ -266,8 +266,16 @@ func (a *App) executeDueGreyWaterOpening(ctx context.Context) error {
 	if err := a.CloseGreyWaterValve(ctx); err != nil {
 		return a.finishGreyWaterSchedule(ctx, *scheduled, fmt.Sprintf("Scheduled grey water close failed: %v", err), a.nowTime().UTC())
 	}
-	message := fmt.Sprintf("Grey water valve opened at %s for %d minutes.", scheduled.LocalTime, scheduled.DurationMinutes)
+	message := fmt.Sprintf("Grey water valve opened at %s on %s for %d minutes.", scheduled.LocalTime, greyWaterScheduleDate(scheduled), scheduled.DurationMinutes)
 	return a.finishGreyWaterSchedule(ctx, *scheduled, message, a.nowTime().UTC())
+}
+
+func greyWaterScheduleDate(scheduled *config.GreyWaterScheduledOpening) string {
+	loc, err := time.LoadLocation(scheduled.Timezone)
+	if err != nil {
+		loc = time.UTC
+	}
+	return scheduled.OpenAt.In(loc).Format("2006-01-02")
 }
 
 func (a *App) finishGreyWaterSchedule(ctx context.Context, _ config.GreyWaterScheduledOpening, message string, at time.Time) error {

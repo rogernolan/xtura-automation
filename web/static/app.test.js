@@ -644,7 +644,7 @@ test("renders waiting message when temperature data is absent", () => {
   assert.match(elements.temperatureBody.innerHTML, /Waiting for temperature/);
 });
 
-test("renders seven-day water chart as two simple datum-to-datum lines", () => {
+test("renders seven-day water chart as two smooth lines", () => {
   const { renderWaterHistory, state, elements } = loadApp();
   elements.waterHistoryChart.scrollWidth = 720;
   elements.waterHistoryChart.clientWidth = 320;
@@ -664,7 +664,7 @@ test("renders seven-day water chart as two simple datum-to-datum lines", () => {
   assert.match(elements.waterHistoryChart.innerHTML, /stroke="#1976d2"/);
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-fresh[^>]*fill="none"/);
   assert.match(elements.waterHistoryChart.innerHTML, /water-history-grey[^>]*fill="none"/);
-  assert.match(elements.waterHistoryChart.innerHTML, /<path d="[^"]*L[^"]*" class="water-history-fresh"/);
+  assert.match(elements.waterHistoryChart.innerHTML, /<path d="[^"]*C[^"]*" class="water-history-fresh"/);
   assert.match(elements.waterHistoryChart.innerHTML, /100%/);
   assert.match(elements.waterHistoryChart.innerHTML, /0%/);
   assert.match(elements.waterHistoryChart.innerHTML, /[A-Z]{3} \d{1,2}/);
@@ -675,7 +675,7 @@ test("renders seven-day water chart as two simple datum-to-datum lines", () => {
   assert.equal(elements.greyWaterUsage.textContent, "1 day since last grey water empty, used 18%");
 });
 
-test("connects each prepared chart datum directly", () => {
+test("smooths each prepared chart datum while rendering", () => {
   const { renderWaterHistory, state, elements } = loadApp();
   const base = Date.now() - 2 * 60 * 60 * 1000;
   state.waterHistory = {
@@ -691,7 +691,8 @@ test("connects each prepared chart datum directly", () => {
 
   const freshPath = elements.waterHistoryChart.innerHTML.match(/<path d="([^"]+)" class="water-history-fresh"/);
   assert.ok(freshPath);
-  assert.equal((freshPath[1].match(/L/g) || []).length, 2);
+  assert.equal((freshPath[1].match(/C/g) || []).length, 2);
+  assert.doesNotMatch(freshPath[1], /L/);
 });
 
 test("renders server-prepared chart samples instead of raw samples", () => {
@@ -754,6 +755,24 @@ test("renders explicit water no-event summaries", () => {
   assert.equal(elements.freshWaterUsage.textContent, "No fresh water fill recorded.");
   assert.equal(elements.greyWaterUsage.textContent, "No grey water empty recorded.");
   assert.match(elements.waterHistoryChart.innerHTML, /No water history available/);
+});
+
+test("renders the fresh water depletion prediction with its usage summary", () => {
+  const { renderWaterHistory, state, elements } = loadApp();
+  state.waterHistory = {
+    samples: [],
+    fresh: {
+      event_at: new Date().toISOString(),
+      days_since: 1,
+      used_percent: 20,
+      prediction: "Based on 12 hours fresh water usage data, predict 10% in 1 day 6 hours",
+    },
+    grey: {},
+  };
+
+  renderWaterHistory();
+
+  assert.equal(elements.freshWaterUsage.textContent, "1 day since last fresh water fill, used 20%. Based on 12 hours fresh water usage data, predict 10% in 1 day 6 hours");
 });
 
 test("trend label maps every trend value", () => {
