@@ -210,6 +210,39 @@ func TestEngineOnlySessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestCorruptDailyTrackIsQuarantinedBeforeReplacement(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)
+	name := "track-2026-08-13-0940-0940.geojson"
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("{corrupt\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	clock := newFakeClock(start)
+	poll := newFakePoll()
+	poll.add(fix(51.0, 0.85, nil, time.Time{}), nil)
+	poll.add(fix(51.0, 0.86, nil, time.Time{}), nil)
+	manager := tracking.New(dir, poll.poll, clock.now, discardLogger())
+	manager.Configure(tracking.Settings{WhenEngineOn: true, SampleInterval: 5 * time.Second})
+	manager.ObserveFrame(start, heating.DirectionReceive, engineFrame(11, 1))
+
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("corrupt track was not moved aside, stat error=%v", err)
+	}
+	backups, err := filepath.Glob(path + ".corrupt-*")
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("expected one quarantined track, got %v (err=%v)", backups, err)
+	}
+
+	manager.Sample(context.Background())
+	clock.set(start.Add(5 * time.Second))
+	manager.Sample(context.Background())
+	track := parseFeature(t, readFile(t, path))
+	if len(track.Coords) != 2 {
+		t.Fatalf("replacement track has %d coordinates, want 2", len(track.Coords))
+	}
+}
+
 func TestEngineSessionsOnSameDayShareTrackAndRecordEvents(t *testing.T) {
 	dir := t.TempDir()
 	start := time.Date(2026, 8, 13, 9, 40, 0, 0, time.UTC)

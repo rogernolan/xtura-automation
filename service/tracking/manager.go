@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -399,16 +400,29 @@ func (m *Manager) beginSessionLocked(at time.Time, daily bool) {
 	}
 	m.track = &activeTrack{name: name, day: day, daily: daily, suffix: suffix}
 	if daily {
-		if data, err := os.ReadFile(filepath.Join(m.dir, name)); err == nil {
+		path := filepath.Join(m.dir, name)
+		if data, err := os.ReadFile(path); err == nil {
 			if loaded, ok := parseActiveTrack(data); ok {
 				loaded.name = name
 				loaded.day = day
 				loaded.daily = daily
 				loaded.suffix = suffix
 				m.track = loaded
+			} else if backup, quarantineErr := quarantineCorruptTrack(path); quarantineErr != nil {
+				m.logger.Printf("tracking: unable to quarantine corrupt track %s: %v", path, quarantineErr)
+			} else {
+				m.logger.Printf("tracking: moved corrupt track %s to %s", path, backup)
 			}
 		}
 	}
+}
+
+func quarantineCorruptTrack(path string) (string, error) {
+	backup := fmt.Sprintf("%s.corrupt-%s", path, time.Now().UTC().Format("20060102T150405.000000000Z"))
+	if err := os.Rename(path, backup); err != nil {
+		return "", err
+	}
+	return backup, nil
 }
 
 func fileExists(path string) bool {
@@ -501,9 +515,26 @@ func (m *Manager) writeTrackLocked() error {
 	data = append(data, '\n')
 	target := filepath.Join(m.dir, name)
 	tmp := target + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
 		m.track.name = oldName
 		return fmt.Errorf("write track: %w", err)
+	}
+	n, writeErr := file.Write(data)
+	if writeErr == nil && n != len(data) {
+		writeErr = io.ErrShortWrite
+	}
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	closeErr := file.Close()
+	if writeErr != nil {
+		m.track.name = oldName
+		return fmt.Errorf("write track: %w", writeErr)
+	}
+	if closeErr != nil {
+		m.track.name = oldName
+		return fmt.Errorf("close track: %w", closeErr)
 	}
 	if err := os.Rename(tmp, target); err != nil {
 		m.track.name = oldName

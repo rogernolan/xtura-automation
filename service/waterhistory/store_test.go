@@ -671,6 +671,15 @@ func TestLoadSkipsCorruptNDJSONRecords(t *testing.T) {
 	if len(doc.Samples) != 1 || len(doc.Events) != 1 {
 		t.Fatalf("expected valid records to survive corrupt records, got %d samples and %d events", len(doc.Samples), len(doc.Events))
 	}
+	for _, name := range []string{"samples.ndjson", "events.ndjson"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "corrupt") || strings.ContainsRune(string(data), '\x00') {
+			t.Fatalf("%s still contains corrupt data: %q", name, data)
+		}
+	}
 }
 
 func TestLoadRepairsCorruptUnterminatedTailBeforeAppend(t *testing.T) {

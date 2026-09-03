@@ -72,6 +72,46 @@ func TestLoadTailAndSeedRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLoadTailRepairsCorruptUnterminatedTailBeforeAppend(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)
+	store := New(dir, 2*time.Hour, 7*24*time.Hour, func() time.Time { return now }, nil)
+	if err := store.Append("abc", sensors.Sample{At: now, Temp: 20}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "abc.ndjson")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, []byte("{\"t\":\"2026-08-16T10:01:00Z\"")...)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := New(dir, 2*time.Hour, 7*24*time.Hour, func() time.Time { return now.Add(2 * time.Minute) }, nil)
+	if _, err := reloaded.LoadTail("abc", now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := reloaded.Append("abc", sensors.Sample{At: now.Add(2 * time.Minute), Temp: 21}); err != nil {
+		t.Fatal(err)
+	}
+	samples, err := reloaded.LoadTail("abc", now.Add(2*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(samples) != 2 || samples[1].Temp != 21 {
+		t.Fatalf("expected original and appended samples, got %#v", samples)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte("2026-08-16T10:01:00Z")) {
+		t.Fatalf("corrupt record remained in cleaned history: %q", data)
+	}
+}
+
 func TestCompactRetainsThirtyDayWindowAndArchivesHourly(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 8, 16, 10, 0, 0, 0, time.UTC)

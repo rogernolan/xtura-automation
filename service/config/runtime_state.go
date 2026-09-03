@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -51,12 +52,25 @@ func LoadHeatingRuntimeState(path string) (HeatingRuntimeState, error) {
 	}
 	var state HeatingRuntimeState
 	if err := yaml.Unmarshal(data, &state); err != nil {
-		return HeatingRuntimeState{}, fmt.Errorf("decode runtime state: %w", err)
+		return recoveredHeatingRuntimeState(), recoverCorruptState(path, "heating runtime state", err)
 	}
 	if err := state.Validate(); err != nil {
-		return HeatingRuntimeState{}, err
+		return recoveredHeatingRuntimeState(), recoverCorruptState(path, "heating runtime state", err)
 	}
 	return state, nil
+}
+
+func recoveredHeatingRuntimeState() HeatingRuntimeState {
+	return HeatingRuntimeState{Mode: HeatingModeOff, UpdatedAt: time.Now().UTC()}
+}
+
+func recoverCorruptState(path, kind string, cause error) error {
+	backup := fmt.Sprintf("%s.corrupt-%s", path, time.Now().UTC().Format("20060102T150405.000000000Z"))
+	if err := os.Rename(path, backup); err != nil {
+		return fmt.Errorf("%s: %w (quarantine failed: %v)", kind, cause, err)
+	}
+	log.Printf("%s: moved corrupt file to %s: %v", kind, backup, cause)
+	return nil
 }
 
 func SaveHeatingRuntimeState(path string, state HeatingRuntimeState) error {

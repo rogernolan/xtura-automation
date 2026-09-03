@@ -142,9 +142,19 @@ func (a *App) loadWaterRuntimeState() error {
 	if path == "" {
 		return nil
 	}
-	state, err := config.LoadWaterRuntimeState(path)
+	state, recovered, err := config.LoadWaterRuntimeStateWithRecovery(path)
 	if err != nil {
 		return err
+	}
+	if recovered {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		if err := a.CloseGreyWaterValve(closeCtx); err != nil {
+			a.logger.Printf("water runtime state recovery: failed to close grey water valve: %v", err)
+		}
+		cancel()
+		if err := config.SaveWaterRuntimeState(path, state); err != nil {
+			a.logger.Printf("water runtime state recovery: failed to save safe state: %v", err)
+		}
 	}
 	a.applyWaterRuntimeState(state)
 	return nil
