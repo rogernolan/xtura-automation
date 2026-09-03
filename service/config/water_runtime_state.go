@@ -43,10 +43,10 @@ func LoadWaterRuntimeState(path string) (WaterRuntimeState, error) {
 	}
 	var state WaterRuntimeState
 	if err := yaml.Unmarshal(data, &state); err != nil {
-		return WaterRuntimeState{}, fmt.Errorf("decode water runtime state: %w", err)
+		return WaterRuntimeState{}, recoverCorruptState(path, "water runtime state", err)
 	}
 	if err := state.Validate(); err != nil {
-		return WaterRuntimeState{}, err
+		return WaterRuntimeState{}, recoverCorruptState(path, "water runtime state", err)
 	}
 	return state, nil
 }

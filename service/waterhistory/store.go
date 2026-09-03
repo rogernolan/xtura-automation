@@ -936,55 +936,63 @@ func readNDJSON(path string, target interface{}) error {
 	}
 	scanner := bufio.NewScanner(file)
 	var lines []json.RawMessage
-	lineStart := int64(0)
 	for scanner.Scan() {
 		line := append(json.RawMessage(nil), scanner.Bytes()...)
 		lines = append(lines, line)
-		lineStart += int64(len(line)) + 1
 	}
 	if err := scanner.Err(); err != nil {
 		return err
 	}
+	var validLines []json.RawMessage
+	corrupt := false
 	switch out := target.(type) {
 	case *[]Point:
-		for index, line := range lines {
+		for _, line := range lines {
 			var value Point
 			if err := json.Unmarshal(line, &value); err != nil {
 				log.Printf("water history: skipping unparsable line in %s: %v", path, err)
-				if index == len(lines)-1 && lineStart-1 == info.Size() {
-					if repairErr := truncateCorruptTail(path, lineStart-int64(len(line))-1); repairErr != nil {
-						log.Printf("water history: unable to repair corrupt tail in %s: %v", path, repairErr)
-					}
-				}
+				corrupt = true
 				continue
 			}
 			*out = append(*out, value)
+			validLines = append(validLines, line)
 		}
 	case *[]Event:
-		for index, line := range lines {
+		for _, line := range lines {
 			var value Event
 			if err := json.Unmarshal(line, &value); err != nil {
 				log.Printf("water history: skipping unparsable line in %s: %v", path, err)
-				if index == len(lines)-1 && lineStart-1 == info.Size() {
-					if repairErr := truncateCorruptTail(path, lineStart-int64(len(line))-1); repairErr != nil {
-						log.Printf("water history: unable to repair corrupt tail in %s: %v", path, repairErr)
-					}
-				}
+				corrupt = true
 				continue
 			}
 			*out = append(*out, value)
+			validLines = append(validLines, line)
+		}
+	}
+	if info.Size() > 0 {
+		var lastByte [1]byte
+		if _, err := file.ReadAt(lastByte[:], info.Size()-1); err == nil && lastByte[0] != '\n' {
+			corrupt = true
+		}
+	}
+	if corrupt {
+		if err := rewriteRawNDJSON(path, validLines, info.Mode().Perm()); err != nil {
+			log.Printf("water history: unable to clean %s: %v", path, err)
 		}
 	}
 	return nil
 }
 
-func truncateCorruptTail(path string, offset int64) error {
-	file, err := os.OpenFile(path, os.O_WRONLY, 0)
-	if err != nil {
-		return err
+func rewriteRawNDJSON(path string, lines []json.RawMessage, mode os.FileMode) error {
+	var data bytes.Buffer
+	for _, line := range lines {
+		data.Write(line)
+		data.WriteByte('\n')
 	}
-	defer file.Close()
-	return file.Truncate(offset)
+	if mode == 0 {
+		mode = 0o644
+	}
+	return writeFileAtomic(path, data.Bytes(), mode)
 }
 
 func writeNDJSON(path string, values interface{}) error {

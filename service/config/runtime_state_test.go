@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -66,6 +67,27 @@ func TestHeatingRuntimeStateValidateRejectsTargetOutsideSafeRange(t *testing.T) 
 	}
 }
 
+func TestHeatingRuntimeStateQuarantinesCorruptFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.yaml")
+	if err := os.WriteFile(path, []byte("mode: manual\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state, err := LoadHeatingRuntimeState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Mode != HeatingModeSchedule {
+		t.Fatalf("got mode %q, want default schedule", state.Mode)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("corrupt state was not quarantined, stat error=%v", err)
+	}
+	backups, err := filepath.Glob(path + ".corrupt-*")
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("expected one quarantined state file, got %v (err=%v)", backups, err)
+	}
+}
+
 func TestWaterRuntimeStateRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "water-runtime.yaml")
@@ -119,5 +141,26 @@ func TestWaterRuntimeStateValidateRejectsInvalidSchedule(t *testing.T) {
 	}
 	if err := state.Validate(); err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestWaterRuntimeStateQuarantinesCorruptFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "water-runtime.yaml")
+	if err := os.WriteFile(path, []byte("scheduled_opening: [corrupt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state, err := LoadWaterRuntimeState(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ScheduledOpening != nil {
+		t.Fatalf("got recovered schedule %#v, want empty state", state.ScheduledOpening)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("corrupt state was not quarantined, stat error=%v", err)
+	}
+	backups, err := filepath.Glob(path + ".corrupt-*")
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("expected one quarantined state file, got %v (err=%v)", backups, err)
 	}
 }

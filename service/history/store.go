@@ -4,6 +4,7 @@ package history
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -171,22 +172,30 @@ func (s *Store) LoadTail(id string, now time.Time) ([]sensors.Sample, error) {
 		return nil, fmt.Errorf("open sensor history for load: %w", err)
 	}
 	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat sensor history: %w", err)
+	}
 
 	cutoff := now.Add(-s.window)
 	var samples []sensors.Sample
 	scanner := bufio.NewScanner(file)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
+	var validLines [][]byte
+	corrupt := false
 	for scanner.Scan() {
-		line := scanner.Bytes()
+		line := append([]byte(nil), scanner.Bytes()...)
 		if len(line) == 0 {
 			continue
 		}
 		var sample sensors.Sample
 		if err := json.Unmarshal(line, &sample); err != nil {
 			s.logger.Printf("sensor history: skipping unparsable line in %s: %v", path, err)
+			corrupt = true
 			continue
 		}
+		validLines = append(validLines, line)
 		if sample.At.Before(cutoff) {
 			continue
 		}
@@ -195,7 +204,51 @@ func (s *Store) LoadTail(id string, now time.Time) ([]sensors.Sample, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("read sensor history: %w", err)
 	}
+	if info.Size() > 0 {
+		var lastByte [1]byte
+		if _, err := file.ReadAt(lastByte[:], info.Size()-1); err == nil && lastByte[0] != '\n' {
+			corrupt = true
+		}
+	}
+	if corrupt {
+		if err := rewriteRawNDJSON(path, validLines, info.Mode().Perm()); err != nil {
+			s.logger.Printf("sensor history: unable to clean %s: %v", path, err)
+		}
+	}
 	return samples, nil
+}
+
+func rewriteRawNDJSON(path string, lines [][]byte, mode os.FileMode) error {
+	var data bytes.Buffer
+	for _, line := range lines {
+		data.Write(line)
+		data.WriteByte('\n')
+	}
+	if mode == 0 {
+		mode = 0o644
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".sensor-history-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data.Bytes()); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 // Compact rewrites every history file keeping only samples within the
