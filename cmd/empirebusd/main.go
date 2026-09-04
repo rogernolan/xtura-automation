@@ -36,6 +36,9 @@ func (sentryBreadcrumbWriter) Write(p []byte) (int, error) {
 }
 
 func sentryDSN() string {
+	if os.Getenv("SENTRY_DISABLED") == "1" {
+		return ""
+	}
 	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
 		return dsn
 	}
