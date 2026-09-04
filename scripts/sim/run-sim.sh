@@ -66,6 +66,6 @@ done
 
 echo "==> Starting empirebusd (config=temporary sim copy)"
 echo "    UI/API: http://localhost:8091"
-XTURA_SIM_SWITCHBOT=1 "${BUILD_DIR}/empirebusd" -config "${BUILD_DIR}/config.sim.yaml" &
+SENTRY_DISABLED=1 XTURA_ENVIRONMENT=simulation XTURA_SIM_SWITCHBOT=1 "${BUILD_DIR}/empirebusd" -config "${BUILD_DIR}/config.sim.yaml" &
 EMPIREBUSD_PID=$!
 wait "${EMPIREBUSD_PID}"

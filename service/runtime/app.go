@@ -308,11 +308,11 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 			return nil
 		}(),
 	})
-	go func() {
+	goSafe(logger, "shutdown", func() {
 		<-ctx.Done()
 		recorder.Shutdown()
 		app.stopSwitchbotScan()
-	}()
+	})
 	app.revision = readConfigRevision(configPath)
 	if err := app.loadRuntimeState(); err != nil {
 		return nil, err
@@ -326,16 +326,16 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		SystemTimezone:     currentSystemTimezone(),
 		TimezoneUpdateMode: timezoneUpdateMode(cfg.Location.TimezoneUpdate),
 	}
-	go app.startSwitchbotScan()
-	go app.startSwitchbotSim(ctx)
-	go app.startMopekaSim(ctx)
-	go app.sensorCompactLoop(ctx)
-	go app.publishStateLoop(ctx)
+	goSafe(logger, "switchbot_scan", app.startSwitchbotScan)
+	goSafe(logger, "switchbot_sim", func() { app.startSwitchbotSim(ctx) })
+	goSafe(logger, "mopeka_sim", func() { app.startMopekaSim(ctx) })
+	goSafe(logger, "sensor_compact", func() { app.sensorCompactLoop(ctx) })
+	goSafe(logger, "publish_state", func() { app.publishStateLoop(ctx) })
 	if cfg.Location.Enabled {
-		go app.locationLoop(ctx)
+		goSafe(logger, "location", func() { app.locationLoop(ctx) })
 	}
-	go app.schedulerLoop(ctx)
-	go app.waterSchedulerLoop(ctx)
+	goSafe(logger, "scheduler", func() { app.schedulerLoop(ctx) })
+	goSafe(logger, "water_scheduler", func() { app.waterSchedulerLoop(ctx) })
 	return app, nil
 }
 
