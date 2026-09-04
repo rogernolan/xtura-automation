@@ -18,6 +18,7 @@ import (
 	"empirebus-tests/service/config"
 	"empirebus-tests/service/runtime"
 	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
 const defaultSentryDSN = "https://7974958093e997a45c12344488e04cc0@o4511755059462144.ingest.de.sentry.io/4512026879262800"
@@ -110,13 +111,18 @@ func main() {
 		fatalError("start app", err)
 	}
 	version := buildinfo.Current()
-	sentry.NewLogger(ctx).Info().Emit(fmt.Sprintf(
-		"empirebusd started: version=%s environment=%s config=%s listen=%s",
-		version.GitSHA,
-		environment,
-		configPath,
-		normalized.API.Listen,
-	))
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "empirebusd")
+		scope.SetTag("environment", environment)
+		scope.SetTag("version", version.GitSHA)
+		sentry.CaptureMessage(fmt.Sprintf(
+			"empirebusd started: version=%s environment=%s config=%s listen=%s",
+			version.GitSHA,
+			environment,
+			configPath,
+			normalized.API.Listen,
+		))
+	})
 	logger.Printf("empirebusd starting: config=%s listen=%s", configPath, normalized.API.Listen)
 	logger.Printf(
 		"empirebusd garmin target: ws_url=%s origin=%s heartbeat=%s trace_window=%s",
@@ -137,7 +143,7 @@ func main() {
 	}
 	server := &http.Server{
 		Addr:              normalized.API.Listen,
-		Handler:           httpapi.New(app).Handler(),
+		Handler:           sentryhttp.New(sentryhttp.Options{}).Handle(httpapi.New(app).Handler()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

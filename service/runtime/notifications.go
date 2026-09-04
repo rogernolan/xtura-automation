@@ -94,7 +94,7 @@ func (a *App) evaluateOfflineNotifications() {
 func (a *App) dispatchNotifications(items []notifications.Notification) {
 	for _, n := range items {
 		for _, sub := range a.notificationSubs.List() {
-			go func(sub notifications.Subscription, n notifications.Notification) {
+			goSafe(a.logger, "notification_send", func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
 				if err := a.notificationSender.Send(ctx, sub, n); err != nil {
@@ -104,7 +104,7 @@ func (a *App) dispatchNotifications(items []notifications.Notification) {
 					}
 					a.logger.Printf("notification send %s: %v", n.AlertID, err)
 				}
-			}(sub, n)
+			})
 		}
 	}
 }
