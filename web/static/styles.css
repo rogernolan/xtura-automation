@@ -455,8 +455,8 @@ h2 {
 
 .grey-schedule-control {
   display: grid;
-  grid-template-columns: minmax(112px, 132px) auto minmax(112px, 132px);
-  column-gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
   row-gap: 8px;
   align-items: end;
   justify-content: center;
@@ -464,6 +464,10 @@ h2 {
 
 .grey-schedule-control .secondary-wide {
   grid-column: 1 / -1;
+}
+
+.grey-schedule-control .field label {
+  text-align: left;
 }
 
 .schedule-separator {
