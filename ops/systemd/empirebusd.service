@@ -11,6 +11,7 @@ WorkingDirectory=/opt/xtura/current
 ExecStart=/opt/xtura/current/empirebusd -config /var/lib/xtura/config.yaml
 Restart=on-failure
 RestartSec=5
+Environment=XTURA_ENVIRONMENT=production
 StandardOutput=journal
 StandardError=journal
 AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW

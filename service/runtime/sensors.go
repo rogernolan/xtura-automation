@@ -377,7 +377,7 @@ func (a *App) startSwitchbotScan() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.switchbotCancel = cancel
-	go a.switchbot.Run(ctx)
+	goSafe(a.logger, "switchbot_scan", func() { a.switchbot.Run(ctx) })
 }
 
 // stopSwitchbotScan cancels a running adapter scan loop.
@@ -410,7 +410,7 @@ func (a *App) restartSwitchbotIfNeeded() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.switchbotCancel = cancel
-	go a.switchbot.Run(ctx)
+	goSafe(a.logger, "switchbot_scan", func() { a.switchbot.Run(ctx) })
 }
 
 // startSwitchbotSim feeds synthetic SwitchBot readings through the real
@@ -421,7 +421,7 @@ func (a *App) startSwitchbotSim(ctx context.Context) {
 		return
 	}
 	a.logger.Printf("switchbot simulation enabled: feeding synthetic BLE readings")
-	go func() {
+	goSafe(a.logger, "switchbot_sim_tick", func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -432,7 +432,7 @@ func (a *App) startSwitchbotSim(ctx context.Context) {
 				a.switchbotSimTick()
 			}
 		}
-	}()
+	})
 }
 
 func (a *App) switchbotSimTick() {

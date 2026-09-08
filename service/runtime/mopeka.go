@@ -13,14 +13,14 @@ import (
 const mopekaStaleAfter = 5 * time.Minute
 
 type mopekaState struct {
-	mu          sync.Mutex
-	distanceMm  float64
-	batteryPct  float64
-	tempC       float64
-	quality     int
-	lastSeen    time.Time
-	hasReading  bool
-	lastGas     overview.Gas
+	mu         sync.Mutex
+	distanceMm float64
+	batteryPct float64
+	tempC      float64
+	quality    int
+	lastSeen   time.Time
+	hasReading bool
+	lastGas    overview.Gas
 }
 
 func (a *App) handleMopekaReading(reading btle.MopekaReading) {
@@ -108,7 +108,7 @@ func (a *App) startMopekaSim(ctx context.Context) {
 		return
 	}
 	a.logger.Printf("mopeka simulation enabled: feeding synthetic readings")
-	go func() {
+	goSafe(a.logger, "mopeka_sim_tick", func() {
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -119,7 +119,7 @@ func (a *App) startMopekaSim(ctx context.Context) {
 				a.mopekaSimTick()
 			}
 		}
-	}()
+	})
 }
 
 func (a *App) mopekaSimTick() {

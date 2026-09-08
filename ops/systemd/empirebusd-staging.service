@@ -12,6 +12,7 @@ ExecStart=/opt/xtura-staging/current/empirebusd -config /var/lib/xtura-staging/c
 Environment=XTURA_SIM_SWITCHBOT=1
 Restart=on-failure
 RestartSec=5
+Environment=XTURA_ENVIRONMENT=staging
 StandardOutput=journal
 StandardError=journal
 AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW
