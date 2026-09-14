@@ -168,4 +168,7 @@ test("overview markup uses page panels and drawer navigation", () => {
   assert.match(styles, /background-image: linear-gradient\(rgba\(231, 226, 216, 0\.6/);
   assert.match(styles, /\.navigation-drawer \{[^}]*transform: translateX\(-16px\)/);
   assert.match(styles, /\.navigation-drawer a\[aria-current="page"\]:hover \{[^}]*background: var\(--accent-pressed\)[^}]*color: #ffffff/);
+  assert.match(styles, /html,\s*body\s*\{[^}]*overflow-x: hidden;/);
+  assert.doesNotMatch(styles, /html,\s*body\s*\{[^}]*overflow-y: (?:hidden|clip)/);
+  assert.doesNotMatch(styles, /body\s*\{[^}]*overflow-y: (?:hidden|clip)/);
 });
