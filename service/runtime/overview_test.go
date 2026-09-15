@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"empirebus-tests/service/config"
 	"empirebus-tests/service/api/events"
+	"empirebus-tests/service/config"
 	"empirebus-tests/service/domains/overview"
 )
 
@@ -83,16 +83,17 @@ func TestOverviewGasFallsBackToMopekaCapacityWhenOverviewUnset(t *testing.T) {
 func TestUpdateOverviewSettingsPersistsAllSettings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.yaml")
 	initial := config.Config{
-		Garmin:     config.GarminConfig{WSURL: "ws://localhost:8090/ws", HeartbeatInterval: 4 * time.Second},
+		Garmin: config.GarminConfig{WSURL: "ws://localhost:8090/ws", HeartbeatInterval: 4 * time.Second},
 		Automation: config.AutomationConfig{
 			Timezone: "UTC",
 			HeatingPrograms: []config.HeatingProgramConfig{{
-				ID: "test",
-				Days: []string{"mon"},
+				ID:      "test",
+				Days:    []string{"mon"},
 				Periods: []config.HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:        config.APIConfig{Listen: ":8091"},
+		API:      config.APIConfig{Listen: ":8091"},
+		Overview: config.OverviewConfig{ChargeEfficiency: 0.99},
 	}
 	if err := config.SaveFile(path, initial); err != nil {
 		t.Fatal(err)

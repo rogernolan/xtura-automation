@@ -39,3 +39,11 @@ automation:
       periods:
         - start: "00:00"
           mode: "off"
+
+overview:
+  battery_capacity_ah: 660
+  battery_nominal_voltage: 12.8
+  battery_floor_soc: 20
+  battery_ready_soc: 95
+  multiplus_max_charge_current_a: 120
+  charge_efficiency: 0.99

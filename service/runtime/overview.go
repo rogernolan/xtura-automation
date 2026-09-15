@@ -108,7 +108,11 @@ func (a *App) UpdateOverviewSettings(ctx context.Context, settings overview.Sett
 	if path == "" {
 		return overview.Settings{}, fmt.Errorf("config path is not configured")
 	}
-	next.Overview = config.OverviewConfig{Comfort: append([]float64(nil), settings.Comfort...), UsableBatteryCapacityAh: settings.UsableBatteryCapacityAh, GasTankCapacityLitres: settings.GasTankCapacityLitres}
+	ov := next.Overview
+	ov.Comfort = append([]float64(nil), settings.Comfort...)
+	ov.UsableBatteryCapacityAh = settings.UsableBatteryCapacityAh
+	ov.GasTankCapacityLitres = settings.GasTankCapacityLitres
+	next.Overview = ov
 	normalized, err := next.Normalize()
 	if err != nil {
 		return overview.Settings{}, err

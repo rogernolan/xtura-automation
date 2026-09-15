@@ -347,8 +347,8 @@ func (c Config) Validate() error {
 	if c.Overview.BatteryReadySOC < 0 || c.Overview.BatteryReadySOC > 100 {
 		problems = append(problems, "overview.battery_ready_soc must be between 0 and 100")
 	}
-	if c.Overview.ChargeEfficiency < 0 || c.Overview.ChargeEfficiency > 1 {
-		problems = append(problems, "overview.charge_efficiency must be between 0 and 1")
+	if c.Overview.ChargeEfficiency <= 0 || c.Overview.ChargeEfficiency > 1 {
+		problems = append(problems, "overview.charge_efficiency must be greater than zero and at most one")
 	}
 	if c.WaterHistory.ThresholdPercent < 0 || c.WaterHistory.ThresholdPercent > 100 {
 		problems = append(problems, "water_history.threshold_percent must be between 0 and 100")

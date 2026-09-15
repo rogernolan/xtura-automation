@@ -235,6 +235,9 @@ func newTrackingTestApp(t *testing.T, serverURL, configPath, trackDir string) *A
 			}},
 		},
 		API: config.APIConfig{Listen: "127.0.0.1:0"},
+		Overview: config.OverviewConfig{
+			ChargeEfficiency: 0.99,
+		},
 	}
 	if err := config.SaveFile(configPath, cfg); err != nil {
 		t.Fatal(err)
