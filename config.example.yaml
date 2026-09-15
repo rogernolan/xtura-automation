@@ -53,6 +53,13 @@ overview:
   # Total capacity of the LPG tanks (e.g. 2x Gaslow 11L = 22).
   gas_tank_capacity_litres: 0
   comfort_thresholds: [10, 18, 24, 30]
+  # Victron battery bank configuration
+  battery_capacity_ah: 660
+  battery_nominal_voltage: 12.8
+  battery_floor_soc: 20
+  battery_ready_soc: 95
+  multiplus_max_charge_current_a: 120
+  charge_efficiency: 0.99
 
 water_history:
   threshold_percent: 5
