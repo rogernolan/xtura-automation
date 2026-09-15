@@ -37,15 +37,15 @@ type WaterHistoryConfig struct {
 }
 
 type OverviewConfig struct {
-	UsableBatteryCapacityAh         float64   `yaml:"usable_battery_capacity_ah,omitempty"`
-	GasTankCapacityLitres           float64   `yaml:"gas_tank_capacity_litres,omitempty"`
-	Comfort                         []float64 `yaml:"comfort_thresholds,omitempty"`
-	BatteryCapacityAh               float64   `yaml:"battery_capacity_ah,omitempty"`
-	BatteryNominalVoltage           float64   `yaml:"battery_nominal_voltage,omitempty"`
-	BatteryFloorSOC                 float64   `yaml:"battery_floor_soc,omitempty"`
-	BatteryReadySOC                 float64   `yaml:"battery_ready_soc,omitempty"`
-	MultiplusMaxChargeCurrentA      float64   `yaml:"multiplus_max_charge_current_a,omitempty"`
-	ChargeEfficiency                float64   `yaml:"charge_efficiency,omitempty"`
+	UsableBatteryCapacityAh    float64   `yaml:"usable_battery_capacity_ah,omitempty"`
+	GasTankCapacityLitres      float64   `yaml:"gas_tank_capacity_litres,omitempty"`
+	Comfort                    []float64 `yaml:"comfort_thresholds,omitempty"`
+	BatteryCapacityAh          float64   `yaml:"battery_capacity_ah,omitempty"`
+	BatteryNominalVoltage      float64   `yaml:"battery_nominal_voltage,omitempty"`
+	BatteryFloorSOC            float64   `yaml:"battery_floor_soc,omitempty"`
+	BatteryReadySOC            float64   `yaml:"battery_ready_soc,omitempty"`
+	MultiplusMaxChargeCurrentA float64   `yaml:"multiplus_max_charge_current_a,omitempty"`
+	ChargeEfficiency           float64   `yaml:"charge_efficiency,omitempty"`
 }
 
 type GarminConfig struct {
