@@ -95,8 +95,5 @@ func testRecordingConfig() config.Config {
 			}},
 		},
 		API: config.APIConfig{Listen: "127.0.0.1:0"},
-		Overview: config.OverviewConfig{
-			ChargeEfficiency: 0.99,
-		},
 	}
 }

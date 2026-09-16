@@ -43,7 +43,6 @@ func validTestConfig() Config {
 		Garmin:     GarminConfig{WSURL: "ws://localhost:8090/ws", HeartbeatInterval: time.Second},
 		Automation: AutomationConfig{Timezone: "UTC", HeatingPrograms: []HeatingProgramConfig{{ID: "test", Days: []string{"mon"}, Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}}}}},
 		API:        APIConfig{Listen: ":8091"},
-		Overview:   OverviewConfig{ChargeEfficiency: 0.99},
 	}
 }
 
@@ -72,8 +71,6 @@ automation:
       periods:
         - start: "00:00"
           mode: "off"
-overview:
-  charge_efficiency: 0.99
 api:
   listen: 0.0.0.0:8080
 `)), 0o600); err != nil {
@@ -110,8 +107,7 @@ func TestValidateAllowsAdjacentPeriodsWithSameEffectiveState(t *testing.T) {
 				},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected adjacent matching periods to validate, got %v", err)
@@ -139,8 +135,7 @@ func TestNormalizeLocationDefaultsRUTX50(t *testing.T) {
 				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	normalized, err := cfg.Normalize()
 	if err != nil {
@@ -187,8 +182,7 @@ func TestValidateRejectsTimezoneUpdateWithoutAction(t *testing.T) {
 				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "location.timezone_update.command") {
 		t.Fatalf("expected timezone update validation error, got %v", err)
@@ -209,8 +203,7 @@ func TestValidateRejectsMissingHeatTarget(t *testing.T) {
 				},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "target_celsius") {
 		t.Fatalf("expected target validation error, got %v", err)
@@ -232,8 +225,7 @@ func TestValidateRejectsHeatTargetOutsideSafeRange(t *testing.T) {
 				},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "target_celsius") {
 		t.Fatalf("expected target validation error, got %v", err)
@@ -258,8 +250,7 @@ func TestValidateRejectsOverlappingProgramDays(t *testing.T) {
 				},
 			},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "overlaps") {
 		t.Fatalf("expected overlapping-day validation error, got %v", err)
@@ -367,8 +358,6 @@ automation:
       periods:
         - start: "00:00"
           mode: "off"
-overview:
-  charge_efficiency: 0.99
 api:
   listen: 0.0.0.0:8080
 `)), 0o600); err != nil {
@@ -411,8 +400,7 @@ func trackingBaseConfig() Config {
 				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 }
 
@@ -428,8 +416,7 @@ func TestHeatingScheduleDocumentRoundTrip(t *testing.T) {
 				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	doc := cfg.HeatingScheduleDocument("rev-1")
 	if doc.Revision != "rev-1" {
@@ -462,8 +449,7 @@ func TestNormalizeHostSampleIntervalDefault(t *testing.T) {
 				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	normalized, err := cfg.Normalize()
 	if err != nil {
@@ -486,8 +472,7 @@ func TestNormalizeHostSampleIntervalFromConfig(t *testing.T) {
 				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	normalized, err := cfg.Normalize()
 	if err != nil {
@@ -510,8 +495,7 @@ func TestValidateRejectsNegativeHostSampleInterval(t *testing.T) {
 				Periods: []HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
 			}},
 		},
-		API:      APIConfig{Listen: ":8080"},
-		Overview: OverviewConfig{ChargeEfficiency: 0.99},
+		API: APIConfig{Listen: ":8080"},
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected validation error for negative host.sample_interval")
@@ -570,7 +554,7 @@ func TestValidateRejectsInvalidBatteryConfig(t *testing.T) {
 		{"floor soc negative", func(o OverviewConfig) OverviewConfig { o.BatteryFloorSOC = -1; return o }, "overview.battery_floor_soc"},
 		{"ready soc negative", func(o OverviewConfig) OverviewConfig { o.BatteryReadySOC = -1; return o }, "overview.battery_ready_soc"},
 		{"ready soc above 100", func(o OverviewConfig) OverviewConfig { o.BatteryReadySOC = 101; return o }, "overview.battery_ready_soc"},
-		{"charge efficiency zero", func(o OverviewConfig) OverviewConfig { o.ChargeEfficiency = 0; return o }, "overview.charge_efficiency"},
+		{"charge efficiency negative", func(o OverviewConfig) OverviewConfig { o.ChargeEfficiency = -0.5; return o }, "overview.charge_efficiency"},
 		{"charge efficiency above one", func(o OverviewConfig) OverviewConfig { o.ChargeEfficiency = 1.5; return o }, "overview.charge_efficiency"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -582,5 +566,11 @@ func TestValidateRejectsInvalidBatteryConfig(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestValidateAllowsUnsetChargeEfficiency(t *testing.T) {
+	if err := validTestConfig().Validate(); err != nil {
+		t.Fatalf("expected zero charge_efficiency to be a valid unset sentinel, got %v", err)
 	}
 }

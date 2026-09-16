@@ -73,3 +73,47 @@ ok  	empirebus-tests/service/runtime	3.184s
 
 - The `== 0` default pattern for `BatteryFloorSOC`/`BatteryReadySOC` was left untouched as instructed.
 - Charge efficiency differs from capacity/voltage: because it now rejects zero (the Go zero value), every config that flows through `Validate` must carry an explicit positive value. The example/sim/staging configs were updated accordingly. All config fixtures were conformed; no deployment-only config was changed beyond the two in this repo.
+
+## Fix round 2
+
+### What I changed
+
+- **`service/config/config.go`** — reverted the charge-efficiency validation back to rejecting only values outside the meaningful range:
+  `if c.Overview.ChargeEfficiency < 0 || c.Overview.ChargeEfficiency > 1`, message `overview.charge_efficiency must be between 0 and 1`. `0` is the Go zero value / project-wide "unset" sentinel and is now again a valid input that `normalizeOverview` defaults to 0.99. This restores backward compatibility for existing deployments that never configured a battery section.
+- **`service/config/config_test.go`** — updated the battery validation tests to the corrected semantics:
+  - `ChargeEfficiency: -0.5` → error containing `overview.charge_efficiency`.
+  - `ChargeEfficiency: 1.5` → error containing `overview.charge_efficiency`.
+  - Removed the previous "charge efficiency zero" rejection case.
+  - Added `TestValidateAllowsUnsetChargeEfficiency` asserting that `ChargeEfficiency: 0` (the unset sentinel) produces no charge_efficiency validation error.
+  - `TestOverviewBatteryConfigDefaults` kept: capacity 660, voltage 12.8, floor 20, ready 95, max charge current 120, efficiency 0.99 when zeroed.
+- **Reverted test fixtures** that had only been changed to satisfy the now-reverted `<= 0` check: the `charge_efficiency: 0.99` field added to `validTestConfig`, `trackingBaseConfig`, the inline struct fixtures in `config_test.go`, the YAML `overview:` blocks in `TestLoadFileAndNormalize` / `TestTrackingSectionRoundTrip`, and the `Overview` structs added to `service/runtime/overview_test.go`, `recording_test.go`, `tracking_test.go`.
+
+### Kept (per follow-up brief)
+
+- **`service/runtime/overview.go`** — `UpdateOverviewSettings` still copies `next.Overview` and replaces only `Comfort`/`UsableBatteryCapacityAh`/`GasTankCapacityLitres` (preserves battery fields; required by Task 3). Not reverted.
+- **`config.sim.yaml`, `config.staging.example.yaml`** — Victron battery bank blocks left in place as optional documentation. Not reverted.
+- `config.example.yaml` is untouched (already carried the battery block).
+
+### Tests run
+
+```
+$ go test -count=1 ./service/config/... ./service/runtime/... ./service/api/httpapi/...
+ok  	empirebus-tests/service/config	0.268s
+ok  	empirebus-tests/service/runtime	2.857s
+ok  	empirebus-tests/service/api/httpapi	0.253s
+
+$ go vet ./service/config/...
+vet-ok
+
+$ go test -count=1 ./...
+ok  	empirebus-tests/service/config	0.093s
+ok  	empirebus-tests/service/runtime	3.241s
+ok  	empirebus-tests/service/api/httpapi	0.143s
+(all other packages ok / no test files)
+```
+
+`gofmt -l` on the changed Go files reports nothing. `service/config/config.go` is byte-identical to the pre-fix commit `16ebe27`.
+
+### Notes
+
+- The full-repo `go test -count=1 ./...` passes, confirming backward compatibility: configs that previously lacked any battery/charge-efficiency config now validate again.
