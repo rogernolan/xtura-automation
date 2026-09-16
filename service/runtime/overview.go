@@ -81,7 +81,7 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 				doc.Battery.ChargeState = "topping_off"
 			} else if est.EstimatedSeconds > 0 {
 				doc.Battery.ETASeconds = &est.EstimatedSeconds
-				targetSOC := est.TargetSOC
+				targetSOC := estCfg.ReadySOC
 				doc.Battery.TargetSOC = &targetSOC
 			}
 		case BatteryModeDischarging:
