@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"math"
+	"sync"
 	"testing"
 	"time"
 )
@@ -140,13 +141,20 @@ func TestBatteryEstimateSmoothingDampensSpike(t *testing.T) {
 		t.Fatalf("smoothing should dampen spike, got %v (expected > -80)", afterSpike)
 	}
 
-	// Return to -30A, should recover within ~30 seconds
-	for i := 0; i < 30; i++ {
+	// Return to -30A, converge over several half-lives.
+	// With alpha ≈ 0.00231 (5-min half-life, 1-s ticks), half-life ≈ 300 updates,
+	// so 5 half-lives ≈ 1500 updates for ~97% convergence.
+	for i := 0; i < 1500; i++ {
 		smoother.Update(-30.0)
 	}
 	recovered := smoother.Smoothed()
-	if recovered < -35 || recovered > -25 {
-		t.Fatalf("smoothing should recover, got %v (expected near -30)", recovered)
+	// Assert convergence: within 0.5A of the target -30A, and strictly
+	// closer to -30A than the post-spike value was.
+	if math.Abs(recovered-(-30.0)) > 0.5 {
+		t.Fatalf("smoothing should converge to -30A after recovery, got %v", recovered)
+	}
+	if math.Abs(recovered-(-30.0)) > math.Abs(afterSpike-(-30.0)) {
+		t.Fatalf("recovered value %v should be closer to -30A than post-spike value %v", recovered, afterSpike)
 	}
 }
 
@@ -187,5 +195,40 @@ func TestFormatBatteryDuration(t *testing.T) {
 				t.Fatalf("FormatBatteryDuration(%v) = %q, want %q", tt.seconds, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestBatteryEstimateSmoothingConcurrent(t *testing.T) {
+	smoother := NewBatteryEstimateSmoothing(5*time.Minute, time.Second)
+
+	const writers, writerUpdates = 8, 200
+	const readers, readerReads = 4, 200
+
+	var wg sync.WaitGroup
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < writerUpdates; i++ {
+				smoother.Update(-30.0)
+			}
+		}()
+	}
+	for r := 0; r < readers; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < readerReads; i++ {
+				_ = smoother.Smoothed()
+			}
+		}()
+	}
+	wg.Wait()
+
+	// After all updates finish the smoothed value must be a finite number,
+	// never NaN (a common symptom of non-atomic read-modify-write races).
+	got := smoother.Smoothed()
+	if math.IsNaN(got) || math.IsInf(got, 0) {
+		t.Fatalf("expected finite smoothed value, got %v", got)
 	}
 }

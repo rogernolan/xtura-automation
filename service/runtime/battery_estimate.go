@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 	"math"
+	"sync"
 	"time"
 )
 
@@ -55,7 +56,9 @@ type BatteryEstimate struct {
 }
 
 // BatteryEstimateSmoothing maintains an EWMA of battery current.
+// It is safe for concurrent use.
 type BatteryEstimateSmoothing struct {
+	mu          sync.Mutex
 	smoothed    float64
 	initialized bool
 	alpha       float64 // computed from half-life and tick interval
@@ -71,6 +74,8 @@ func NewBatteryEstimateSmoothing(halfLife time.Duration, tickInterval time.Durat
 
 // Update incorporates a new current reading. Returns the smoothed value.
 func (s *BatteryEstimateSmoothing) Update(current float64) float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.initialized {
 		s.smoothed = current
 		s.initialized = true
@@ -82,11 +87,15 @@ func (s *BatteryEstimateSmoothing) Update(current float64) float64 {
 
 // Smoothed returns the current smoothed value without updating.
 func (s *BatteryEstimateSmoothing) Smoothed() float64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.smoothed
 }
 
 // Reset clears the smoothing state.
 func (s *BatteryEstimateSmoothing) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.smoothed = 0
 	s.initialized = false
 }
