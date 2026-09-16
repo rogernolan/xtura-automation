@@ -17,12 +17,17 @@ type Settings struct {
 	Comfort                 []float64 `json:"comfort_thresholds"`
 	UsableBatteryCapacityAh float64   `json:"usable_battery_capacity_ah"`
 	GasTankCapacityLitres   float64   `json:"gas_tank_capacity_litres"`
+	BatteryCapacityAh       float64   `json:"battery_capacity_ah"`
 }
 
 type Battery struct {
 	StateOfChargePercent *float64   `json:"state_of_charge_percent,omitempty"`
 	CurrentA             *float64   `json:"current_a,omitempty"`
-	ETAHours             *float64   `json:"eta_hours,omitempty"`
+	PowerW               *float64   `json:"power_w,omitempty"`
+	Mode                 string     `json:"mode"`
+	ChargeState          string     `json:"charge_state,omitempty"`
+	ETASeconds           *float64   `json:"eta_seconds,omitempty"`
+	TargetSOC            *float64   `json:"target_soc,omitempty"`
 	Status               string     `json:"status"`
 	UpdatedAt            *time.Time `json:"updated_at,omitempty"`
 }
@@ -74,12 +79,12 @@ type TemperaturePoint struct {
 }
 
 type Gas struct {
-	Status         string     `json:"status"`
-	LevelPercent   *float64   `json:"level_percent,omitempty"`
-	LevelLitres    *float64   `json:"level_litres,omitempty"`
-	CapacityLitres *float64   `json:"capacity_litres,omitempty"`
-	BatteryPercent *float64   `json:"battery_percent,omitempty"`
-	TempC          *float64   `json:"temp_c,omitempty"`
-	Quality        *int       `json:"quality,omitempty"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	Status         string    `json:"status"`
+	LevelPercent   *float64  `json:"level_percent,omitempty"`
+	LevelLitres    *float64  `json:"level_litres,omitempty"`
+	CapacityLitres *float64  `json:"capacity_litres,omitempty"`
+	BatteryPercent *float64  `json:"battery_percent,omitempty"`
+	TempC          *float64  `json:"temp_c,omitempty"`
+	Quality        *int      `json:"quality,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }

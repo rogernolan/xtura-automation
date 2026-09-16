@@ -1,115 +1,38 @@
-# Task 2 Report: Restructure the HTML into pages and add the burger drawer
+# Task 2 Report: Create battery estimate module
 
-## Implementation summary
+## What I implemented
 
-Restructured `web/static/index.html` from grouped `controls` and `more` sections into eight page containers: `overviewPanel`, `heatingPanel`, `waterPanel`, `lightingPanel`, `locationPanel`, `systemPanel`, `toolsPanel`, and `settingsPanel`. Added the shared burger navigation controls (`menuButton`, `navigationBackdrop`, `navigationDrawer`, `closeMenuButton`) and the eight `data-page` links exactly as specified. Removed the section `<select>` controls, removed `.section-panel` ownership wrappers, removed the bottom `.primary-nav`, and updated overview card routes to `#/heating`, `#/water`, `#/system`, and `#/settings`.
+Created `service/runtime/battery_estimate.go` exactly per the task brief (verbatim transcription, then gofmt-normalized):
 
-Updated `web/static/navigation.test.js` to assert the new page-panel IDs, drawer markup, page links, route targets, and removal of legacy grouped-navigation markup.
+- Constants: `idleDeadbandA` (2.0), `smoothingHalfLifeDuration` (5 min)
+- `BatteryMode` type with `Charging`/`Discharging`/`Idle`/`Unknown` values
+- `BatteryChargeState` type with `Bulk`/`Absorption`/`Float`/`Storage`/`Unknown` values
+- `BatteryConfig` struct (capacity, nominal voltage, floor SOC, ready SOC, max charge current, charge efficiency)
+- `BatteryEstimate` struct (mode, SOC, current, power, charge state, target SOC, estimated seconds, available)
+- `BatteryEstimateSmoothing` EWMA tracker: `NewBatteryEstimateSmoothing`, `Update`, `Smoothed`, `Reset`
+- `ComputeBatteryEstimate` — nil-guards SOC/current pointers, handles nil smoother (uses raw current), deadband mode selection, charge/discharge ETA math
+- `FormatBatteryDuration` — formatter for display durations
+
+The file is in package `runtime`. It was NOT wired into `App` (that is Task 3). No tests were added (Task 4 covers that).
+
+## What I tested and test results
+
+- `gofmt -w service/runtime/battery_estimate.go` — clean, no diff after first pass
+- `go build ./service/runtime/...` — PASS, pristine output (exit 0, no output)
 
 ## Files changed
 
-- `web/static/index.html`
-- `web/static/navigation.test.js`
+- `service/runtime/battery_estimate.go` (new, 194 lines)
 
-## RED/GREEN TDD evidence
+## Self-review findings
 
-### RED
+- Completeness: every constant, type, struct field, and function from the brief is present with matching names and semantics.
+- Quality: gofmt-clean. The brief's non-canonical formatting (struct literal/keyword alignment, the misindented `dischargeCurrent` line) was normalized by gofmt; no semantic change.
+- Nil handling: `ComputeBatteryEstimate` returns `BatteryEstimate{Available: false}` when SOC or current is nil, and uses raw current when the smoother is nil — all per the brief.
+- Discipline: nothing beyond the brief — no App wiring, no extra functions, no tests.
+- Build: `go build ./service/runtime/...` passes with pristine output.
 
-Command:
+## Issues or concerns
 
-```bash
-node --test web/static/navigation.test.js
-```
-
-Result:
-
-- Failed in `overview markup uses page panels and drawer navigation`
-- First failing assertion was missing `data-page="overview"` in the old HTML
-- The failure matched the expected pre-change state: legacy grouped panels and no drawer navigation
-
-### GREEN
-
-Command:
-
-```bash
-node --test web/static/navigation.test.js
-```
-
-Result:
-
-- 5 tests passed
-- 0 tests failed
-
-## Test commands and results
-
-### Focused Task 2 test
-
-```bash
-node --test web/static/navigation.test.js
-```
-
-- Pass: 5
-- Fail: 0
-
-### Relevant static regression check
-
-```bash
-node --test web/static/navigation.test.js web/static/app.test.js
-```
-
-- Pass: 11
-- Fail: 2
-- Expected failures:
-  - `changing the controls dropdown navigates to the selected section`
-  - `changing the more dropdown navigates to the selected section`
-- Both failures are due to Task 2 intentionally removing the grouped dropdown navigation while `web/static/app.js` and its tests are still on the pre-Task-3 routing model
-
-## Self-review
-
-- Verified only the two requested files were changed for implementation.
-- Confirmed all required page-panel IDs and drawer link `data-page` attributes exist.
-- Confirmed the legacy `data-section-group` markup and bottom `.primary-nav` were removed.
-- Confirmed existing control element IDs and inner control markup were preserved while moving them into the new page containers.
-- Confirmed no changes were made to `web/static/app.js` or `web/static/styles.css`.
-
-## Concerns
-
-- `web/static/app.test.js` still contains assertions for the removed controls/more dropdown model, so the static suite is not fully green until Task 3 updates route binding and test expectations.
-
-## Review fix evidence
-
-Addressed the Task 2 review findings in `web/static/navigation.test.js` by tightening the markup assertions to:
-
-- pair each drawer link `data-page` with its exact canonical `href`
-- assert `navigationBackdrop` exists
-- assert the exact Overview card ID to `data-overview-route` mappings:
-  - `aldeCard` -> `#/heating`
-  - `freshWaterCard` -> `#/water`
-  - `greyWaterCard` -> `#/water`
-  - `batterySocCard` -> `#/system`
-  - `batteryCurrentCard` -> `#/system`
-  - `gasCard` -> `#/settings`
-
-Command:
-
-```bash
-node --test web/static/navigation.test.js
-```
-
-Output:
-
-```text
-✔ exposes the canonical page list (0.73325ms)
-✔ parses every canonical page (0.182833ms)
-✔ falls back for legacy, nested, and unknown routes (0.099167ms)
-✔ writes canonical page hashes (0.0915ms)
-✔ overview markup uses page panels and drawer navigation (1.18325ms)
-ℹ tests 5
-ℹ suites 0
-ℹ pass 5
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 60.585875
-```
+- None. The unused package-level constant `smoothingHalfLifeDuration` is intentional (specified in the brief; will be consumed by a later task) and does not affect the build.
+- Note: `docs/superpowers/plans/2026-09-15-battery-estimate.md` is untracked in the worktree but is outside this task's scope and was left untouched.

@@ -37,9 +37,15 @@ type WaterHistoryConfig struct {
 }
 
 type OverviewConfig struct {
-	UsableBatteryCapacityAh float64   `yaml:"usable_battery_capacity_ah,omitempty"`
-	GasTankCapacityLitres   float64   `yaml:"gas_tank_capacity_litres,omitempty"`
-	Comfort                 []float64 `yaml:"comfort_thresholds,omitempty"`
+	UsableBatteryCapacityAh    float64   `yaml:"usable_battery_capacity_ah,omitempty"`
+	GasTankCapacityLitres      float64   `yaml:"gas_tank_capacity_litres,omitempty"`
+	Comfort                    []float64 `yaml:"comfort_thresholds,omitempty"`
+	BatteryCapacityAh          float64   `yaml:"battery_capacity_ah,omitempty"`
+	BatteryNominalVoltage      float64   `yaml:"battery_nominal_voltage,omitempty"`
+	BatteryFloorSOC            float64   `yaml:"battery_floor_soc,omitempty"`
+	BatteryReadySOC            float64   `yaml:"battery_ready_soc,omitempty"`
+	MultiplusMaxChargeCurrentA float64   `yaml:"multiplus_max_charge_current_a,omitempty"`
+	ChargeEfficiency           float64   `yaml:"charge_efficiency,omitempty"`
 }
 
 type GarminConfig struct {
@@ -329,6 +335,21 @@ func (c Config) Validate() error {
 	if c.Overview.GasTankCapacityLitres < 0 {
 		problems = append(problems, "overview.gas_tank_capacity_litres must be greater than zero")
 	}
+	if c.Overview.BatteryCapacityAh < 0 {
+		problems = append(problems, "overview.battery_capacity_ah must not be negative")
+	}
+	if c.Overview.BatteryNominalVoltage < 0 {
+		problems = append(problems, "overview.battery_nominal_voltage must not be negative")
+	}
+	if c.Overview.BatteryFloorSOC < 0 || c.Overview.BatteryFloorSOC > 100 {
+		problems = append(problems, "overview.battery_floor_soc must be between 0 and 100")
+	}
+	if c.Overview.BatteryReadySOC < 0 || c.Overview.BatteryReadySOC > 100 {
+		problems = append(problems, "overview.battery_ready_soc must be between 0 and 100")
+	}
+	if c.Overview.ChargeEfficiency < 0 || c.Overview.ChargeEfficiency > 1 {
+		problems = append(problems, "overview.charge_efficiency must be between 0 and 1")
+	}
 	if c.WaterHistory.ThresholdPercent < 0 || c.WaterHistory.ThresholdPercent > 100 {
 		problems = append(problems, "water_history.threshold_percent must be between 0 and 100")
 	}
@@ -446,6 +467,9 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 			HeatingPrograms: make([]domainheating.HeatingProgram, 0, len(c.Automation.HeatingPrograms)),
 		},
 	}
+	if out.Overview.BatteryFloorSOC >= out.Overview.BatteryReadySOC {
+		return NormalizedConfig{}, fmt.Errorf("overview.battery_floor_soc (%v) must be less than overview.battery_ready_soc (%v)", out.Overview.BatteryFloorSOC, out.Overview.BatteryReadySOC)
+	}
 	for i, program := range c.Automation.HeatingPrograms {
 		normalized, err := normalizeHeatingProgram(program)
 		if err != nil {
@@ -485,6 +509,24 @@ func normalizeOverview(in OverviewConfig) OverviewConfig {
 		out.Comfort = []float64{10, 18, 24, 30}
 	}
 	out.Comfort = append([]float64(nil), out.Comfort...)
+	if out.BatteryCapacityAh == 0 {
+		out.BatteryCapacityAh = 660
+	}
+	if out.BatteryNominalVoltage == 0 {
+		out.BatteryNominalVoltage = 12.8
+	}
+	if out.BatteryFloorSOC == 0 {
+		out.BatteryFloorSOC = 20
+	}
+	if out.BatteryReadySOC == 0 {
+		out.BatteryReadySOC = 95
+	}
+	if out.MultiplusMaxChargeCurrentA == 0 {
+		out.MultiplusMaxChargeCurrentA = 120
+	}
+	if out.ChargeEfficiency == 0 {
+		out.ChargeEfficiency = 0.99
+	}
 	return out
 }
 

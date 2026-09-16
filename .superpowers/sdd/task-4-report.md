@@ -1,119 +1,54 @@
-# Task 4 Report: runtime grey discharge wiring
+# Task 4: Add battery estimate tests — Report
 
-## Status
+## What I implemented
 
-Complete.
+Created `service/runtime/battery_estimate_test.go` per the brief with 11 test cases covering:
+- Discharging ETA to floor SOC
+- Charging ETA to ready SOC
+- Near-full (above ready SOC) — no linear ETA
+- Idle within deadband
+- Below floor SOC — no ETA
+- Missing SOC → Available:false
+- Missing current → Available:false
+- EWMA spike damping (baseline → spike → recovery)
+- Power computation (current × voltage)
+- FormatBatteryDuration table tests (zero, minutes, hours, days, negative, NaN, Inf)
 
-Task 4 wires Task 2's Garmin discharge-event queue and Task 3's deterministic
-water-history store into the runtime polling path:
+## Two fixes required to make the brief's tests pass
 
-- runtime now captures an optional `GreyWaterDischargeProvider` from the Garmin
-  adapter during `New`.
-- runtime passes `logger.Printf` into `waterhistory.New(...)` so unexpected
-  grey-level drops surface through the normal runtime logger.
-- each water-history tick now drains Garmin open/close events before sampling
-  overview telemetry, so a discharge open suppresses false anomaly logs on the
-  following grey drop.
-- the tick publishes exactly one `water.history_changed` event after either a
-  discharge event or a telemetry sample changes history.
-- `observeWaterTelemetry` remains responsible for sample ingestion and fresh
-  fill detection only.
+1. **`battery_estimate.go` — missing TargetSOC in discharging branch**: The production code set `TargetSOC` only in the charging branch. Added `est.TargetSOC = cfg.FloorSOC` in the discharging branch so the test assertion `est.TargetSOC != 20` passes.
+
+2. **Brief math error in FormatBatteryDuration test case**: The brief specified `{"one day three hours", 90000, "1d 3h"}` but 90000s = 25h = 1d 1h. Changed expected to `"1d 1h"` and renamed the subtest to `"one day one hours"`.
+
+## Test commands + results
+
+```
+go test -count=1 ./service/runtime/ -run 'TestBattery|TestFormatBatteryDuration' -v
+→ PASS (all 11 tests, including 11 FormatBatteryDuration subtests)
+
+go test -count=1 ./service/runtime/...
+→ PASS (full suite, 3.3s)
+```
 
 ## Files changed
 
-- `service/runtime/app.go`
-- `service/runtime/sensors.go`
-- `service/runtime/sensors_test.go`
+| File | Change |
+|---|---|
+| `service/runtime/battery_estimate_test.go` | Created (verbatim from brief + math fix) |
+| `service/runtime/battery_estimate.go` | Added `est.TargetSOC = cfg.FloorSOC` in discharging branch |
 
-## Verification
+## Self-review
 
-### RED
+- All 11 test funcs present and matching the brief (with the two corrections above).
+- Discharge ETA: ~47520s ✓, Charge ETA: ~10800s ✓, Spike > -80 ✓.
+- Full runtime package suite passes; no regressions.
+- Only the two listed files were modified.
 
-Command:
+## Commit
 
-```bash
-go test ./service/runtime -run TestGreyWaterHistoryDrainsProviderEventsBeforeSamplesAndPublishesClose
-```
-
-Result:
-
-- `FAIL    empirebus-tests/service/runtime [build failed]`
-- compiler failures matched the missing Task 4 surface:
-  - `unknown field greyWaterDischarge in struct literal of type App`
-  - `app.observeWaterHistory undefined`
-
-### GREEN
-
-Command:
-
-```bash
-go test ./service/runtime -run 'TestGreyWaterHistoryDrainsProviderEventsBeforeSamplesAndPublishesClose|TestObserveWaterTelemetryLogsGreyDropWithoutDischargeOpen|TestObserveWaterTelemetryKeepsFreshFillDetection'
-```
-
-Result:
-
-- `ok      empirebus-tests/service/runtime  0.697s`
-
-### Required package verification
-
-Command:
-
-```bash
-rtk test go test ./heating ./service/adapters/garmin ./service/waterhistory ./service/runtime
-```
-
-Result:
-
-- `ok   empirebus-tests/heating (cached)`
-- `ok   empirebus-tests/service/adapters/garmin (cached)`
-- `ok   empirebus-tests/service/waterhistory (cached)`
-- `ok   empirebus-tests/service/runtime 2.503s`
-
-### Full repository verification
-
-Command:
-
-```bash
-rtk test go test ./...
-```
-
-Result:
-
-- repo-wide test run passed
-- included:
-  - `ok   empirebus-tests/cmd/servsim 2.827s`
-  - `ok   empirebus-tests/heating (cached)`
-  - `ok   empirebus-tests/service/runtime (cached)`
-  - `ok   empirebus-tests/service/waterhistory (cached)`
-
-### Patch hygiene
-
-Commands:
-
-```bash
-rtk proxy gofmt -w service/runtime/app.go service/runtime/sensors.go service/runtime/sensors_test.go
-rtk git diff --check
-```
-
-Result:
-
-- formatting applied cleanly
-- diff check clean
-
-## Notes
-
-- The runtime helper is `observeWaterHistory()`: it drains discharge events
-  first, then samples telemetry, then publishes once if either side changed the
-  water-history document.
-- The runtime tests cover:
-  - open-before-sample ordering via the absence of a false grey-drop log
-  - deterministic close-to-empty event recording
-  - runtime logging when grey drops without an open event
-  - preservation of fresh fill detection through `observeWaterTelemetry`
-- A pre-existing modification to `.superpowers/sdd/task-2-report.md` was left
-  untouched and is not part of Task 4.
+`23f3da1` — test: add battery estimate and duration formatting tests
 
 ## Concerns
 
-None for this task. The requested runtime wiring is in place, focused tests are
-green, package verification passed, and the full repository suite passed.
+- The brief's `FormatBatteryDuration` test case for "one day three hours" had wrong expected math (90000s ≠ 3h remainder). This is a brief bug, not a code bug.
+- The production code's missing `TargetSOC` in the discharging path was a genuine oversight caught by the test — the test did its job.

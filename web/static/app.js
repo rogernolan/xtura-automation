@@ -626,6 +626,27 @@ function formatBatteryCurrent(value) {
   return `${sign}${Math.abs(current) >= 100 ? current.toFixed(0) : current.toFixed(1)}A`;
 }
 
+function formatBatteryDuration(seconds) {
+  if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return "";
+  const s = Number(seconds);
+  if (s < 60) return "< 1 minute";
+  const totalMinutes = Math.floor(s / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  if (days > 0) return `${days}d ${remainingHours}h`;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+function formatBatteryPower(watts) {
+  if (watts === null || watts === undefined || !Number.isFinite(Number(watts))) return "";
+  const w = Number(watts);
+  const sign = w >= 0 ? "+" : "";
+  return `${sign}${(w / 1000).toFixed(2)} kW`;
+}
+
 function temperatureThresholds() {
   return state.overviewSettings && state.overviewSettings.comfort_thresholds;
 }
@@ -784,8 +805,35 @@ function renderOverview() {
   renderTemperature(doc);
   if (byId("batterySoc")) byId("batterySoc").textContent = overviewPercent(doc.battery && doc.battery.state_of_charge_percent);
   if (byId("batteryCurrent")) byId("batteryCurrent").textContent = doc.battery && doc.battery.current_a !== undefined ? formatBatteryCurrent(doc.battery.current_a) : "--";
-  if (byId("batteryState")) byId("batteryState").textContent = doc.battery ? (doc.battery.status === "charging" ? "Charging" : doc.battery.status === "not_charging" ? "Not charging" : "N/A") : "N/A";
-  if (byId("timeToFull")) byId("timeToFull").textContent = doc.battery && doc.battery.eta_hours !== undefined ? `Time to full: ${Number(doc.battery.eta_hours).toFixed(1)}h` : "Time to full: N/A";
+  if (byId("batteryState")) {
+    const b = doc.battery;
+    let stateText = "N/A";
+    if (b) {
+      if (stale || b.status === "unavailable") stateText = "N/A";
+      else if (b.mode === "charging" && b.charge_state === "topping_off") stateText = "Charging";
+      else if (b.mode === "charging") stateText = "Charging";
+      else if (b.mode === "discharging") stateText = "Discharging";
+      else if (b.mode === "idle") stateText = "Idle";
+      else stateText = "N/A";
+    }
+    byId("batteryState").textContent = stateText;
+  }
+  if (byId("batteryPower")) {
+    byId("batteryPower").textContent = doc.battery && doc.battery.power_w !== undefined ? formatBatteryPower(doc.battery.power_w) : "";
+  }
+  if (byId("timeToFull")) {
+    const b = doc.battery;
+    let detailText = "";
+    if (b && !stale && b.status !== "unavailable") {
+      if (b.mode === "charging" && b.charge_state === "topping_off") {
+        detailText = "Topping off";
+      } else if (b.eta_seconds !== undefined && b.eta_seconds !== null) {
+        const targetLabel = b.target_soc !== undefined ? `${Number(b.target_soc).toFixed(0)}%` : "";
+        detailText = `${formatBatteryDuration(b.eta_seconds)} to ${targetLabel}`;
+      }
+    }
+    byId("timeToFull").textContent = detailText;
+  }
   if (byId("batteryBar")) { const pct = doc.battery && doc.battery.state_of_charge_percent; byId("batteryBar").style.width = pct === undefined || pct === null ? "0%" : `${Math.max(0, Math.min(100, Number(pct)))}%`; }
   applyLastSeen("batteryLastSeen", doc.battery && doc.battery.updated_at);
   if (byId("freshWater")) byId("freshWater").textContent = overviewPercent(doc.fresh_water_percent);
@@ -823,6 +871,7 @@ function renderOverviewSettings() {
   const values = settings.comfort_thresholds || [];
   ["comfortCold", "comfortComfort", "comfortWarm", "comfortHot"].forEach((id, index) => { if (byId(id)) byId(id).value = values[index] ?? ""; });
   if (byId("batteryCapacity")) byId("batteryCapacity").value = settings.usable_battery_capacity_ah ?? "";
+  if (byId("batteryCapacityAh")) byId("batteryCapacityAh").value = settings.battery_capacity_ah ?? "";
   if (byId("gasCapacity")) byId("gasCapacity").value = settings.gas_tank_capacity_litres ?? "";
 }
 
@@ -2248,6 +2297,7 @@ function bindActions() {
       state.overviewSettings = await withRequest(() => api.updateOverviewSettings({
         comfort_thresholds: ids.map((id) => Number(byId(id).value)),
         usable_battery_capacity_ah: Number(byId("batteryCapacity").value),
+        battery_capacity_ah: Number(byId("batteryCapacityAh").value),
         gas_tank_capacity_litres: Number(byId("gasCapacity").value),
       }), "Saving overview settings");
       state.overviewSettingsDirty = false;

@@ -516,3 +516,89 @@ func TestValidateRejectsInvalidOverviewSettings(t *testing.T) {
 		t.Fatalf("expected overview validation errors, got %v", err)
 	}
 }
+
+func TestOverviewBatteryConfigDefaults(t *testing.T) {
+	got := NormalizeOverview(OverviewConfig{})
+	if got.BatteryCapacityAh != 660 {
+		t.Errorf("expected battery_capacity_ah default 660, got %v", got.BatteryCapacityAh)
+	}
+	if got.BatteryNominalVoltage != 12.8 {
+		t.Errorf("expected battery_nominal_voltage default 12.8, got %v", got.BatteryNominalVoltage)
+	}
+	if got.BatteryFloorSOC != 20 {
+		t.Errorf("expected battery_floor_soc default 20, got %v", got.BatteryFloorSOC)
+	}
+	if got.BatteryReadySOC != 95 {
+		t.Errorf("expected battery_ready_soc default 95, got %v", got.BatteryReadySOC)
+	}
+	if got.MultiplusMaxChargeCurrentA != 120 {
+		t.Errorf("expected multiplus_max_charge_current_a default 120, got %v", got.MultiplusMaxChargeCurrentA)
+	}
+	if got.ChargeEfficiency != 0.99 {
+		t.Errorf("expected charge_efficiency default 0.99, got %v", got.ChargeEfficiency)
+	}
+	if got.UsableBatteryCapacityAh != 100 {
+		t.Errorf("expected usable_battery_capacity_ah default 100, got %v", got.UsableBatteryCapacityAh)
+	}
+}
+
+func TestValidateRejectsInvalidBatteryConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		overviewFunc func(OverviewConfig) OverviewConfig
+		want         string
+	}{
+		{"negative capacity ah", func(o OverviewConfig) OverviewConfig { o.BatteryCapacityAh = -1; return o }, "overview.battery_capacity_ah"},
+		{"negative nominal voltage", func(o OverviewConfig) OverviewConfig { o.BatteryNominalVoltage = -1; return o }, "overview.battery_nominal_voltage"},
+		{"floor soc above 100", func(o OverviewConfig) OverviewConfig { o.BatteryFloorSOC = 101; return o }, "overview.battery_floor_soc"},
+		{"floor soc negative", func(o OverviewConfig) OverviewConfig { o.BatteryFloorSOC = -1; return o }, "overview.battery_floor_soc"},
+		{"ready soc negative", func(o OverviewConfig) OverviewConfig { o.BatteryReadySOC = -1; return o }, "overview.battery_ready_soc"},
+		{"ready soc above 100", func(o OverviewConfig) OverviewConfig { o.BatteryReadySOC = 101; return o }, "overview.battery_ready_soc"},
+		{"charge efficiency negative", func(o OverviewConfig) OverviewConfig { o.ChargeEfficiency = -0.5; return o }, "overview.charge_efficiency"},
+		{"charge efficiency above one", func(o OverviewConfig) OverviewConfig { o.ChargeEfficiency = 1.5; return o }, "overview.charge_efficiency"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validTestConfig()
+			cfg.Overview = tc.overviewFunc(cfg.Overview)
+			if err := cfg.Validate(); err == nil {
+				t.Fatal("expected validation error")
+			} else if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestValidateAllowsUnsetChargeEfficiency(t *testing.T) {
+	if err := validTestConfig().Validate(); err != nil {
+		t.Fatalf("expected zero charge_efficiency to be a valid unset sentinel, got %v", err)
+	}
+}
+
+func TestNormalizeRejectsFloorSOCGreaterOrEqualToReadySOC(t *testing.T) {
+	cases := []struct {
+		name    string
+		floor   float64
+		ready   float64
+		wantErr bool
+	}{
+		{"explicit floor >= ready", 90, 80, true},
+		{"floor unset default 20 vs ready 10", 0, 10, true},
+		{"both default", 0, 0, false},
+		{"both explicit valid", 80, 95, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validTestConfig()
+			cfg.Overview.BatteryFloorSOC = tc.floor
+			cfg.Overview.BatteryReadySOC = tc.ready
+			_, err := cfg.Normalize()
+			if tc.wantErr && err == nil {
+				t.Fatal("expected normalization error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
