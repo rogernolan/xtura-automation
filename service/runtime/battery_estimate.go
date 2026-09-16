@@ -154,6 +154,7 @@ func ComputeBatteryEstimate(
 		}
 
 	case BatteryModeDischarging:
+		est.TargetSOC = cfg.FloorSOC
 		// Don't compute ETA if already at or below floor
 		if socVal <= cfg.FloorSOC {
 			return est
