@@ -156,7 +156,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     "recordingPanel", "recordingState", "recordingDetail", "recordingDuration", "trackingPanel", "trackingState", "trackingDetail", "trackingManualControls", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval", "todayTrackMapView", "todayTrackMapStatus", "todayTrackMap", "trackList", "trackMapView", "trackMapBack", "trackMapTitle", "trackMapStatus", "trackMap",
     "modeOn", "modeSchedule", "modeOff", "modeState", "targetState", "modeDetail", "targetValue", "targetDown", "targetUp", "boostButton", "boostRunning", "cancelBoostButton",
     "scheduleForm", "scheduleState", "scheduleDetail", "scheduleSlots", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
-    "overviewSettingsForm", "deploymentInfo", "piStatusPanel", "piPowerState", "piStats", "piDetail", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity",
+    "overviewSettingsForm", "deploymentInfo", "piStatusPanel", "piPowerState", "piStats", "piDetail", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity", "batteryPower", "timeToFull",
     "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
@@ -272,7 +272,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     localStorage,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatBatteryDuration, formatBatteryPower, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
@@ -291,6 +291,8 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     overviewCurrentState: context.module.exports.overviewCurrentState,
     overviewSupplyState: context.module.exports.overviewSupplyState,
     formatBatteryCurrent: context.module.exports.formatBatteryCurrent,
+    formatBatteryDuration: context.module.exports.formatBatteryDuration,
+    formatBatteryPower: context.module.exports.formatBatteryPower,
     formatLastSeen: context.module.exports.formatLastSeen,
     sensorLastSeenText: context.module.exports.sensorLastSeenText,
     state: context.module.exports.state,
@@ -339,6 +341,24 @@ test("formats battery current to fit the 99.9A display slot", () => {
   assert.equal(formatBatteryCurrent(99.9), "+99.9A");
   assert.equal(formatBatteryCurrent(250), "+250A");
   assert.equal(formatBatteryCurrent(-125), "-125A");
+});
+
+test("formatBatteryDuration returns human-readable durations", () => {
+  const { formatBatteryDuration } = loadApp();
+  assert.equal(formatBatteryDuration(null), "");
+  assert.equal(formatBatteryDuration(undefined), "");
+  assert.equal(formatBatteryDuration("not-a-number"), "");
+  assert.equal(formatBatteryDuration(30), "< 1 minute");
+  assert.equal(formatBatteryDuration(3600), "1h 00m");
+  assert.equal(formatBatteryDuration(90000), "1d 1h");
+});
+
+test("formatBatteryPower returns signed kilowatt string", () => {
+  const { formatBatteryPower } = loadApp();
+  assert.equal(formatBatteryPower(null), "");
+  assert.equal(formatBatteryPower(undefined), "");
+  assert.equal(formatBatteryPower(0), "+0.00 kW");
+  assert.equal(formatBatteryPower(-1500), "-1.50 kW");
 });
 
 test("healthy supplies leave their status label blank", () => {
