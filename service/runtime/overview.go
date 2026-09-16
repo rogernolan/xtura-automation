@@ -3,7 +3,6 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"empirebus-tests/service/api/events"
@@ -45,20 +44,52 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 		GreyWaterPercent:  telemetry.GreyWaterPercent,
 		UpdatedAt:         telemetry.UpdatedAt,
 		Gas:               a.overviewGas(),
-		Battery:           overview.Battery{StateOfChargePercent: telemetry.BatteryStateOfChargePercent, CurrentA: telemetry.BatteryCurrentA, Status: "unavailable", UpdatedAt: telemetry.UpdatedAt},
 		Temperature:       a.temperatureDocument(telemetry),
 	}
-	if telemetry.BatteryCurrentA != nil {
-		if *telemetry.BatteryCurrentA > 0 {
-			doc.Battery.Status = "charging"
-			if telemetry.BatteryStateOfChargePercent != nil && settings.UsableBatteryCapacityAh > 0 && *telemetry.BatteryStateOfChargePercent < 100 {
-				eta := settings.UsableBatteryCapacityAh * (1 - *telemetry.BatteryStateOfChargePercent/100) / *telemetry.BatteryCurrentA
-				if eta >= 0 && math.IsInf(eta, 0) == false && !math.IsNaN(eta) {
-					doc.Battery.ETAHours = &eta
-				}
+	estCfg := BatteryConfig{
+		CapacityAh:        settings.BatteryCapacityAh,
+		NominalVoltage:    settings.BatteryNominalVoltage,
+		FloorSOC:          settings.BatteryFloorSOC,
+		ReadySOC:          settings.BatteryReadySOC,
+		MaxChargeCurrentA: settings.MultiplusMaxChargeCurrentA,
+		ChargeEfficiency:  settings.ChargeEfficiency,
+	}
+	est := ComputeBatteryEstimate(
+		telemetry.BatteryStateOfChargePercent,
+		telemetry.BatteryCurrentA,
+		a.batteryEstimate,
+		estCfg,
+	)
+
+	doc.Battery = overview.Battery{
+		StateOfChargePercent: telemetry.BatteryStateOfChargePercent,
+		CurrentA:             telemetry.BatteryCurrentA,
+		UpdatedAt:            telemetry.UpdatedAt,
+	}
+
+	if !est.Available {
+		doc.Battery.Status = "unavailable"
+	} else {
+		doc.Battery.Status = string(est.Mode)
+		doc.Battery.Mode = string(est.Mode)
+		powerW := est.PowerW
+		doc.Battery.PowerW = &powerW
+
+		switch est.Mode {
+		case BatteryModeCharging:
+			if est.SOC >= estCfg.ReadySOC {
+				doc.Battery.ChargeState = "topping_off"
+			} else if est.EstimatedSeconds > 0 {
+				doc.Battery.ETASeconds = &est.EstimatedSeconds
+				targetSOC := est.TargetSOC
+				doc.Battery.TargetSOC = &targetSOC
 			}
-		} else {
-			doc.Battery.Status = "not_charging"
+		case BatteryModeDischarging:
+			if est.EstimatedSeconds > 0 {
+				doc.Battery.ETASeconds = &est.EstimatedSeconds
+				targetSOC := estCfg.FloorSOC
+				doc.Battery.TargetSOC = &targetSOC
+			}
 		}
 	}
 	if status == "stale" {

@@ -110,6 +110,8 @@ type App struct {
 	notificationSubs      *notifications.SubscriptionStore
 	waterHistory          *waterhistory.Store
 
+	batteryEstimate *BatteryEstimateSmoothing
+
 	mu                 sync.RWMutex
 	configMu           sync.Mutex
 	switchbotMu        sync.Mutex
@@ -282,6 +284,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		now:                   time.Now,
 		sensorsStore:          sensorStore,
 		waterHistory:          waterStore,
+		batteryEstimate:       NewBatteryEstimateSmoothing(smoothingHalfLifeDuration, time.Second),
 		sensorStates:          make(map[string]*sensorState),
 		lastHistory:           make(map[string]sensorStamp),
 		sensorSettings:        cfg.Switchbot,
