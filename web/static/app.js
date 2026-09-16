@@ -871,6 +871,7 @@ function renderOverviewSettings() {
   const values = settings.comfort_thresholds || [];
   ["comfortCold", "comfortComfort", "comfortWarm", "comfortHot"].forEach((id, index) => { if (byId(id)) byId(id).value = values[index] ?? ""; });
   if (byId("batteryCapacity")) byId("batteryCapacity").value = settings.usable_battery_capacity_ah ?? "";
+  if (byId("batteryCapacityAh")) byId("batteryCapacityAh").value = settings.battery_capacity_ah ?? "";
   if (byId("gasCapacity")) byId("gasCapacity").value = settings.gas_tank_capacity_litres ?? "";
 }
 
@@ -2296,6 +2297,7 @@ function bindActions() {
       state.overviewSettings = await withRequest(() => api.updateOverviewSettings({
         comfort_thresholds: ids.map((id) => Number(byId(id).value)),
         usable_battery_capacity_ah: Number(byId("batteryCapacity").value),
+        battery_capacity_ah: Number(byId("batteryCapacityAh").value),
         gas_tank_capacity_litres: Number(byId("gasCapacity").value),
       }), "Saving overview settings");
       state.overviewSettingsDirty = false;

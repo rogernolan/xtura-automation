@@ -1,89 +1,67 @@
-# Task 3 Report: deterministic grey empty recording and anomaly diagnostics
+# Task 3 Report: Extend Battery struct and wire estimator into App
 
-## Status
+**Status:** DONE
 
-Complete.
+## What I implemented
 
-Task 3 replaces heuristic grey-empty event creation with deterministic discharge tracking:
+### Step 1 — Battery struct (`service/domains/overview/types.go`)
+Replaced the `Battery` struct per the brief: removed `ETAHours *float64` (`eta_hours`), added `PowerW`, `Mode`, `ChargeState`, `ETASeconds`, `TargetSOC` fields with the exact JSON tags from the brief.
 
-- `Store.RecordGreyDischargeOpen(at)` persists a pending grey discharge-open timestamp and is idempotent for the same timestamp.
-- `Store.RecordGreyEmpty(at)` records exactly one deterministic `TankGrey` / `KindEmpty` event when a pending open exists, then clears the pending state.
-- unmatched grey close calls return `(false, nil)` and create no event.
-- grey level drops seen without a pending discharge open no longer create heuristic events; they emit one diagnostic log when the drop meets the configured threshold.
-- upward grey movement is treated as normal filling and does not log.
-- fresh fill detection still uses the configured threshold and settling period.
+### Step 2 — `batteryEstimate` field (`service/runtime/app.go`)
+Added `batteryEstimate *BatteryEstimateSmoothing` to the `App` struct, placed between the `waterHistory` field and the `mu sync.RWMutex` block (same package as the smoother type, so no import needed).
 
-## Files changed
+### Step 3 — Smoother initialization (`service/runtime/app.go`)
+Added `batteryEstimate: NewBatteryEstimateSmoothing(smoothingHalfLifeDuration, time.Second)` to the `app := &App{...}` literal.
 
-- `service/waterhistory/types.go`
-- `service/waterhistory/store.go`
-- `service/waterhistory/store_test.go`
+### Step 4 — Estimator wiring in `overviewDocument` (`service/runtime/overview.go`)
+- Removed the inline `Battery:` field from the `overview.Document{...}` literal (now set after the estimate).
+- Removed the old `if telemetry.BatteryCurrentA != nil { ... }` ETA block (which set `Status` to `"charging"`/`"not_charging"` and computed `ETAHours`).
+- Replaced it with `BatteryConfig` construction from the new normalized settings fields, `ComputeBatteryEstimate(...)` call passing `a.batteryEstimate`, a base `doc.Battery = overview.Battery{...}` assignment, and the `Available`/mode mapping exactly as specified:
+  - unavailable → `Status = "unavailable"`
+  - available → `Status`/`Mode` = `string(est.Mode)`, `PowerW` = `est.PowerW`
+  - charging: `topping_off` when `est.SOC >= ReadySOC`, else `ETASeconds` = `est.EstimatedSeconds` + `TargetSOC` = `est.TargetSOC` when `EstimatedSeconds > 0`
+  - discharging: `ETASeconds` + `TargetSOC` = `FloorSOC` when `EstimatedSeconds > 0`
+- Removed the now-unused `math` import.
+
+### Step 5 — Preserve battery config in `UpdateOverviewSettings`
+Already implemented during Task 1's review fixes (`service/runtime/overview.go` lines 142-146): it copies `next.Overview` into `ov`, overrides only the 3 legacy fields, and reassigns `next.Overview = ov`. This matches the brief's intent (battery fields preserved on settings save). No change was made.
 
 ## Verification
 
-### RED
+- `go build ./service/runtime/...` → PASS
+- `go build ./service/domains/overview/...` → PASS
+- `go vet ./service/runtime/... ./service/domains/overview/...` → FAILS **only** on:
+  `vet: service/runtime/overview_test.go:19:17: doc.Battery.ETAHours undefined (type overview.Battery has no field or method ETAHours)`
+  This is the expected, deliberate breakage — the test package still references the removed `ETAHours` field and is fixed in Task 5. Per instructions, `go test` was not run.
+- `gofmt -w` applied to `types.go`, `app.go`, `overview.go`.
 
-Command:
+## Files changed (committed)
 
-```bash
-rtk test go test ./service/waterhistory -run 'Test.*Grey|TestFillRequires'
-```
+- `service/domains/overview/types.go`
+- `service/runtime/app.go`
+- `service/runtime/overview.go`
 
-Result:
+Commit: `42827d9 feat: wire battery estimate into overview document`
 
-- `FAIL    empirebus-tests/service/waterhistory [build failed]`
-- compiler failures matched the missing Task 3 surface:
-  - `store.RecordGreyDischargeOpen undefined`
-  - `store.RecordGreyEmpty undefined`
-  - `unknown field Logf in struct literal of type Options`
+## Self-review findings
 
-### GREEN
+- Battery struct matches the brief exactly, JSON tags included (verified via diff).
+- `batteryEstimate` field is on `App` and initialized in the construction literal.
+- `overviewDocument` uses `ComputeBatteryEstimate` with `a.batteryEstimate`; status/mode/power/eta/target_soc mapping matches the brief; the inline Document-literal `Battery:` field is removed.
+- No leftover `ETAHours`/`eta_hours` references in non-test code. The only non-doc reference to `eta_hours` is `web/static/app.js:788` (frontend display), which is outside this task's scope; unchanged.
+- `gofmt` also realigned the `Gas` struct field alignment in `types.go` (cosmetic, correct).
+- Nothing beyond the task was changed; only the 3 task files were committed. (A pre-existing uncommitted edit to `.superpowers/sdd/task-2-report.md` and an untracked plan doc were left untouched.)
 
-Commands:
+## Fix round 1
 
-```bash
-rtk test go test ./service/waterhistory -run TestGrey
-rtk test go test ./service/waterhistory -run TestFillRequires
-```
+Changed charging branch `targetSOC` source from `est.TargetSOC` to `estCfg.ReadySOC` (`service/runtime/overview.go:84`), making it consistent with the discharging branch which reads `targetSOC` from config (`estCfg.FloorSOC`).
 
-Result:
+- `go build ./service/runtime/...` → PASS (no output)
+- `go build ./service/domains/overview/...` → PASS (no output)
 
-- `ok  	empirebus-tests/service/waterhistory	0.568s`
-- `ok  	empirebus-tests/service/waterhistory	0.356s`
+Commit: `e79f38d fix: use config ReadySOC for charging target_soc`
 
-### Package verification
+## Issues / concerns
 
-Command:
-
-```bash
-rtk test go test ./service/waterhistory
-```
-
-Result:
-
-- `ok  	empirebus-tests/service/waterhistory	1.350s`
-- rerun after `gofmt`: `ok  	empirebus-tests/service/waterhistory	(cached)`
-
-### Patch hygiene
-
-Commands:
-
-```bash
-rtk proxy gofmt -w service/waterhistory/types.go service/waterhistory/store.go service/waterhistory/store_test.go
-rtk git diff --check
-```
-
-Result:
-
-- formatting applied cleanly
-- diff check clean
-
-## Notes
-
-- The store now persists pending grey discharge-open state in `state.json`, so a restart between open and close still allows one deterministic empty event to be recorded.
-- `RecordGreyEmpty` sets the event `From` from the latest known grey level, writes `To=0` and `Used=From`, clears the pending open, and resets the in-memory grey state to empty so summary calculations reflect an actual empty tank.
-- Existing tests that previously depended on heuristic grey empty detection were rewritten to use the deterministic open/close API or to assert that level movement alone is not an event.
-
-## Concerns
-
-- The focused regex from the brief reproduced the intended RED compiler failure, but on later reruns the shell wrapper parsed the `|`; GREEN verification used separate focused commands instead.
+1. `go vet` reports the expected `overview_test.go` compile error (Task 5 fix). Vet cannot be fully clean until then.
+2. Frontend `web/static/app.js` still renders from `eta_hours`; it will need updating for the new fields (`eta_seconds`, `mode`, `power_w`, `target_soc`) — presumably covered by a later task.

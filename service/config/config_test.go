@@ -574,3 +574,31 @@ func TestValidateAllowsUnsetChargeEfficiency(t *testing.T) {
 		t.Fatalf("expected zero charge_efficiency to be a valid unset sentinel, got %v", err)
 	}
 }
+
+func TestNormalizeRejectsFloorSOCGreaterOrEqualToReadySOC(t *testing.T) {
+	cases := []struct {
+		name    string
+		floor   float64
+		ready   float64
+		wantErr bool
+	}{
+		{"explicit floor >= ready", 90, 80, true},
+		{"floor unset default 20 vs ready 10", 0, 10, true},
+		{"both default", 0, 0, false},
+		{"both explicit valid", 80, 95, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validTestConfig()
+			cfg.Overview.BatteryFloorSOC = tc.floor
+			cfg.Overview.BatteryReadySOC = tc.ready
+			_, err := cfg.Normalize()
+			if tc.wantErr && err == nil {
+				t.Fatal("expected normalization error")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}

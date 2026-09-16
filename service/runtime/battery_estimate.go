@@ -92,6 +92,13 @@ func (s *BatteryEstimateSmoothing) Smoothed() float64 {
 	return s.smoothed
 }
 
+// Initialized reports whether Update has been called at least once.
+func (s *BatteryEstimateSmoothing) Initialized() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.initialized
+}
+
 // Reset clears the smoothing state.
 func (s *BatteryEstimateSmoothing) Reset() {
 	s.mu.Lock()
@@ -101,10 +108,8 @@ func (s *BatteryEstimateSmoothing) Reset() {
 }
 
 // ComputeBatteryEstimate calculates the battery estimate from raw telemetry.
-// A nil smoother disables smoothing and uses the raw current directly (used by
-// tests and when the App has not been fully wired). The smoother is only fed
-// when both SOC and current are present, so missing telemetry never pollutes
-// the running average.
+// The smoother is fed externally (single writer from the publish loop) and
+// this function reads it; nil or uninitialized means raw current is used directly.
 func ComputeBatteryEstimate(
 	soc *float64,
 	rawCurrent *float64,
@@ -118,10 +123,10 @@ func ComputeBatteryEstimate(
 	socVal := *soc
 	currentRaw := *rawCurrent
 
-	// Update the EWMA smoother when one is available
+	// Read the EWMA smoother when it has been seeded; otherwise use raw
 	smoothedCurrent := currentRaw
-	if smoother != nil {
-		smoothedCurrent = smoother.Update(currentRaw)
+	if smoother != nil && smoother.Initialized() {
+		smoothedCurrent = smoother.Smoothed()
 	}
 
 	// Compute power from smoothed current × nominal voltage

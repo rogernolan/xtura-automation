@@ -189,3 +189,48 @@ func TestUpdateOverviewSettingsPersistsAllSettings(t *testing.T) {
 		t.Fatalf("capacity settings were not persisted: %#v", saved.Overview)
 	}
 }
+
+func TestOverviewUpdateSettingsBatteryCapacityAh(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	initial := config.Config{
+		Garmin: config.GarminConfig{WSURL: "ws://localhost:8090/ws", HeartbeatInterval: 4 * time.Second},
+		Automation: config.AutomationConfig{
+			Timezone: "UTC",
+			HeatingPrograms: []config.HeatingProgramConfig{{
+				ID:      "test",
+				Days:    []string{"mon"},
+				Periods: []config.HeatingPeriodConfig{{Start: "00:00", Mode: "off"}},
+			}},
+		},
+		API: config.APIConfig{Listen: ":8091"},
+	}
+	if err := config.SaveFile(path, initial); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	app := &App{rawConfig: initial, configPath: path, broker: events.NewBroker(1), now: func() time.Time { return now }}
+
+	saved, err := app.UpdateOverviewSettings(context.Background(), overview.Settings{Comfort: []float64{11, 19, 25, 31}, UsableBatteryCapacityAh: 120, GasTankCapacityLitres: 31, BatteryCapacityAh: 660})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.BatteryCapacityAh != 660 {
+		t.Fatalf("expected returned BatteryCapacityAh 660, got %v", saved.BatteryCapacityAh)
+	}
+
+	saved, err = app.UpdateOverviewSettings(context.Background(), overview.Settings{Comfort: []float64{11, 19, 25, 31}, UsableBatteryCapacityAh: 120, GasTankCapacityLitres: 31, BatteryCapacityAh: 800})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.BatteryCapacityAh != 800 {
+		t.Fatalf("expected updated BatteryCapacityAh 800, got %v", saved.BatteryCapacityAh)
+	}
+
+	loaded, err := config.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Overview.BatteryCapacityAh != 800 {
+		t.Fatalf("expected persisted BatteryCapacityAh 800, got %v", loaded.Overview.BatteryCapacityAh)
+	}
+}

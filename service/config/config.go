@@ -467,6 +467,9 @@ func (c Config) Normalize() (NormalizedConfig, error) {
 			HeatingPrograms: make([]domainheating.HeatingProgram, 0, len(c.Automation.HeatingPrograms)),
 		},
 	}
+	if out.Overview.BatteryFloorSOC >= out.Overview.BatteryReadySOC {
+		return NormalizedConfig{}, fmt.Errorf("overview.battery_floor_soc (%v) must be less than overview.battery_ready_soc (%v)", out.Overview.BatteryFloorSOC, out.Overview.BatteryReadySOC)
+	}
 	for i, program := range c.Automation.HeatingPrograms {
 		normalized, err := normalizeHeatingProgram(program)
 		if err != nil {

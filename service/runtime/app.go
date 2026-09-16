@@ -887,6 +887,12 @@ func (a *App) publishStateLoop(ctx context.Context) {
 			a.observeAldeTelemetry()
 			a.observeWaterHistory()
 			a.evaluateOfflineNotifications()
+			if a.batteryEstimate != nil && a.overviewTelemetry != nil {
+				t := a.overviewTelemetry()
+				if t.BatteryStateOfChargePercent != nil && t.BatteryCurrentA != nil {
+					a.batteryEstimate.Update(*t.BatteryCurrentA)
+				}
+			}
 			currentOverview := a.Overview()
 			if !reflect.DeepEqual(currentOverview, lastOverview) {
 				lastOverview = currentOverview

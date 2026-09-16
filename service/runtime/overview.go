@@ -112,7 +112,12 @@ func (a *App) overviewConfig() config.OverviewConfig {
 
 func (a *App) OverviewSettings() overview.Settings {
 	settings := config.NormalizeOverview(a.overviewConfig())
-	return overview.Settings{Comfort: append([]float64(nil), settings.Comfort...), UsableBatteryCapacityAh: settings.UsableBatteryCapacityAh, GasTankCapacityLitres: settings.GasTankCapacityLitres}
+	return overview.Settings{
+		Comfort:                 append([]float64(nil), settings.Comfort...),
+		UsableBatteryCapacityAh: settings.UsableBatteryCapacityAh,
+		GasTankCapacityLitres:   settings.GasTankCapacityLitres,
+		BatteryCapacityAh:       settings.BatteryCapacityAh,
+	}
 }
 
 func (a *App) UpdateOverviewSettings(ctx context.Context, settings overview.Settings) (overview.Settings, error) {
@@ -130,6 +135,9 @@ func (a *App) UpdateOverviewSettings(ctx context.Context, settings overview.Sett
 	if settings.GasTankCapacityLitres < 0 {
 		return overview.Settings{}, fmt.Errorf("overview.gas_tank_capacity_litres must not be negative")
 	}
+	if settings.BatteryCapacityAh < 0 {
+		return overview.Settings{}, fmt.Errorf("overview.battery_capacity_ah must not be negative")
+	}
 	a.configMu.Lock()
 	defer a.configMu.Unlock()
 	a.mu.RLock()
@@ -143,6 +151,7 @@ func (a *App) UpdateOverviewSettings(ctx context.Context, settings overview.Sett
 	ov.Comfort = append([]float64(nil), settings.Comfort...)
 	ov.UsableBatteryCapacityAh = settings.UsableBatteryCapacityAh
 	ov.GasTankCapacityLitres = settings.GasTankCapacityLitres
+	ov.BatteryCapacityAh = settings.BatteryCapacityAh
 	next.Overview = ov
 	normalized, err := next.Normalize()
 	if err != nil {

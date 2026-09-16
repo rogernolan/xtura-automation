@@ -17,6 +17,7 @@ type Settings struct {
 	Comfort                 []float64 `json:"comfort_thresholds"`
 	UsableBatteryCapacityAh float64   `json:"usable_battery_capacity_ah"`
 	GasTankCapacityLitres   float64   `json:"gas_tank_capacity_litres"`
+	BatteryCapacityAh       float64   `json:"battery_capacity_ah"`
 }
 
 type Battery struct {
