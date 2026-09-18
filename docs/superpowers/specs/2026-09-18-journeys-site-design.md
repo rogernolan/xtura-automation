@@ -2,6 +2,12 @@
 
 Date: 2026-09-18
 
+> **Revised 2026-09-18** after live review: the server-side PNG map renderer was
+> removed (`6425d6f`). The feed carries only text plus a GeoJSON enclosure; the
+> per-journey link opens `/blog/{name}`, an interactive Leaflet page that draws
+> the route from `/v1/tracks/{name}` over OpenStreetMap tiles in the browser.
+> See `docs/gps-tracking.md` for the current surface.
+
 ## Problem
 
 The tracked GPS journeys (per-UTC-day GeoJSON track files produced by

@@ -132,9 +132,8 @@ browser subscriptions must be created again.
 - `DELETE /v1/tracks/{name}`
 - `GET /v1/events`
 - `GET /rss.xml`
-- `GET /maps/{name}.png`
-- `GET /maps/{name}@2000.png`
 - `GET /blog/`
+- `GET /blog/{name}`
 
 ### WebSocket recording
 
@@ -179,11 +178,13 @@ The location service defaults to the Teltonika RUTX50 GPS position endpoint at `
 
 The daemon also serves a journeys web site from the same process. `GET /rss.xml`
 is an RSS 2.0 feed with one item per track (title `Date From - To` in UTC); each
-item body embeds a 1000x1000 map image, links to a larger 2000x2000 map (rendered
-lazily on first request), and links to the GeoJSON download, with both the map and
-the GeoJSON exposed as RSS enclosures so a consumer such as the InstaBlog agent
-can download either. `GET /blog/` is a minimal HTML index. See
-[gps-tracking.md](docs/gps-tracking.md) for the feed and map endpoint details.
+item is text plus an `application/geo+json` enclosure carrying the track, and
+links to the track's interactive map page. `GET /blog/` is a minimal HTML index
+of journeys; `GET /blog/{name}` renders that journey as an interactive Leaflet
+map (OpenStreetMap tiles loaded by the browser) with the route, start/end
+markers, and engine events, plus links to the GeoJSON download. The feed and
+pages are written for consumers such as the InstaBlog agent. See
+[gps-tracking.md](docs/gps-tracking.md) for the feed and page details.
 
 ### Pi status
 

@@ -237,32 +237,34 @@ applies them live:
 Only names matching the track pattern are accepted, which guards against path
 traversal.
 
-### Journeys web site (RSS feed and map images)
+### Journeys web site (RSS feed and interactive maps)
 
 The daemon serves a small journeys web site from the same process and HTTPS
 entry point:
 
 - `GET /rss.xml` — an RSS 2.0 feed with one item per track, newest first. Item
   title is `YYYY-MM-DD HH:MM - HH:MM` using the track's UTC start and end.
-  The item description embeds the 1000x1000 map image and links to a larger
-  2000x2000 map and to the GeoJSON download. Each item also carries two
-  `<enclosure>` elements — the 1000x1000 PNG (`image/png`) and the track
-  GeoJSON (`application/geo+json`, the same bytes as `GET /v1/tracks/{name}`)
-  — so a reader such as the InstaBlog agent can download the image or the
-  journey data.
-- `GET /maps/{name}.png` — the 1000x1000 map image for a track.
-- `GET /maps/{name}@2000.png` — a larger 2000x2000 map, generated lazily on
-  first request and cached afterwards.
-- `GET /blog/` — a minimal HTML index of recent journeys.
+  The item body is text describing the track plus links to the interactive map
+  page and the GeoJSON download. Each item carries one `<enclosure>` element for
+  the track GeoJSON (`application/geo+json`, the same bytes as
+  `GET /v1/tracks/{name}`, with an accurate `length`), so a reader such as the
+  InstaBlog agent can download the journey data.
+- `GET /blog/` — a minimal HTML index of recent journeys with links to each
+  track's interactive map page and its GeoJSON download.
+- `GET /blog/{name}` — an interactive map page for one journey. The page loads
+  Leaflet (1.9.4) from the unpkg CDN in the browser and draws the route from the
+  track GeoJSON (fetched from `/v1/tracks/{name}`) over OpenStreetMap tiles,
+  with a green start marker, a red end marker, and gray markers for engine
+  on/off events. The browser needs internet access for the CDN and tiles.
+  The track `name` is validated as `track-*.geojson`; unknown tracks return
+  `404` and other names `400`.
 
-Maps are rendered server-side in pure Go from the track coordinates (Web
-Mercator projection, route polyline with start/end markers); no tile provider
-or internet connection is required, so rendering works offline. Feed links and
-enclosures are absolute and derived from the request host and the
+Feed links are absolute and derived from the request host and the
 `X-Forwarded-Proto` header set by Tailscale Serve.
 
-Tracks that fail to render are omitted from the feed rather than failing it;
-an empty track directory still produces a valid feed with no items.
+Tracks without a recorded start or end time are omitted from the feed rather
+than failing it; an empty track directory still produces a valid feed with no
+items.
 
 ### Live updates
 

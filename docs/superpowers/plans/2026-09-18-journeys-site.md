@@ -1,5 +1,12 @@
 # Journeys Web Site RSS Feed Implementation Plan
 
+> **Revised 2026-09-18** after live review: Tasks 1 and 2 (PNG map renderer and
+> cache) and the `/maps/*.png` routes were removed in `6425d6f`. The shipped
+> surface is: feed items carry text plus a single `application/geo+json`
+> enclosure and link to `/blog/{name}`, an interactive Leaflet page rendering
+> the route in the browser over OpenStreetMap tiles. See `docs/gps-tracking.md`
+> for the current surface.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a small web site to `empirebusd` that offers an RSS feed of GPS journeys (track files), each item carrying a 1000x1000 map PNG, a link to a lazily-generated 2000x2000 map, and a link to download the track GeoJSON, so the InstaBlog agent can download the image or the GeoJSON.
