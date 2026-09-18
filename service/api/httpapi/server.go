@@ -26,12 +26,14 @@ import (
 	"empirebus-tests/service/recording"
 	"empirebus-tests/service/runtime"
 	"empirebus-tests/service/tracking"
+	"empirebus-tests/service/tracksite"
 	"empirebus-tests/service/waterhistory"
 )
 
 type Server struct {
 	app    Application
 	broker *events.Broker
+	maps   *tracksite.Cache
 }
 
 type Application interface {
@@ -86,7 +88,7 @@ type Application interface {
 }
 
 func New(app Application) *Server {
-	return &Server{app: app, broker: app.Broker()}
+	return &Server{app: app, broker: app.Broker(), maps: tracksite.NewCache()}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -132,6 +134,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/tracks", s.handleTracks)
 	mux.HandleFunc("/v1/tracks/{name}", s.handleTrack)
 	mux.HandleFunc("/v1/events", s.handleEvents)
+	mux.HandleFunc("/rss.xml", s.handleRSSFeed)
+	mux.HandleFunc("/maps/", s.handleTrackMap)
+	mux.HandleFunc("/blog/", s.handleBlogIndex)
 	registerStaticRoutes(mux)
 	return mux
 }
