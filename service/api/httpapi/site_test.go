@@ -1,12 +1,9 @@
 package httpapi
 
 import (
-	"bytes"
 	"errors"
-	"image/png"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -43,22 +40,8 @@ func siteTestFileInfo() []tracking.FileInfo {
 	}}
 }
 
-func decodePNGSize(t *testing.T, data []byte) (int, int) {
-	t.Helper()
-	img, err := png.Decode(bytes.NewReader(data))
-	if err != nil {
-		t.Fatalf("decode png: %v", err)
-	}
-	r := img.Bounds()
-	return r.Dx(), r.Dy()
-}
-
 func TestRSSFeedRoute(t *testing.T) {
-	app := fakeApp{
-		broker:        events.NewBroker(1),
-		trackFiles:    siteTestFileInfo(),
-		trackReadData: []byte(siteTestTrack),
-	}
+	app := fakeApp{broker: events.NewBroker(1), trackFiles: siteTestFileInfo()}
 	server := New(app).Handler()
 	req := httptest.NewRequest(http.MethodGet, "/rss.xml", nil)
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -74,17 +57,22 @@ func TestRSSFeedRoute(t *testing.T) {
 	for _, want := range []string{
 		"https://example.com/rss.xml",
 		"<title>2026-08-13 09:40 - 10:15</title>",
-		`<enclosure url="https://example.com/maps/track-2026-08-13-0940-1015.geojson.png" length="`,
+		`<link>https://example.com/blog/track-2026-08-13-0940-1015.geojson</link>`,
+		`<guid isPermaLink="false">https://example.com/blog/track-2026-08-13-0940-1015.geojson</guid>`,
 		`<enclosure url="https://example.com/v1/tracks/track-2026-08-13-0940-1015.geojson" length="123" type="application/geo+json"`,
-		`https://example.com/maps/track-2026-08-13-0940-1015.geojson@2000.png`,
+		`<a href="https://example.com/blog/track-2026-08-13-0940-1015.geojson">Open interactive map</a>`,
+		`<a href="https://example.com/v1/tracks/track-2026-08-13-0940-1015.geojson">Download GeoJSON</a>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("feed body missing %q: %s", want, body)
 		}
 	}
+	if strings.Contains(body, "image/png") || strings.Contains(body, "/maps/") {
+		t.Fatalf("feed must not reference map images: %s", body)
+	}
 }
 
-func TestRSSFeedEmptyAndSkippedTracks(t *testing.T) {
+func TestRSSFeedEmptySkipsUntimedTracks(t *testing.T) {
 	server := New(fakeApp{broker: events.NewBroker(1)}).Handler()
 	rr := httptest.NewRecorder()
 	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/rss.xml", nil))
@@ -96,18 +84,25 @@ func TestRSSFeedEmptyAndSkippedTracks(t *testing.T) {
 	}
 
 	app := fakeApp{
-		broker:        events.NewBroker(1),
-		trackFiles:    siteTestFileInfo(),
-		trackReadErr:  errors.New("boom"),
+		broker:     events.NewBroker(1),
+		trackFiles: []tracking.FileInfo{{Name: "track-2026-08-13-0940-1015.geojson", Bytes: 123}},
 	}
 	server = New(app).Handler()
 	rr = httptest.NewRecorder()
 	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/rss.xml", nil))
 	if rr.Code != http.StatusOK {
-		t.Fatalf("feed with unreadable track status = %d", rr.Code)
+		t.Fatalf("feed with untimed track status = %d", rr.Code)
 	}
 	if strings.Contains(rr.Body.String(), "<item>") {
-		t.Fatal("unreadable track must be skipped")
+		t.Fatal("track without start/end times must be skipped")
+	}
+
+	app = fakeApp{broker: events.NewBroker(1), trackListErr: errors.New("boom")}
+	server = New(app).Handler()
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/rss.xml", nil))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("feed list error status = %d", rr.Code)
 	}
 }
 
@@ -120,84 +115,8 @@ func TestRSSFeedMethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestMapThumbnailRoute(t *testing.T) {
-	app := fakeApp{broker: events.NewBroker(1), trackReadData: []byte(siteTestTrack)}
-	server := New(app).Handler()
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/maps/track-2026-08-13-0940-1015.geojson.png", nil)
-	server.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
-	}
-	if ct := rr.Header().Get("Content-Type"); ct != "image/png" {
-		t.Fatalf("content type = %q", ct)
-	}
-	w, h := decodePNGSize(t, rr.Body.Bytes())
-	if w != 1000 || h != 1000 {
-		t.Fatalf("map size %dx%d, want 1000x1000", w, h)
-	}
-}
-
-func TestMapLargeRouteIsLazy(t *testing.T) {
-	readNames := []string{}
-	app := fakeApp{
-		broker:         events.NewBroker(1),
-		trackReadData:  []byte(siteTestTrack),
-		trackReadNames: &readNames,
-	}
-	server := New(app).Handler()
-	rr := httptest.NewRecorder()
-	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/maps/track-2026-08-13-0940-1015.geojson@2000.png", nil))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
-	}
-	w, h := decodePNGSize(t, rr.Body.Bytes())
-	if w != 2000 || h != 2000 {
-		t.Fatalf("map size %dx%d, want 2000x2000", w, h)
-	}
-	if len(readNames) != 1 || readNames[0] != "track-2026-08-13-0940-1015.geojson" {
-		t.Fatalf("large map read names = %#v, want single track read", readNames)
-	}
-}
-
-func TestMapRouteRejectsInvalidName(t *testing.T) {
-	app := fakeApp{
-		broker:       events.NewBroker(1),
-		trackReadErr: errors.New(`invalid track name "../x.png"`),
-	}
-	server := New(app).Handler()
-	rr := httptest.NewRecorder()
-	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/maps/..%2Fx.png", nil))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestMapRouteMissingTrackNotFound(t *testing.T) {
-	app := fakeApp{broker: events.NewBroker(1), trackReadErr: os.ErrNotExist}
-	server := New(app).Handler()
-	rr := httptest.NewRecorder()
-	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/maps/track-2026-08-13.geojson.png", nil))
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
-	}
-}
-
-func TestMapRouteMethodNotAllowed(t *testing.T) {
-	server := New(fakeApp{broker: events.NewBroker(1)}).Handler()
-	rr := httptest.NewRecorder()
-	server.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/maps/track-x.geojson.png", nil))
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status = %d", rr.Code)
-	}
-}
-
 func TestBlogIndexRoute(t *testing.T) {
-	app := fakeApp{
-		broker:        events.NewBroker(1),
-		trackFiles:    siteTestFileInfo(),
-		trackReadData: []byte(siteTestTrack),
-	}
+	app := fakeApp{broker: events.NewBroker(1), trackFiles: siteTestFileInfo()}
 	server := New(app).Handler()
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/blog/", nil)
@@ -212,12 +131,71 @@ func TestBlogIndexRoute(t *testing.T) {
 	body := rr.Body.String()
 	for _, want := range []string{
 		`rel="alternate" type="application/rss+xml" href="https://example.com/rss.xml"`,
-		`href="https://example.com/maps/track-2026-08-13-0940-1015.geojson.png"`,
-		`https://example.com/maps/track-2026-08-13-0940-1015.geojson@2000.png`,
+		`href="https://example.com/blog/track-2026-08-13-0940-1015.geojson"`,
 		`https://example.com/v1/tracks/track-2026-08-13-0940-1015.geojson`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("blog body missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, ".png") {
+		t.Fatalf("blog index must not reference map images: %s", body)
+	}
+}
+
+func TestBlogTrackPageRoute(t *testing.T) {
+	app := fakeApp{broker: events.NewBroker(1), trackFiles: siteTestFileInfo()}
+	server := New(app).Handler()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/blog/track-2026-08-13-0940-1015.geojson", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	server.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Fatalf("content type = %q", ct)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		"unpkg.com/leaflet@1.9.4/dist/leaflet",
+		`const TRACK = "track-2026-08-13-0940-1015.geojson";`,
+		`<title>Xtura journeys - 2026-08-13 09:40 - 10:15</title>`,
+		`href="https://example.com/v1/tracks/track-2026-08-13-0940-1015.geojson"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("track page missing %q: %s", want, body)
+		}
+	}
+}
+
+func TestBlogTrackPageNotFound(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)}).Handler()
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/blog/track-2026-08-13-0940-1015.geojson", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestBlogTrackPageRejectsInvalidName(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)}).Handler()
+	for _, path := range []string{"/blog/track-x.txt", "/blog/x.png", "/blog/..%2Fetc%2Fpasswd"} {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d body=%s", path, rr.Code, rr.Body.String())
+		}
+	}
+}
+
+func TestBlogMethodNotAllowed(t *testing.T) {
+	server := New(fakeApp{broker: events.NewBroker(1)}).Handler()
+	for _, path := range []string{"/blog/", "/blog/track-x.geojson"} {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, path, nil))
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s status = %d", path, rr.Code)
 		}
 	}
 }

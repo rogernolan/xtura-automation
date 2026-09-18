@@ -32,19 +32,10 @@ func (s *Server) handleRSSFeed(w http.ResponseWriter, r *http.Request) {
 		if track.StartTime == nil || track.EndTime == nil {
 			continue
 		}
-		raw, err := s.app.TrackRead(track.Name)
-		if err != nil {
-			continue
-		}
-		mapPNG, err := s.renderTrack(track.Name, 1000, raw)
-		if err != nil {
-			continue
-		}
 		items = append(items, tracksite.Item{
 			Name:         track.Name,
 			StartTime:    track.StartTime.UTC(),
 			EndTime:      track.EndTime.UTC(),
-			MapPNGBytes:  int64(len(mapPNG)),
 			GeoJSONBytes: track.Bytes,
 		})
 	}
