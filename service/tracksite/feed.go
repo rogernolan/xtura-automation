@@ -13,7 +13,6 @@ type Item struct {
 	Name         string
 	StartTime    time.Time
 	EndTime      time.Time
-	MapPNGBytes  int64
 	GeoJSONBytes int64
 }
 
@@ -44,21 +43,20 @@ func BuildFeed(baseURL string, items []Item) ([]byte, error) {
 }
 
 func writeItem(b *bytes.Buffer, baseURL string, item Item) {
-	thumb := baseURL + "/maps/" + item.Name + ".png"
-	big := baseURL + "/maps/" + item.Name + "@2000.png"
+	page := baseURL + "/blog/" + item.Name
 	geo := baseURL + "/v1/tracks/" + item.Name
 	title := trackTitle(item.StartTime, item.EndTime)
 	b.WriteString("<item>\n")
 	fmt.Fprintf(b, "<title>%s</title>\n", xmlEscape(title))
-	fmt.Fprintf(b, "<link>%s</link>\n", xmlEscape(big))
-	fmt.Fprintf(b, "<guid isPermaLink=\"false\">%s</guid>\n", xmlEscape(geo))
+	fmt.Fprintf(b, "<link>%s</link>\n", xmlEscape(page))
+	fmt.Fprintf(b, "<guid isPermaLink=\"false\">%s</guid>\n", xmlEscape(page))
 	fmt.Fprintf(b, "<pubDate>%s</pubDate>\n", rssTime(item.EndTime))
-	fmt.Fprintf(b, "<enclosure url=\"%s\" length=\"%d\" type=\"image/png\"/>\n", xmlEscape(thumb), item.MapPNGBytes)
 	fmt.Fprintf(b, "<enclosure url=\"%s\" length=\"%d\" type=\"application/geo+json\"/>\n", xmlEscape(geo), item.GeoJSONBytes)
 	description := fmt.Sprintf(
-		"<p><img src=\"%s\" width=\"1000\" height=\"1000\" alt=\"%s\"/></p>\n"+
-			"<p>Larger map: <a href=\"%s\">View</a> \u00b7 GeoJSON: <a href=\"%s\">Download</a></p>",
-		thumb, xmlEscape(title), big, geo,
+		"<p>Timed track (UTC): %s to %s.</p>\n"+
+			"<p><a href=\"%s\">Open interactive map</a> \u00b7 <a href=\"%s\">Download GeoJSON</a></p>",
+		item.StartTime.UTC().Format("2006-01-02 15:04"), item.EndTime.UTC().Format("2006-01-02 15:04"),
+		page, geo,
 	)
 	fmt.Fprintf(b, "<description><![CDATA[%s]]></description>\n", description)
 	b.WriteString("</item>\n")

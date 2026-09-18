@@ -50,8 +50,8 @@ func testItems() []Item {
 	start2 := time.Date(2026, 8, 12, 8, 0, 0, 0, time.UTC)
 	end2 := time.Date(2026, 8, 12, 9, 10, 5, 0, time.UTC)
 	return []Item{
-		{Name: "track-2026-08-13-0940-1015.geojson", StartTime: start1, EndTime: end1, MapPNGBytes: 999, GeoJSONBytes: 123},
-		{Name: "track-2026-08-12-0800-0910.geojson", StartTime: start2, EndTime: end2, MapPNGBytes: 888, GeoJSONBytes: 111},
+		{Name: "track-2026-08-13-0940-1015.geojson", StartTime: start1, EndTime: end1, GeoJSONBytes: 123},
+		{Name: "track-2026-08-12-0800-0910.geojson", StartTime: start2, EndTime: end2, GeoJSONBytes: 111},
 	}
 }
 
@@ -67,20 +67,17 @@ func TestBuildFeedItemShape(t *testing.T) {
 	if first.PubDate != "Thu, 13 Aug 2026 10:15:20 +0000" {
 		t.Fatalf("pubDate = %q", first.PubDate)
 	}
-	if first.GUID != "https://xtura.example.ts.net/v1/tracks/track-2026-08-13-0940-1015.geojson" {
+	page := "https://xtura.example.ts.net/blog/track-2026-08-13-0940-1015.geojson"
+	if first.Link != page {
+		t.Fatalf("link = %q", first.Link)
+	}
+	if first.GUID != page {
 		t.Fatalf("guid = %q", first.GUID)
 	}
-	if len(first.Enclosures) != 2 {
-		t.Fatalf("enclosures = %d, want 2", len(first.Enclosures))
+	if len(first.Enclosures) != 1 {
+		t.Fatalf("enclosures = %d, want 1", len(first.Enclosures))
 	}
-	img := first.Enclosures[0]
-	if img.Type != "image/png" || img.Length != "999" {
-		t.Fatalf("image enclosure = %#v", img)
-	}
-	if img.URL != "https://xtura.example.ts.net/maps/track-2026-08-13-0940-1015.geojson.png" {
-		t.Fatalf("image enclosure url = %q", img.URL)
-	}
-	geo := first.Enclosures[1]
+	geo := first.Enclosures[0]
 	if geo.Type != "application/geo+json" || geo.Length != "123" {
 		t.Fatalf("geojson enclosure = %#v", geo)
 	}
@@ -93,13 +90,16 @@ func TestBuildFeedDescriptionContents(t *testing.T) {
 	doc := mustParseRSS(t, mustBuildFeed(t, "https://xtura.example.ts.net", testItems()))
 	desc := doc.Channel.Items[0].Description
 	for _, want := range []string{
-		`<img src="https://xtura.example.ts.net/maps/track-2026-08-13-0940-1015.geojson.png" width="1000" height="1000"`,
-		`<a href="https://xtura.example.ts.net/maps/track-2026-08-13-0940-1015.geojson@2000.png">View</a>`,
-		`<a href="https://xtura.example.ts.net/v1/tracks/track-2026-08-13-0940-1015.geojson">Download</a>`,
+		`<a href="https://xtura.example.ts.net/blog/track-2026-08-13-0940-1015.geojson">Open interactive map</a>`,
+		`<a href="https://xtura.example.ts.net/v1/tracks/track-2026-08-13-0940-1015.geojson">Download GeoJSON</a>`,
+		"09:40",
 	} {
 		if !strings.Contains(desc, want) {
 			t.Fatalf("description missing %q: %s", want, desc)
 		}
+	}
+	if strings.Contains(desc, ".png") || strings.Contains(desc, "img src") {
+		t.Fatalf("description must not embed map images: %s", desc)
 	}
 }
 
