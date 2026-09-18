@@ -131,6 +131,10 @@ browser subscriptions must be created again.
 - `GET /v1/tracks/{name}`
 - `DELETE /v1/tracks/{name}`
 - `GET /v1/events`
+- `GET /rss.xml`
+- `GET /maps/{name}.png`
+- `GET /maps/{name}@2000.png`
+- `GET /blog/`
 
 ### WebSocket recording
 
@@ -172,6 +176,14 @@ The Settings tab also controls GPS trail recording. When enabled, the service sa
 Sample every N seconds is configurable from `1` to `3600` (default `5`). The switches and interval apply immediately on change; live state and errors stream over the `tracking.state_changed` event on `GET /v1/events`. Tracks are listed, downloaded, and deleted through the `/v1/tracks` API. See [gps-tracking.md](docs/gps-tracking.md) for the track file format and API, which is written for consumers such as the InstaBlog agent.
 
 The location service defaults to the Teltonika RUTX50 GPS position endpoint at `http://192.168.51.1/api/gps/position/status` when `location.enabled` is true. It exposes the latest longitude, latitude, and timezone at `GET /v1/location/state`; see [location-service.md](docs/location-service.md) for the RUTX50 endpoint config, timezone lookup, and Pi timezone update setup.
+
+The daemon also serves a journeys web site from the same process. `GET /rss.xml`
+is an RSS 2.0 feed with one item per track (title `Date From - To` in UTC); each
+item body embeds a 1000x1000 map image, links to a larger 2000x2000 map (rendered
+lazily on first request), and links to the GeoJSON download, with both the map and
+the GeoJSON exposed as RSS enclosures so a consumer such as the InstaBlog agent
+can download either. `GET /blog/` is a minimal HTML index. See
+[gps-tracking.md](docs/gps-tracking.md) for the feed and map endpoint details.
 
 ### Pi status
 

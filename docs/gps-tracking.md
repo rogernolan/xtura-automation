@@ -237,6 +237,33 @@ applies them live:
 Only names matching the track pattern are accepted, which guards against path
 traversal.
 
+### Journeys web site (RSS feed and map images)
+
+The daemon serves a small journeys web site from the same process and HTTPS
+entry point:
+
+- `GET /rss.xml` — an RSS 2.0 feed with one item per track, newest first. Item
+  title is `YYYY-MM-DD HH:MM - HH:MM` using the track's UTC start and end.
+  The item description embeds the 1000x1000 map image and links to a larger
+  2000x2000 map and to the GeoJSON download. Each item also carries two
+  `<enclosure>` elements — the 1000x1000 PNG (`image/png`) and the track
+  GeoJSON (`application/geo+json`, the same bytes as `GET /v1/tracks/{name}`)
+  — so a reader such as the InstaBlog agent can download the image or the
+  journey data.
+- `GET /maps/{name}.png` — the 1000x1000 map image for a track.
+- `GET /maps/{name}@2000.png` — a larger 2000x2000 map, generated lazily on
+  first request and cached afterwards.
+- `GET /blog/` — a minimal HTML index of recent journeys.
+
+Maps are rendered server-side in pure Go from the track coordinates (Web
+Mercator projection, route polyline with start/end markers); no tile provider
+or internet connection is required, so rendering works offline. Feed links and
+enclosures are absolute and derived from the request host and the
+`X-Forwarded-Proto` header set by Tailscale Serve.
+
+Tracks that fail to render are omitted from the feed rather than failing it;
+an empty track directory still produces a valid feed with no items.
+
 ### Live updates
 
 `GET /v1/events` (server-sent events) emits `tracking.state_changed` whenever the
