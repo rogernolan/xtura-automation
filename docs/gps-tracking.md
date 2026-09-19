@@ -244,6 +244,8 @@ entry point:
 
 - `GET /rss.xml` — an RSS 2.0 feed with one item per track, newest first. Item
   title is `YYYY-MM-DD HH:MM - HH:MM` using the track's UTC start and end.
+  Each item carries two `<category>` tags — the static `journey` and the track's
+  UTC start date (e.g. `2026-09-06`) — so a consumer can filter by type and day.
   The item body is text describing the track plus links to the interactive map
   page and the GeoJSON download. Each item carries one `<enclosure>` element for
   the track GeoJSON (`application/geo+json`, the same bytes as

@@ -57,6 +57,8 @@ func TestRSSFeedRoute(t *testing.T) {
 	for _, want := range []string{
 		"https://example.com/rss.xml",
 		"<title>2026-08-13 09:40 - 10:15</title>",
+		`<category>journey</category>`,
+		`<category>2026-08-13</category>`,
 		`<link>https://example.com/blog/track-2026-08-13-0940-1015.geojson</link>`,
 		`<guid isPermaLink="false">https://example.com/blog/track-2026-08-13-0940-1015.geojson</guid>`,
 		`<enclosure url="https://example.com/v1/tracks/track-2026-08-13-0940-1015.geojson" length="123" type="application/geo+json"`,

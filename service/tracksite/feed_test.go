@@ -15,6 +15,7 @@ type rssEnclosure struct {
 
 type rssItem struct {
 	Title       string         `xml:"title"`
+	Categories  []string       `xml:"category"`
 	Link        string         `xml:"link"`
 	GUID        string         `xml:"guid"`
 	PubDate     string         `xml:"pubDate"`
@@ -63,6 +64,12 @@ func TestBuildFeedItemShape(t *testing.T) {
 	first := doc.Channel.Items[0]
 	if first.Title != "2026-08-13 09:40 - 10:15" {
 		t.Fatalf("first title = %q", first.Title)
+	}
+	if len(first.Categories) != 2 || first.Categories[0] != "journey" || first.Categories[1] != "2026-08-13" {
+		t.Fatalf("first categories = %#v", first.Categories)
+	}
+	if len(doc.Channel.Items[1].Categories) != 2 || doc.Channel.Items[1].Categories[1] != "2026-08-12" {
+		t.Fatalf("second categories = %#v", doc.Channel.Items[1].Categories)
 	}
 	if first.PubDate != "Thu, 13 Aug 2026 10:15:20 +0000" {
 		t.Fatalf("pubDate = %q", first.PubDate)

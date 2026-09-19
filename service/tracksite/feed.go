@@ -48,6 +48,8 @@ func writeItem(b *bytes.Buffer, baseURL string, item Item) {
 	title := trackTitle(item.StartTime, item.EndTime)
 	b.WriteString("<item>\n")
 	fmt.Fprintf(b, "<title>%s</title>\n", xmlEscape(title))
+	fmt.Fprintf(b, "<category>journey</category>\n")
+	fmt.Fprintf(b, "<category>%s</category>\n", xmlEscape(item.StartTime.UTC().Format("2006-01-02")))
 	fmt.Fprintf(b, "<link>%s</link>\n", xmlEscape(page))
 	fmt.Fprintf(b, "<guid isPermaLink=\"false\">%s</guid>\n", xmlEscape(page))
 	fmt.Fprintf(b, "<pubDate>%s</pubDate>\n", rssTime(item.EndTime))
