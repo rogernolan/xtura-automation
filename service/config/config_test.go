@@ -46,6 +46,65 @@ func validTestConfig() Config {
 	}
 }
 
+// The tank fill height default used to be unreachable: Validate rejected an
+// absent/zero tank_fill_height_mm before normalizeMopeka could substitute it,
+// so omitting the key stopped the service from starting. Omitting it must mean
+// "use the default", the same way overview.gas_tank_capacity_litres treats 0.
+func TestOmitTankFillHeightFallsBackToDefault(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.Mopeka = MopekaConfig{Enabled: true, MAC: "00:11:22:33:44:55", TankCapacityLitres: 44}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatalf("omitting tank_fill_height_mm should fall back to the default, got: %v", err)
+	}
+	if normalized.Mopeka.TankFillHeightMm != DefaultMopekaFillHeightMm {
+		t.Fatalf("default not applied: got %v, want %v", normalized.Mopeka.TankFillHeightMm, DefaultMopekaFillHeightMm)
+	}
+
+	explicit := validTestConfig()
+	explicit.Mopeka = MopekaConfig{Enabled: true, MAC: "00:11:22:33:44:55", TankCapacityLitres: 44, TankFillHeightMm: 450}
+	normalized, err = explicit.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Mopeka.TankFillHeightMm != 450 {
+		t.Fatalf("explicit value must win over the default, got %v", normalized.Mopeka.TankFillHeightMm)
+	}
+
+	// The dome radius must default too, and an explicit 0 must still mean
+	// "straight-walled tank" rather than being overwritten by the default.
+	normalized, err = cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := MopekaBaseRadiusOrDefault(normalized.Mopeka); got != DefaultMopekaBaseRadiusMm {
+		t.Fatalf("base radius default = %v, want %v", got, DefaultMopekaBaseRadiusMm)
+	}
+	straight := 0.0
+	cfg.Mopeka.TankBaseRadiusMm = &straight
+	normalized, err = cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := MopekaBaseRadiusOrDefault(normalized.Mopeka); got != 0 {
+		t.Fatalf("explicit straight-walled tank = %v, want 0", got)
+	}
+	cfg.Mopeka.TankBaseRadiusMm = nil
+
+	badRadius := validTestConfig()
+	negativeRadius := -1.0
+	badRadius.Mopeka = MopekaConfig{Enabled: true, MAC: "00:11:22:33:44:55", TankCapacityLitres: 44, TankBaseRadiusMm: &negativeRadius}
+	if err := badRadius.Validate(); err == nil {
+		t.Fatal("expected a negative tank_base_radius_mm to be rejected")
+	}
+
+	negative := validTestConfig()
+	negative.Mopeka = MopekaConfig{Enabled: true, MAC: "00:11:22:33:44:55", TankCapacityLitres: 44, TankFillHeightMm: -5}
+	if err := negative.Validate(); err == nil {
+		t.Fatal("expected a negative tank_fill_height_mm to be rejected")
+	}
+}
+
 func TestLoadFileAndNormalize(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

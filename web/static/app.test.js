@@ -157,6 +157,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     "modeOn", "modeSchedule", "modeOff", "modeState", "targetState", "modeDetail", "targetValue", "targetDown", "targetUp", "boostButton", "boostRunning", "cancelBoostButton",
     "scheduleForm", "scheduleState", "scheduleDetail", "scheduleSlots", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
     "overviewSettingsForm", "deploymentInfo", "piStatusPanel", "piPowerState", "piStats", "piDetail", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity", "batteryPower", "timeToFull",
+    "gasPercent", "gasBar", "gasState", "gasDetail", "gasLastSeen",
     "temperatureBody",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
@@ -272,7 +273,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     localStorage,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, formatBatteryCurrent, formatBatteryDuration, formatBatteryPower, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, renderGas, gasStateLabel, gasLevelTrustworthy, renderGasLastSeen, formatGasAge, formatBatteryCurrent, formatBatteryDuration, formatBatteryPower, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
   return {
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
@@ -290,6 +291,11 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     overviewTemperatureTone: context.module.exports.overviewTemperatureTone,
     overviewCurrentState: context.module.exports.overviewCurrentState,
     overviewSupplyState: context.module.exports.overviewSupplyState,
+    renderGas: context.module.exports.renderGas,
+    gasStateLabel: context.module.exports.gasStateLabel,
+    gasLevelTrustworthy: context.module.exports.gasLevelTrustworthy,
+    renderGasLastSeen: context.module.exports.renderGasLastSeen,
+    formatGasAge: context.module.exports.formatGasAge,
     formatBatteryCurrent: context.module.exports.formatBatteryCurrent,
     formatBatteryDuration: context.module.exports.formatBatteryDuration,
     formatBatteryPower: context.module.exports.formatBatteryPower,
@@ -366,6 +372,96 @@ test("healthy supplies leave their status label blank", () => {
   assert.equal(overviewSupplyState(42, "available"), "");
   assert.equal(overviewSupplyState(undefined, "available"), "N/A");
   assert.equal(overviewSupplyState(undefined, "stale"), "Stale");
+});
+
+test("gas status labels are human readable, not raw enum values", () => {
+  const { gasStateLabel } = loadApp();
+  assert.equal(gasStateLabel({ status: "ok" }), "");
+  assert.equal(gasStateLabel({ status: "stale" }), "Stale");
+  assert.equal(gasStateLabel({ status: "bad_quality" }), "No echo");
+  assert.equal(gasStateLabel({ status: "no_data" }), "No data");
+  assert.equal(gasStateLabel({ status: "mopeka_not_configured" }), "Not configured");
+  assert.equal(gasStateLabel(null), "N/A");
+});
+
+test("only ok and out_of_range gas levels are presented as trustworthy", () => {
+  const { gasLevelTrustworthy } = loadApp();
+  assert.equal(gasLevelTrustworthy({ status: "ok", level_percent: 33 }), true);
+  assert.equal(gasLevelTrustworthy({ status: "out_of_range", level_percent: 100 }), true);
+  assert.equal(gasLevelTrustworthy({ status: "stale", level_percent: 33 }), false);
+  assert.equal(gasLevelTrustworthy({ status: "bad_quality", level_percent: 12 }), false);
+  assert.equal(gasLevelTrustworthy({ status: "no_data", level_percent: 5 }), false);
+  assert.equal(gasLevelTrustworthy({ status: "mopeka_not_configured", level_percent: 5 }), false);
+  assert.equal(gasLevelTrustworthy(null), false);
+});
+
+// The backend deliberately keeps the last known values on a stale sensor, so
+// keying the bar purely off level_percent renders a dead sensor as a healthy
+// tank. This is the regression test for the missing stale error.
+test("a stale gas sensor does not render a live looking bar", () => {
+  const { renderGas, elements } = loadApp();
+  renderGas({
+    gas: {
+      status: "stale",
+      level_percent: 77,
+      level_litres: 17,
+      capacity_litres: 22,
+      age_seconds: 600,
+    },
+  });
+  assert.equal(elements.gasPercent.textContent, "--");
+  assert.equal(elements.gasBar.style.width, "0%");
+  assert.equal(elements.gasState.textContent, "Stale");
+  assert.equal(elements.gasDetail.textContent, "Sensor stopped reporting");
+  assert.equal(elements.gasLastSeen.hidden, false);
+  assert.match(elements.gasLastSeen.textContent, /10 min/);
+});
+
+test("a fresh gas reading renders the level and bar", () => {
+  const { renderGas, elements } = loadApp();
+  renderGas({
+    gas: { status: "ok", level_percent: 33, level_litres: 7.3, capacity_litres: 22, age_seconds: 3 },
+  });
+  assert.equal(elements.gasPercent.textContent, "33%");
+  assert.equal(elements.gasBar.style.width, "33%");
+  assert.equal(elements.gasState.textContent, "");
+  assert.equal(elements.gasDetail.textContent, "7.3L / 22L");
+  assert.equal(elements.gasLastSeen.hidden, true);
+});
+
+test("a configured gas sensor that was never heard from says so", () => {
+  const { renderGas, elements } = loadApp();
+  renderGas({ gas: { status: "no_data" } });
+  assert.equal(elements.gasPercent.textContent, "--");
+  assert.equal(elements.gasState.textContent, "No data");
+  assert.equal(elements.gasDetail.textContent, "Sensor configured but never heard");
+  assert.equal(elements.gasLastSeen.hidden, false);
+  assert.match(elements.gasLastSeen.textContent, /No reading received/);
+});
+
+test("a quality zero gas reading is not presented as a level", () => {
+  const { renderGas, elements } = loadApp();
+  renderGas({ gas: { status: "bad_quality", level_percent: 12, quality: 0, age_seconds: 2 } });
+  assert.equal(elements.gasPercent.textContent, "--");
+  assert.equal(elements.gasBar.style.width, "0%");
+  assert.equal(elements.gasState.textContent, "No echo");
+  assert.equal(elements.gasDetail.textContent, "Ultrasonic echo lost");
+});
+
+test("a miscalibrated tank height is surfaced rather than pinned at 100%", () => {
+  const { renderGas, elements } = loadApp();
+  renderGas({ gas: { status: "out_of_range", level_percent: 100, level_litres: 22, capacity_litres: 22, age_seconds: 1 } });
+  assert.equal(elements.gasState.textContent, "Over 100%");
+  assert.match(elements.gasDetail.textContent, /check tank height setting/);
+});
+
+test("formatGasAge renders human durations", () => {
+  const { formatGasAge } = loadApp();
+  assert.equal(formatGasAge(0), "0s");
+  assert.equal(formatGasAge(45), "45s");
+  assert.equal(formatGasAge(600), "10 min");
+  assert.equal(formatGasAge(7200), "2 h");
+  assert.equal(formatGasAge(-1), "unknown");
 });
 
 test("formatLastSeen returns empty string for invalid input", () => {
