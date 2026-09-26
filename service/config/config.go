@@ -125,11 +125,23 @@ type BtleSensorConfig struct {
 type MopekaConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	MAC     string `yaml:"mac"`
-	// TankCapacityLitres is the capacity of the tank this sensor is fitted to.
-	// A Mopeka measures ONE tank, so for a twin cylinder set with the sensor on
-	// only one of them this is that cylinder's capacity, not the combined
-	// total. For a Gaslow 11kg cylinder that is approximately 21L, the amount
-	// carried at the 80% automatic fill stop.
+	// TankCapacityLitres is the combined capacity of every cylinder the sensor
+	// stands in for, not just the one it is fitted to.
+	//
+	// A Mopeka senses ONE cylinder, but a twin set is piped in parallel and,
+	// with both valves open, sits at a common pressure. The pair therefore
+	// drains together and holds the same fill fraction, so the sensed
+	// cylinder's percentage applies to the whole set and litres is that
+	// fraction times this combined capacity. For a twin of equal cylinders
+	// this is twice one cylinder's capacity.
+	//
+	// The doubling is only valid while both valves are open. A changeover
+	// valve that isolates a cylinder breaks the assumption, because the two
+	// then drain at different rates and one sensor can no longer speak for
+	// the other.
+	//
+	// This value scales litres only. The percentage comes from the tank
+	// geometry below and does not depend on it.
 	TankCapacityLitres float64 `yaml:"tank_capacity_litres"`
 	// TankFillHeightMm is the interior height of the tank measured from the
 	// sensor face up to the full level, NOT the external height of the

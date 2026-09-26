@@ -98,9 +98,16 @@ mopeka:
   # Mopeka Pro Check LPG tank level sensor (BLE, company ID 0x0059).
   # The MAC must match the sensor's BLE address.
   #
-  # tank_capacity_litres is the total volume of all connected tanks. A Mopeka
-  # senses ONE tank, so with the sensor on only one of a twin cylinder set
-  # this is a modelled figure for the pair rather than a measurement.
+  # tank_capacity_litres is the COMBINED capacity of every cylinder the sensor
+  # stands in for, so twice one cylinder's capacity for a twin set of equals.
+  # A Mopeka only senses one cylinder, but a piped-up twin with both valves
+  # open sits at a common pressure, drains together and holds the same fill
+  # fraction, so the sensed percentage applies to the pair. This only scales
+  # litres; the percentage comes from the geometry below.
+  #
+  # The doubling assumes both valves stay open. A changeover valve that
+  # isolates a cylinder breaks it, since the two then drain at different
+  # rates and one sensor stops representing the other.
   #
   # tank_fill_height_mm is the INTERIOR height of the tank, measured from the
   # sensor face up to the full level. It is not the external height: a
