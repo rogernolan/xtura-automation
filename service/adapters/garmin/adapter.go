@@ -21,6 +21,13 @@ type Config struct {
 	TraceWindow       time.Duration
 	Logger            *log.Logger
 	RecordFrame       func(time.Time, rootheating.Direction, string)
+	// Discover locates the SERV on the local subnet when the configured ws_url
+	// is unreachable, so a moved address does not need a redeploy.
+	Discover func(ctx context.Context, host string, port int) (string, error)
+	// DiscoverInterval throttles repeated sweeps while the SERV stays unreachable.
+	DiscoverInterval time.Duration
+	ConnectTimeout   time.Duration
+	DiscoverTimeout  time.Duration
 }
 
 const (
@@ -46,9 +53,25 @@ type Adapter struct {
 	overview    domainoverview.Telemetry
 	health      domainheating.AdapterHealth
 	greyEvents  []GreyWaterDischargeEvent
+
+	discoveryMu     sync.Mutex
+	discoveredWSURL string
+	lastDiscoverAt  time.Time
 }
 
 func New(cfg Config) *Adapter {
+	if cfg.Discover == nil {
+		cfg.Discover = discoverServOnSubnet
+	}
+	if cfg.ConnectTimeout <= 0 {
+		cfg.ConnectTimeout = defaultConnectTimeout
+	}
+	if cfg.DiscoverTimeout <= 0 {
+		cfg.DiscoverTimeout = defaultDiscoverTimeout
+	}
+	if cfg.DiscoverInterval <= 0 {
+		cfg.DiscoverInterval = defaultDiscoverInterval
+	}
 	return &Adapter{cfg: cfg, logger: cfg.Logger}
 }
 
@@ -88,29 +111,69 @@ func (a *Adapter) needsConnect() bool {
 }
 
 func (a *Adapter) tryConnect(parent context.Context) {
-	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	for _, candidate := range a.connectCandidates() {
+		if a.connectWSURL(parent, candidate) {
+			return
+		}
+	}
+	resolved := a.discoverWSURL(parent)
+	if resolved == "" {
+		return
+	}
+	if a.logger != nil {
+		a.logger.Printf("garmin serv address moved, discovered ws_url=%s", resolved)
+	}
+	if a.connectWSURL(parent, resolved) {
+		a.rememberDiscovered(resolved)
+	}
+}
+
+func (a *Adapter) connectCandidates() []string {
+	a.discoveryMu.Lock()
+	discovered := a.discoveredWSURL
+	a.discoveryMu.Unlock()
+	if discovered == "" || discovered == a.cfg.WSURL {
+		return []string{a.cfg.WSURL}
+	}
+	return []string{discovered, a.cfg.WSURL}
+}
+
+func (a *Adapter) connectWSURL(parent context.Context, wsURL string) bool {
+	ctx, cancel := context.WithTimeout(parent, a.cfg.ConnectTimeout)
 	defer cancel()
 	if a.logger != nil {
-		a.logger.Printf("garmin connect: ws_url=%s origin=%s", a.cfg.WSURL, a.cfg.Origin)
+		a.logger.Printf("garmin connect: ws_url=%s origin=%s", wsURL, a.cfg.Origin)
 	}
-	session := rootheating.NewSession(rootheating.SessionConfig{
-		WSURL:             a.cfg.WSURL,
-		Origin:            a.cfg.Origin,
-		HeartbeatInterval: a.cfg.HeartbeatInterval,
-		TraceWindow:       a.cfg.TraceWindow,
-		Logger:            a.logger,
-		RecordFrame:       a.cfg.RecordFrame,
-	})
+	session := a.newSession(wsURL)
 	if err := session.Connect(ctx); err != nil {
 		a.mu.Lock()
 		a.health.Connected = false
 		a.health.LastError = err.Error()
 		a.mu.Unlock()
 		if a.logger != nil {
-			a.logger.Printf("garmin connect failed: ws_url=%s err=%v", a.cfg.WSURL, err)
+			a.logger.Printf("garmin connect failed: ws_url=%s err=%v", wsURL, err)
 		}
-		return
+		return false
 	}
+	a.installSession(session)
+	if a.logger != nil {
+		a.logger.Printf("garmin connect succeeded: ws_url=%s", wsURL)
+	}
+	return true
+}
+
+func (a *Adapter) newSession(wsURL string) *rootheating.Session {
+	return rootheating.NewSession(rootheating.SessionConfig{
+		WSURL:             wsURL,
+		Origin:            a.cfg.Origin,
+		HeartbeatInterval: a.cfg.HeartbeatInterval,
+		TraceWindow:       a.cfg.TraceWindow,
+		Logger:            a.logger,
+		RecordFrame:       a.cfg.RecordFrame,
+	})
+}
+
+func (a *Adapter) installSession(session *rootheating.Session) {
 	a.mu.Lock()
 	if a.session != nil {
 		a.queueGreyWaterDischargeEventsLocked(a.session.DrainReceivedSignalEdges())
@@ -121,9 +184,44 @@ func (a *Adapter) tryConnect(parent context.Context) {
 	a.health.Connected = true
 	a.health.LastError = ""
 	a.mu.Unlock()
-	if a.logger != nil {
-		a.logger.Printf("garmin connect succeeded: ws_url=%s", a.cfg.WSURL)
+}
+
+func (a *Adapter) discoverWSURL(parent context.Context) string {
+	host, port, err := hostPortOf(a.cfg.WSURL)
+	if err != nil {
+		return ""
 	}
+	a.discoveryMu.Lock()
+	if !a.lastDiscoverAt.IsZero() && time.Since(a.lastDiscoverAt) < a.cfg.DiscoverInterval {
+		a.discoveryMu.Unlock()
+		return ""
+	}
+	a.lastDiscoverAt = time.Now()
+	a.discoveryMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(parent, a.cfg.DiscoverTimeout)
+	defer cancel()
+	addr, err := a.cfg.Discover(ctx, host, port)
+	if err != nil {
+		if a.logger != nil {
+			a.logger.Printf("garmin discovery failed: err=%v", err)
+		}
+		return ""
+	}
+	resolved, err := servWSURL(a.cfg.WSURL, addr)
+	if err != nil {
+		return ""
+	}
+	return resolved
+}
+
+func (a *Adapter) rememberDiscovered(wsURL string) {
+	if wsURL == a.cfg.WSURL {
+		return
+	}
+	a.discoveryMu.Lock()
+	a.discoveredWSURL = wsURL
+	a.discoveryMu.Unlock()
 }
 
 func (a *Adapter) pollState() {
