@@ -42,7 +42,7 @@ func (a *App) handleMopekaReading(reading btle.MopekaReading) {
 	if a.mopeka == nil {
 		a.mopeka = &mopekaState{}
 	}
-	now := a.now().UTC()
+	now := a.currentTime()
 	logger := a.logger
 	a.mopeka.mu.Lock()
 	first := !a.mopeka.hasReading
@@ -84,10 +84,7 @@ func (a *App) overviewGas() overview.Gas {
 	raw := a.rawConfig
 	normalized := a.cfg
 	mopeka := a.mopeka
-	now := time.Now().UTC()
-	if a.now != nil {
-		now = a.now().UTC()
-	}
+	now := a.currentTime()
 	a.mu.RUnlock()
 
 	if !normalized.Mopeka.Enabled && !raw.Mopeka.Enabled {
@@ -129,10 +126,9 @@ func (a *App) overviewGas() overview.Gas {
 	if fillHeightMm <= 0 {
 		fillHeightMm = config.DefaultMopekaFillHeightMm
 	}
+	// normalizeMopeka substitutes the defaults, so the normalized value is
+	// already authoritative here.
 	baseRadiusMm := config.MopekaBaseRadiusOrDefault(normalized.Mopeka)
-	if raw.Mopeka.TankBaseRadiusMm != nil {
-		baseRadiusMm = *raw.Mopeka.TankBaseRadiusMm
-	}
 
 	seconds := int64(age / time.Second)
 	gas := overview.Gas{
@@ -169,6 +165,15 @@ func (a *App) overviewGas() overview.Gas {
 	// Cache for when we go stale.
 	mopeka.lastGas = gas
 	return gas
+}
+
+// currentTime reads the injected clock, falling back to the wall clock so a
+// partially constructed App in a test cannot panic on a nil func.
+func (a *App) currentTime() time.Time {
+	if a.now != nil {
+		return a.now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 // tankVolumeBelowMm returns the volume of liquid, in cubic millimetres,

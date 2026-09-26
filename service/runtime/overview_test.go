@@ -133,7 +133,14 @@ func newGasApp(now time.Time, mopekaCfg config.MopekaConfig, overviewCap float64
 			Overview: config.OverviewConfig{GasTankCapacityLitres: overviewCap},
 			Mopeka:   mopekaCfg,
 		},
-		cfg:    config.NormalizedConfig{Mopeka: config.MopekaConfig{Enabled: true, TankFillHeightMm: mopekaCfg.TankFillHeightMm, TankCapacityLitres: mopekaCfg.TankCapacityLitres}},
+		// Mirror what normalizeMopeka produces, so the normalized config here
+		// is the one a real Normalize() would hand the runtime.
+		cfg: config.NormalizedConfig{Mopeka: config.MopekaConfig{
+			Enabled:            true,
+			TankFillHeightMm:   mopekaCfg.TankFillHeightMm,
+			TankCapacityLitres: mopekaCfg.TankCapacityLitres,
+			TankBaseRadiusMm:   mopekaCfg.TankBaseRadiusMm,
+		}},
 		now:    func() time.Time { return now },
 		mopeka: state,
 	}

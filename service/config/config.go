@@ -441,6 +441,20 @@ func (c Config) Validate() error {
 		if c.Mopeka.TankBaseRadiusMm != nil && *c.Mopeka.TankBaseRadiusMm < 0 {
 			problems = append(problems, "mopeka.tank_base_radius_mm must not be negative (omit it to use the default, or set 0 for a straight-walled tank)")
 		}
+		// The dome is the bottom of the tank, so it cannot be taller than the
+		// tank. Left unchecked, a radius larger than the height silently
+		// degenerates into an all-dome tank that reads 100% at any level.
+		fillHeight := c.Mopeka.TankFillHeightMm
+		if fillHeight == 0 {
+			fillHeight = DefaultMopekaFillHeightMm
+		}
+		baseRadius := DefaultMopekaBaseRadiusMm
+		if c.Mopeka.TankBaseRadiusMm != nil {
+			baseRadius = *c.Mopeka.TankBaseRadiusMm
+		}
+		if baseRadius > fillHeight {
+			problems = append(problems, "mopeka.tank_base_radius_mm must not exceed tank_fill_height_mm: the dome cannot be taller than the tank")
+		}
 	}
 	knownSensors := map[string]struct{}{sensors.AldeID: {}}
 	for _, sensor := range c.Switchbot.Sensors {

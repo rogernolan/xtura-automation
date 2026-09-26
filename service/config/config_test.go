@@ -661,3 +661,27 @@ func TestNormalizeRejectsFloorSOCGreaterOrEqualToReadySOC(t *testing.T) {
 		})
 	}
 }
+
+// A dome taller than the tank is a misconfiguration: the geometry silently
+// degenerates into an all-dome tank that reads 100% at every level. Reject it
+// at load time instead of publishing a permanently full gauge.
+func TestMopekaBaseRadiusCannotExceedTankHeight(t *testing.T) {
+	tooBig := 400.0
+	cfg := validTestConfig()
+	cfg.Mopeka = MopekaConfig{Enabled: true, MAC: "00:11:22:33:44:55", TankCapacityLitres: 44, TankFillHeightMm: 340, TankBaseRadiusMm: &tooBig}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected a base radius taller than the tank to be rejected")
+	}
+
+	// The defaults themselves must satisfy the constraint.
+	defaults := validTestConfig()
+	defaults.Mopeka = MopekaConfig{Enabled: true, MAC: "00:11:22:33:44:55", TankCapacityLitres: 44}
+	normalized, err := defaults.Normalize()
+	if err != nil {
+		t.Fatalf("compiled-in defaults must be valid, got: %v", err)
+	}
+	if MopekaBaseRadiusOrDefault(normalized.Mopeka) > normalized.Mopeka.TankFillHeightMm {
+		t.Fatalf("default base radius %v exceeds default height %v",
+			MopekaBaseRadiusOrDefault(normalized.Mopeka), normalized.Mopeka.TankFillHeightMm)
+	}
+}
