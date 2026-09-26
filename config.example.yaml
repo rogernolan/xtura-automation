@@ -50,7 +50,16 @@ tracking:
 
 overview:
   usable_battery_capacity_ah: 100
-  # Total capacity of the LPG tanks (e.g. 2x Gaslow 11L = 22).
+  # Capacity of the tank the Mopeka sensor is fitted to, in litres. This
+  # OVERRIDES mopeka.tank_capacity_litres when non-zero.
+  #
+  # A Mopeka measures ONE tank. If you run a twin cylinder set with the sensor
+  # on only one of them, put the capacity of THAT cylinder here, not the
+  # combined total - otherwise the litres figure implies a level for the
+  # unmeasured cylinder that you have no way of knowing.
+  #
+  # Gaslow 11kg cylinders carry approx 21L at their 80% fill stop, so a sensor
+  # on one of a pair is 21, not 42.
   gas_tank_capacity_litres: 0
   comfort_thresholds: [10, 18, 24, 30]
   # Victron battery bank configuration
@@ -87,14 +96,51 @@ switchbot:
 
 mopeka:
   # Mopeka Pro Check LPG tank level sensor (BLE, company ID 0x0059).
-  # The MAC must match the sensor's BLE address. tank_capacity_litres is the
-  # total volume of all connected tanks; tank_fill_height_mm is the internal
-  # liquid height used to convert the ultrasonic reading to a percentage
-  # (Gaslow 11L default: 290mm).
+  # The MAC must match the sensor's BLE address.
+  #
+  # tank_capacity_litres is the COMBINED capacity of every cylinder the sensor
+  # stands in for, so twice one cylinder's capacity for a twin set of equals.
+  # A Mopeka only senses one cylinder, but a piped-up twin with both valves
+  # open sits at a common pressure, drains together and holds the same fill
+  # fraction, so the sensed percentage applies to the pair. This only scales
+  # litres; the percentage comes from the geometry below.
+  #
+  # The doubling assumes both valves stay open. A changeover valve that
+  # isolates a cylinder breaks it, since the two then drain at different
+  # rates and one sensor stops representing the other.
+  #
+  # tank_fill_height_mm is the INTERIOR height of the tank, measured from the
+  # sensor face up to the full level. It is not the external height: a
+  # composite bottle is around 530mm tall to the top of the filler elbow, but
+  # that includes the base and the multivalve collar, neither of which holds
+  # liquid above the sensor.
+  #
+  # tank_base_radius_mm is the radius of the hemispherical base the sensor sits
+  # in. Most composite LPG cylinders have one. It matters because a level
+  # below this radius is still up inside the dome, where the tank is much
+  # narrower than the full bore and the cross-section grows with the square of
+  # the level. Reading such a level as a plain fraction of tank_fill_height_mm
+  # overstates it: in the Gaslow geometry below, 146mm of liquid reports 43%
+  # under a linear model but 33% by volume, which is what the Mopeka app
+  # shows. Omit the key to accept the default; set it to 0 only for a
+  # genuinely straight-walled tank.
+  #
+  # To calibrate, no tape measure or vendor spec is needed. Fill the tank to
+  # its automatic fill stop, then read the distance from the service log
+  # ("mopeka reading: ... dist=NNNmm") or the Mopeka app. That distance IS
+  # tank_fill_height_mm, because a full tank reads exactly the full depth.
+  # Calibrate against a full tank, never an empty one, which reads near zero.
+  #
+  # Omit either key to accept the compiled-in default. Both are calibrated for
+  # a Gaslow 11kg cylinder: a 300mm bore (150mm dome + 190mm cylinder) holding
+  # 20.5L, with the 80% automatic fill stop at 282mm of level.
+  #
+  # (Gaslow 11kg defaults: tank_fill_height_mm 340, tank_base_radius_mm 150)
   enabled: false
   # mac: "F6:42:96:C8:38:AA"
   # tank_capacity_litres: 22
-  # tank_fill_height_mm: 290
+  # tank_fill_height_mm: 340
+  # tank_base_radius_mm: 150
 
 notifications:
   # Xtura generates this pair on first startup and persists it here. It is

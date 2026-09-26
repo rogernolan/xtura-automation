@@ -78,6 +78,18 @@ type TemperaturePoint struct {
 	Temp float64   `json:"temp"`
 }
 
+// Gas status values. A configured sensor that has never been heard from is
+// "no_data", not "not_configured" — the two send you looking at completely
+// different things (config versus radio).
+const (
+	GasStatusNotConfigured = "mopeka_not_configured"
+	GasStatusNoData        = "no_data"
+	GasStatusStale         = "stale"
+	GasStatusBadQuality    = "bad_quality"
+	GasStatusOutOfRange    = "out_of_range"
+	GasStatusOK            = "ok"
+)
+
 type Gas struct {
 	Status         string    `json:"status"`
 	LevelPercent   *float64  `json:"level_percent,omitempty"`
@@ -87,4 +99,8 @@ type Gas struct {
 	TempC          *float64  `json:"temp_c,omitempty"`
 	Quality        *int      `json:"quality,omitempty"`
 	UpdatedAt      time.Time `json:"updated_at"`
+	// AgeSeconds is how long ago the reading that produced this document
+	// arrived. The UI uses it to flag a stale sensor even when the last
+	// known values are still present.
+	AgeSeconds *int64 `json:"age_seconds,omitempty"`
 }

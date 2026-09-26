@@ -123,10 +123,50 @@ type BtleSensorConfig struct {
 
 // MopekaConfig configures the Mopeka Pro Check LPG tank level sensor.
 type MopekaConfig struct {
-	Enabled            bool    `yaml:"enabled"`
-	MAC                string  `yaml:"mac"`
+	Enabled bool   `yaml:"enabled"`
+	MAC     string `yaml:"mac"`
+	// TankCapacityLitres is the combined capacity of every cylinder the sensor
+	// stands in for, not just the one it is fitted to.
+	//
+	// A Mopeka senses ONE cylinder, but a twin set is piped in parallel and,
+	// with both valves open, sits at a common pressure. The pair therefore
+	// drains together and holds the same fill fraction, so the sensed
+	// cylinder's percentage applies to the whole set and litres is that
+	// fraction times this combined capacity. For a twin of equal cylinders
+	// this is twice one cylinder's capacity.
+	//
+	// The doubling is only valid while both valves are open. A changeover
+	// valve that isolates a cylinder breaks the assumption, because the two
+	// then drain at different rates and one sensor can no longer speak for
+	// the other.
+	//
+	// This value scales litres only. The percentage comes from the tank
+	// geometry below and does not depend on it.
 	TankCapacityLitres float64 `yaml:"tank_capacity_litres"`
-	TankFillHeightMm   float64 `yaml:"tank_fill_height_mm"`
+	// TankFillHeightMm is the interior height of the tank measured from the
+	// sensor face up to the full level, NOT the external height of the
+	// cylinder. Calibrate against a full tank: a full tank reads exactly this
+	// distance, whereas an empty tank reads near zero.
+	//
+	// On its own this is not enough to give a correct percentage. See
+	// TankBaseRadiusMm.
+	TankFillHeightMm float64 `yaml:"tank_fill_height_mm"`
+	// TankBaseRadiusMm is the radius of the hemispherical base the sensor is
+	// mounted in, which is what most composite LPG cylinders have. The
+	// interior is a dome of this radius topped by a cylinder of the same
+	// radius, so a level below TankBaseRadiusMm is still up inside the dome,
+	// where the tank is much narrower than the full bore.
+	//
+	// This matters: reading such a level as a plain fraction of
+	// TankFillHeightMm overstates the volume badly. 146mm of liquid in a
+	// 150mm dome of R=150mm holds 6.8L, not the 10.3L a straight cylinder of
+	// that height and radius would, so a linear model reports 43% where the
+	// true volume fraction is 33%.
+	//
+	// Omit it to accept DefaultMopekaBaseRadiusMm. Set it to 0 explicitly
+	// only for a genuinely straight-walled tank, where volume is proportional
+	// to height.
+	TankBaseRadiusMm *float64 `yaml:"tank_base_radius_mm,omitempty"`
 }
 
 type NotificationsConfig struct {
@@ -389,8 +429,31 @@ func (c Config) Validate() error {
 		if c.Mopeka.TankCapacityLitres <= 0 {
 			problems = append(problems, "mopeka.tank_capacity_litres must be greater than zero")
 		}
-		if c.Mopeka.TankFillHeightMm <= 0 {
-			problems = append(problems, "mopeka.tank_fill_height_mm must be greater than zero")
+		// A zero/absent tank_fill_height_mm means "use DefaultMopekaFillHeightMm".
+		// Validate runs before normalizeMopeka, so rejecting zero here would make
+		// the default unreachable. Only a negative value is a real mistake.
+		if c.Mopeka.TankFillHeightMm < 0 {
+			problems = append(problems, "mopeka.tank_fill_height_mm must not be negative (omit it to use the default)")
+		}
+		// A nil base radius means "use DefaultMopekaBaseRadiusMm". An explicit
+		// zero is legal and selects a straight-walled tank, so only reject
+		// negatives here for the same reason as the fill height.
+		if c.Mopeka.TankBaseRadiusMm != nil && *c.Mopeka.TankBaseRadiusMm < 0 {
+			problems = append(problems, "mopeka.tank_base_radius_mm must not be negative (omit it to use the default, or set 0 for a straight-walled tank)")
+		}
+		// The dome is the bottom of the tank, so it cannot be taller than the
+		// tank. Left unchecked, a radius larger than the height silently
+		// degenerates into an all-dome tank that reads 100% at any level.
+		fillHeight := c.Mopeka.TankFillHeightMm
+		if fillHeight == 0 {
+			fillHeight = DefaultMopekaFillHeightMm
+		}
+		baseRadius := DefaultMopekaBaseRadiusMm
+		if c.Mopeka.TankBaseRadiusMm != nil {
+			baseRadius = *c.Mopeka.TankBaseRadiusMm
+		}
+		if baseRadius > fillHeight {
+			problems = append(problems, "mopeka.tank_base_radius_mm must not exceed tank_fill_height_mm: the dome cannot be taller than the tank")
 		}
 	}
 	knownSensors := map[string]struct{}{sensors.AldeID: {}}
@@ -622,13 +685,51 @@ func normalizeBtle(in BtleConfig) sensors.Settings {
 	return out
 }
 
+// DefaultMopekaFillHeightMm is the interior height of the tank assumed when
+// mopeka.tank_fill_height_mm is omitted, measured from the sensor face up to
+// the full level. It is a single-user default calibrated against a Gaslow 11kg
+// cylinder: 340mm from the sensor face to the top of the interior.
+//
+// It must be an interior depth, not the external height of the cylinder. A
+// composite bottle is around 530mm tall to the top of the filler elbow, but
+// that includes the base and the multivalve collar, neither of which holds
+// liquid above the sensor.
+const DefaultMopekaFillHeightMm = 340.0
+
+// DefaultMopekaBaseRadiusMm is the assumed radius of the hemispherical base
+// when mopeka.tank_base_radius_mm is omitted, for the same Gaslow 11kg
+// cylinder. Its interior is a 150mm dome topped by a cylinder of the same
+// radius, giving a 300mm bore, which matches the 304mm external diameter.
+//
+// Together with DefaultMopekaFillHeightMm this geometry makes the tank hold
+// 20.5L and put the 80% automatic fill stop at 282mm of level. The resulting
+// percentages agree with the Mopeka app to within its displayed resolution,
+// which is what these two constants are calibrated against.
+const DefaultMopekaBaseRadiusMm = 150.0
+
 func normalizeMopeka(in MopekaConfig) MopekaConfig {
 	out := in
 	out.MAC = strings.TrimSpace(out.MAC)
-	if out.TankFillHeightMm == 0 && out.Enabled {
-		out.TankFillHeightMm = 290
+	if out.Enabled {
+		if out.TankFillHeightMm == 0 {
+			out.TankFillHeightMm = DefaultMopekaFillHeightMm
+		}
+		if out.TankBaseRadiusMm == nil {
+			radius := DefaultMopekaBaseRadiusMm
+			out.TankBaseRadiusMm = &radius
+		}
 	}
 	return out
+}
+
+// MopekaBaseRadiusOrDefault reports the configured base radius, or 0 for a
+// straight-walled tank. Callers that only have a MopekaConfig can use this
+// instead of dereferencing TankBaseRadiusMm themselves.
+func MopekaBaseRadiusOrDefault(in MopekaConfig) float64 {
+	if in.TankBaseRadiusMm == nil {
+		return 0
+	}
+	return *in.TankBaseRadiusMm
 }
 
 func normalizeTracking(in TrackingConfig) NormalizedTracking {

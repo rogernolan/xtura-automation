@@ -846,23 +846,107 @@ function renderOverview() {
     if (status) status.textContent = overviewSupplyState(value, stale ? "stale" : doc.status);
     applyLastSeen(`${kind}WaterLastSeen`, doc.updated_at);
   });
-  if (byId("gasPercent")) byId("gasPercent").textContent = overviewPercent(doc.gas && doc.gas.level_percent);
+  renderGas(doc);
+}
+
+// Gas readings are only presented as a live level when the backend says they
+// are trustworthy. The backend deliberately keeps the last known values on a
+// stale sensor, so keying the bar purely off level_percent renders a dead
+// sensor as a healthy full tank.
+const GAS_STATUS_LABELS = {
+  ok: "",
+  out_of_range: "Over 100%",
+  stale: "Stale",
+  bad_quality: "No echo",
+  no_data: "No data",
+  mopeka_not_configured: "Not configured",
+};
+
+function gasStateLabel(gas) {
+  if (!gas) return "N/A";
+  if (gas.status in GAS_STATUS_LABELS) return GAS_STATUS_LABELS[gas.status];
+  return gas.status || "N/A";
+}
+
+// gasLevelTrustworthy reports whether level_percent is a number the sensor can
+// vouch for. ok and out_of_range both carry a real measurement; out_of_range
+// only means the configured tank height is too small.
+function gasLevelTrustworthy(gas) {
+  return Boolean(gas) && (gas.status === "ok" || gas.status === "out_of_range");
+}
+
+function renderGas(doc) {
+  const gas = doc.gas;
+  const trustworthy = gasLevelTrustworthy(gas);
+  if (byId("gasPercent")) byId("gasPercent").textContent = trustworthy ? overviewPercent(gas.level_percent) : "--";
   if (byId("gasBar")) {
-    const pct = doc.gas && doc.gas.level_percent;
+    const pct = trustworthy ? gas.level_percent : null;
     byId("gasBar").style.width = pct === undefined || pct === null ? "0%" : `${Math.max(0, Math.min(100, Number(pct)))}%`;
   }
-  if (byId("gasState")) byId("gasState").textContent = doc.gas ? doc.gas.status : "N/A";
+  if (byId("gasState")) byId("gasState").textContent = gasStateLabel(gas);
   if (byId("gasDetail")) {
-    const g = doc.gas;
-    if (g && g.level_litres !== undefined && g.capacity_litres !== undefined) {
-      byId("gasDetail").textContent = `${Number(g.level_litres).toFixed(1)}L / ${Number(g.capacity_litres).toFixed(0)}L`;
-    } else if (g && g.status === "mopeka_not_configured") {
-      byId("gasDetail").textContent = "Mopeka not configured";
+    const el = byId("gasDetail");
+    const litres = gas && gas.level_litres !== undefined ? `${Number(gas.level_litres).toFixed(1)}L` : "";
+    const capacity = gas && gas.capacity_litres !== undefined ? `${Number(gas.capacity_litres).toFixed(0)}L` : "";
+    if (gas && gas.status === "mopeka_not_configured") {
+      el.textContent = "Mopeka not configured";
+    } else if (gas && gas.status === "no_data") {
+      el.textContent = "Sensor configured but never heard";
+    } else if (gas && gas.status === "bad_quality") {
+      el.textContent = "Ultrasonic echo lost";
+    } else if (gas && gas.status === "stale") {
+      el.textContent = "Sensor stopped reporting";
+    } else if (gas && gas.status === "out_of_range") {
+      // The level is a real measurement, but it is more liquid than the
+      // configured tank height can hold. Show it and name the cause.
+      el.textContent = `${litres} / ${capacity} - above tank height, check tank height setting`;
+    } else if (trustworthy && litres && capacity) {
+      el.textContent = `${litres} / ${capacity}`;
     } else {
-      byId("gasDetail").textContent = "N/A";
+      el.textContent = "N/A";
     }
   }
-  applyLastSeen("gasLastSeen", doc.gas && doc.gas.updated_at);
+  renderGasLastSeen(gas);
+}
+
+// The backend now reports age_seconds, so surface staleness from that rather
+// than waiting for the generic 5 minute threshold. When the sensor has never
+// been heard from there is no updated_at at all, and age_seconds is what tells
+// the user to go and look at the radio.
+function renderGasLastSeen(gas) {
+  const el = byId("gasLastSeen");
+  if (!el) return;
+  if (!gas || gas.status === "mopeka_not_configured") {
+    el.textContent = "";
+    el.hidden = true;
+    return;
+  }
+  if (gas.status === "no_data") {
+    el.textContent = "No reading received from the Mopeka sensor";
+    el.hidden = false;
+    return;
+  }
+  const age = gas.age_seconds;
+  if (age === undefined || age === null) {
+    applyLastSeen("gasLastSeen", gas.updated_at);
+    return;
+  }
+  if (gas.status === "stale" || Number(age) * 1000 >= STALE_AFTER_MS) {
+    el.textContent = `Last seen ${formatGasAge(Number(age))} ago`;
+    el.hidden = false;
+    return;
+  }
+  el.textContent = "";
+  el.hidden = true;
+}
+
+function formatGasAge(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "unknown";
+  if (seconds < 90) return `${Math.round(seconds)}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 90) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} h`;
 }
 
 function renderOverviewSettings() {
