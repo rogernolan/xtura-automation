@@ -17,12 +17,36 @@ water_history:
   settling_period: 10m
   grouping_window: 1h
   calibration:
+    # Fresh-tank fill measured 2026-09-27; pauses allowed the level to settle.
     fresh:
       - percent: 0
         litres: 0
       - percent: 17
         litres: 15.5
-      # ... measured points ...
+      - percent: 23
+        litres: 25.3
+      - percent: 27
+        litres: 30.3
+      - percent: 36
+        litres: 40.0
+      - percent: 45
+        litres: 50.2
+      - percent: 50
+        litres: 60.2
+      - percent: 57
+        litres: 70.3
+      - percent: 66
+        litres: 80.2
+      - percent: 74
+        litres: 90.3
+      - percent: 81
+        litres: 100.2
+      - percent: 87
+        litres: 110.2
+      - percent: 95
+        litres: 120.2
+      - percent: 99
+        litres: 130.1
       - percent: 100
         litres: 138.9
     # Add grey points after a separate measured grey-tank run.
@@ -76,7 +100,6 @@ Add coverage for:
 - overview JSON with fresh calibration, with grey calibration, and with no calibration;
 - Overview rendering of calibrated and uncalibrated tanks;
 - Water-page rendering of the same values;
-- the supplied fresh calibration points, including the non-linear result that 100.2 L corresponds to 81% and full corresponds to 138.9 L.
+- every supplied fresh calibration point, including the non-linear result that 100.2 L corresponds to 81% and full corresponds to 138.9 L.
 
 Run the existing Go suite and browser test suite, plus lint for the changed JavaScript. No production or staging configuration is changed as part of the code change; deployment can add the fresh curve to the active Pi config after the implementation is verified.
-
