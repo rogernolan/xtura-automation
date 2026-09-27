@@ -844,6 +844,8 @@ function renderOverview() {
     if (bar) bar.style.width = value === undefined ? "0%" : `${Math.max(0, Math.min(100, Number(value)))}%`;
     const status = byId(`${kind}WaterState`);
     if (status) status.textContent = overviewSupplyState(value, stale ? "stale" : doc.status);
+    const detail = byId(`${kind}WaterDetail`);
+    if (detail) detail.textContent = formatWaterLitres(doc[`${kind}_water_litres`]);
     applyLastSeen(`${kind}WaterLastSeen`, doc.updated_at);
   });
   renderGas(doc);
@@ -1547,7 +1549,20 @@ function renderLights() {
   flashButton.disabled = state.requestInFlight || lights.flash_in_progress;
 }
 
+function formatWaterLitres(litres) {
+  return Number.isFinite(litres) ? `${litres.toFixed(1)} L remaining` : "";
+}
+
+function renderWaterLevels() {
+  const overview = state.overview || {};
+  ["fresh", "grey"].forEach((kind) => {
+    const level = byId(kind === "fresh" ? "waterFreshLevel" : "waterGreyLevel");
+    if (level) level.textContent = formatWaterLitres(overview[`${kind}_water_litres`]);
+  });
+}
+
 function renderWater() {
+  renderWaterLevels();
   renderWaterHistory();
   const water = state.water;
   const openButton = byId("openGreyValve");
