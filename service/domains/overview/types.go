@@ -33,14 +33,18 @@ type Battery struct {
 }
 
 type Document struct {
-	Status            string      `json:"status"`
-	AldeTemperatureC  *float64    `json:"alde_temperature_c,omitempty"`
-	Battery           Battery     `json:"battery"`
-	FreshWaterPercent *float64    `json:"fresh_water_percent,omitempty"`
-	GreyWaterPercent  *float64    `json:"grey_water_percent,omitempty"`
-	Gas               Gas         `json:"gas"`
-	Temperature       Temperature `json:"temperature"`
-	UpdatedAt         *time.Time  `json:"updated_at,omitempty"`
+	Status                   string      `json:"status"`
+	AldeTemperatureC         *float64    `json:"alde_temperature_c,omitempty"`
+	Battery                  Battery     `json:"battery"`
+	FreshWaterPercent        *float64    `json:"fresh_water_percent,omitempty"`
+	GreyWaterPercent         *float64    `json:"grey_water_percent,omitempty"`
+	FreshWaterLitres         *float64    `json:"fresh_water_litres,omitempty"`
+	FreshWaterCapacityLitres *float64    `json:"fresh_water_capacity_litres,omitempty"`
+	GreyWaterLitres          *float64    `json:"grey_water_litres,omitempty"`
+	GreyWaterCapacityLitres  *float64    `json:"grey_water_capacity_litres,omitempty"`
+	Gas                      Gas         `json:"gas"`
+	Temperature              Temperature `json:"temperature"`
+	UpdatedAt                *time.Time  `json:"updated_at,omitempty"`
 }
 
 // Temperature is the temperature panel: the big primary card plus the small

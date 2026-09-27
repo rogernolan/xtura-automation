@@ -8,6 +8,7 @@ import (
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/config"
 	"empirebus-tests/service/domains/overview"
+	"empirebus-tests/service/watercalibration"
 )
 
 const overviewStaleAfter = 30 * time.Second
@@ -46,6 +47,22 @@ func (a *App) overviewDocument(telemetry overview.Telemetry) overview.Document {
 		Gas:               a.overviewGas(),
 		Temperature:       a.temperatureDocument(telemetry),
 	}
+	calibration := a.overviewWaterCalibration()
+	if telemetry.FreshWaterPercent != nil && len(calibration.Fresh) > 0 {
+		if curve, err := watercalibration.New(calibration.Fresh); err == nil {
+			litres, capacity := curve.LitresAtPercent(*telemetry.FreshWaterPercent), curve.CapacityLitres()
+			doc.FreshWaterLitres = &litres
+			doc.FreshWaterCapacityLitres = &capacity
+		}
+	}
+	if telemetry.GreyWaterPercent != nil && len(calibration.Grey) > 0 {
+		if curve, err := watercalibration.New(calibration.Grey); err == nil {
+			litres, capacity := curve.LitresAtPercent(*telemetry.GreyWaterPercent), curve.CapacityLitres()
+			doc.GreyWaterLitres = &litres
+			doc.GreyWaterCapacityLitres = &capacity
+		}
+	}
+
 	estCfg := BatteryConfig{
 		CapacityAh:        settings.BatteryCapacityAh,
 		NominalVoltage:    settings.BatteryNominalVoltage,
@@ -108,6 +125,15 @@ func (a *App) overviewConfig() config.OverviewConfig {
 	settings := a.rawConfig.Overview
 	settings.Comfort = append([]float64(nil), settings.Comfort...)
 	return settings
+}
+
+func (a *App) overviewWaterCalibration() config.WaterCalibrationConfig {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	calibration := a.rawConfig.WaterHistory.Calibration
+	calibration.Fresh = append([]watercalibration.Point(nil), calibration.Fresh...)
+	calibration.Grey = append([]watercalibration.Point(nil), calibration.Grey...)
+	return calibration
 }
 
 func (a *App) OverviewSettings() overview.Settings {

@@ -3,6 +3,7 @@ package runtime
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log"
 	"math"
 	"path/filepath"
@@ -14,7 +15,94 @@ import (
 	"empirebus-tests/service/api/events"
 	"empirebus-tests/service/config"
 	"empirebus-tests/service/domains/overview"
+	"empirebus-tests/service/watercalibration"
 )
+
+func TestOverviewWaterCalibration(t *testing.T) {
+	floatPtr := func(value float64) *float64 { return &value }
+	fresh := []watercalibration.Point{
+		{Percent: 0, Litres: 0}, {Percent: 17, Litres: 15.5},
+		{Percent: 23, Litres: 25.3}, {Percent: 27, Litres: 30.3},
+		{Percent: 36, Litres: 40}, {Percent: 45, Litres: 50.2},
+		{Percent: 50, Litres: 60.2}, {Percent: 57, Litres: 70.3},
+		{Percent: 66, Litres: 80.2}, {Percent: 74, Litres: 90.3},
+		{Percent: 81, Litres: 100.2}, {Percent: 87, Litres: 110.2},
+		{Percent: 95, Litres: 120.2}, {Percent: 99, Litres: 130.1},
+		{Percent: 100, Litres: 138.9},
+	}
+	grey := []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 50, Litres: 30}, {Percent: 100, Litres: 80}}
+	freshPercent, greyPercent := 81.0, 75.0
+	for _, tc := range []struct {
+		name                                                     string
+		calibration                                              config.WaterCalibrationConfig
+		telemetry                                                overview.Telemetry
+		wantFresh, wantFreshCapacity, wantGrey, wantGreyCapacity *float64
+	}{
+		{"both curves", config.WaterCalibrationConfig{Fresh: fresh, Grey: grey}, overview.Telemetry{FreshWaterPercent: &freshPercent, GreyWaterPercent: &greyPercent}, floatPtr(100.2), floatPtr(138.9), floatPtr(55), floatPtr(80)},
+		{"fresh only", config.WaterCalibrationConfig{Fresh: fresh}, overview.Telemetry{FreshWaterPercent: &freshPercent, GreyWaterPercent: &greyPercent}, floatPtr(100.2), floatPtr(138.9), nil, nil},
+		{"grey only", config.WaterCalibrationConfig{Grey: grey}, overview.Telemetry{FreshWaterPercent: &freshPercent, GreyWaterPercent: &greyPercent}, nil, nil, floatPtr(55), floatPtr(80)},
+		{"no curves", config.WaterCalibrationConfig{}, overview.Telemetry{FreshWaterPercent: &freshPercent, GreyWaterPercent: &greyPercent}, nil, nil, nil, nil},
+		{"no telemetry", config.WaterCalibrationConfig{Fresh: fresh, Grey: grey}, overview.Telemetry{}, nil, nil, nil, nil},
+		{"missing fresh telemetry", config.WaterCalibrationConfig{Fresh: fresh, Grey: grey}, overview.Telemetry{GreyWaterPercent: &greyPercent}, nil, nil, floatPtr(55), floatPtr(80)},
+		{"invalid fresh curve", config.WaterCalibrationConfig{Fresh: fresh[:1], Grey: grey}, overview.Telemetry{FreshWaterPercent: &freshPercent, GreyWaterPercent: &greyPercent}, nil, nil, floatPtr(55), floatPtr(80)},
+		{"invalid grey curve", config.WaterCalibrationConfig{Fresh: fresh, Grey: grey[:1]}, overview.Telemetry{FreshWaterPercent: &freshPercent, GreyWaterPercent: &greyPercent}, floatPtr(100.2), floatPtr(138.9), nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &App{rawConfig: config.Config{WaterHistory: config.WaterHistoryConfig{Calibration: tc.calibration}}}
+			doc := app.overviewDocument(tc.telemetry)
+			data, err := json.Marshal(doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(data, &fields); err != nil {
+				t.Fatal(err)
+			}
+			for _, field := range []struct {
+				name      string
+				got, want *float64
+			}{
+				{"fresh_water_litres", doc.FreshWaterLitres, tc.wantFresh},
+				{"fresh_water_capacity_litres", doc.FreshWaterCapacityLitres, tc.wantFreshCapacity},
+				{"grey_water_litres", doc.GreyWaterLitres, tc.wantGrey},
+				{"grey_water_capacity_litres", doc.GreyWaterCapacityLitres, tc.wantGreyCapacity},
+			} {
+				if field.want == nil {
+					if field.got != nil {
+						t.Errorf("%s = %v, want nil", field.name, *field.got)
+					}
+					if _, ok := fields[field.name]; ok {
+						t.Errorf("%s should be omitted from JSON", field.name)
+					}
+					continue
+				}
+				if field.got == nil || math.Abs(*field.got-*field.want) > 1e-9 {
+					t.Errorf("%s = %v, want %v", field.name, field.got, *field.want)
+				}
+				var value float64
+				if err := json.Unmarshal(fields[field.name], &value); err != nil {
+					t.Fatalf("%s: %v", field.name, err)
+				}
+				if math.Abs(value-*field.want) > 1e-9 {
+					t.Errorf("JSON %s = %v, want %v", field.name, value, *field.want)
+				}
+			}
+		})
+	}
+}
+
+func TestOverviewWaterCalibrationSnapshotCopiesPoints(t *testing.T) {
+	app := &App{rawConfig: config.Config{WaterHistory: config.WaterHistoryConfig{Calibration: config.WaterCalibrationConfig{
+		Fresh: []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 100, Litres: 138.9}},
+		Grey:  []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 100, Litres: 80}},
+	}}}}
+	snapshot := app.overviewWaterCalibration()
+	snapshot.Fresh[1].Litres = 1
+	snapshot.Grey[1].Litres = 2
+	if app.rawConfig.WaterHistory.Calibration.Fresh[1].Litres != 138.9 || app.rawConfig.WaterHistory.Calibration.Grey[1].Litres != 80 {
+		t.Fatal("snapshot aliases configured calibration points")
+	}
+}
 
 func TestOverviewDocumentEstimatesChargingTimeLinearly(t *testing.T) {
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
