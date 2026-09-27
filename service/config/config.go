@@ -10,6 +10,7 @@ import (
 	domainheating "empirebus-tests/service/domains/heating"
 	"empirebus-tests/service/domains/sensors"
 	"empirebus-tests/service/notifications"
+	"empirebus-tests/service/watercalibration"
 
 	"gopkg.in/yaml.v3"
 )
@@ -30,10 +31,16 @@ type Config struct {
 }
 
 type WaterHistoryConfig struct {
-	ThresholdPercent           float64       `yaml:"threshold_percent,omitempty"`
-	PredictionThresholdPercent float64       `yaml:"prediction_threshold_percent,omitempty"`
-	SettlingPeriod             time.Duration `yaml:"settling_period,omitempty"`
-	GroupingWindow             time.Duration `yaml:"grouping_window,omitempty"`
+	Calibration                WaterCalibrationConfig `yaml:"calibration,omitempty"`
+	ThresholdPercent           float64                `yaml:"threshold_percent,omitempty"`
+	PredictionThresholdPercent float64                `yaml:"prediction_threshold_percent,omitempty"`
+	SettlingPeriod             time.Duration          `yaml:"settling_period,omitempty"`
+	GroupingWindow             time.Duration          `yaml:"grouping_window,omitempty"`
+}
+
+type WaterCalibrationConfig struct {
+	Fresh []watercalibration.Point `yaml:"fresh,omitempty"`
+	Grey  []watercalibration.Point `yaml:"grey,omitempty"`
 }
 
 type OverviewConfig struct {
@@ -401,6 +408,16 @@ func (c Config) Validate() error {
 	}
 	if c.WaterHistory.GroupingWindow < 0 {
 		problems = append(problems, "water_history.grouping_window must not be negative")
+	}
+	if points := c.WaterHistory.Calibration.Fresh; len(points) > 0 {
+		if _, err := watercalibration.New(points); err != nil {
+			problems = append(problems, fmt.Sprintf("water_history.calibration.fresh: %v", err))
+		}
+	}
+	if points := c.WaterHistory.Calibration.Grey; len(points) > 0 {
+		if _, err := watercalibration.New(points); err != nil {
+			problems = append(problems, fmt.Sprintf("water_history.calibration.grey: %v", err))
+		}
 	}
 	if len(c.Overview.Comfort) > 0 {
 		if len(c.Overview.Comfort) != 4 {

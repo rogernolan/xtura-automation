@@ -75,6 +75,38 @@ water_history:
   prediction_threshold_percent: 10
   settling_period: 10m
   grouping_window: 1h
+  calibration:
+    fresh:
+      - percent: 0
+        litres: 0
+      - percent: 17
+        litres: 15.5
+      - percent: 23
+        litres: 25.3
+      - percent: 27
+        litres: 30.3
+      - percent: 36
+        litres: 40.0
+      - percent: 45
+        litres: 50.2
+      - percent: 50
+        litres: 60.2
+      - percent: 57
+        litres: 70.3
+      - percent: 66
+        litres: 80.2
+      - percent: 74
+        litres: 90.3
+      - percent: 81
+        litres: 100.2
+      - percent: 87
+        litres: 110.2
+      - percent: 95
+        litres: 120.2
+      - percent: 99
+        litres: 130.1
+      - percent: 100
+        litres: 138.9
 
 switchbot:
   # BLE temperature/humidity sensors shown in the Overview Temperature panel.
