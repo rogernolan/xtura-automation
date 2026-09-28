@@ -33,6 +33,9 @@ func New(points []Point) (Curve, error) {
 		if math.IsNaN(point.Litres) || math.IsInf(point.Litres, 0) {
 			return Curve{}, fmt.Errorf("litres: point %d must be finite", i)
 		}
+		if point.Litres < 0 {
+			return Curve{}, fmt.Errorf("litres: point %d must be non-negative", i)
+		}
 		if i == 0 {
 			continue
 		}

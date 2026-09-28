@@ -64,6 +64,8 @@ func TestNewRejectsInvalidCurves(t *testing.T) {
 		{name: "duplicate percentages", points: []Point{{Percent: 0, Litres: 0}, {Percent: 50, Litres: 5}, {Percent: 50, Litres: 7}, {Percent: 100, Litres: 10}}, field: "percent"},
 		{name: "descending percentages", points: []Point{{Percent: 0, Litres: 0}, {Percent: 60, Litres: 5}, {Percent: 50, Litres: 7}, {Percent: 100, Litres: 10}}, field: "percent"},
 		{name: "non-increasing litres", points: []Point{{Percent: 0, Litres: 0}, {Percent: 50, Litres: 5}, {Percent: 100, Litres: 5}}, field: "litres"},
+		{name: "negative first litres", points: []Point{{Percent: 0, Litres: -1}, {Percent: 100, Litres: 10}}, field: "litres"},
+		{name: "negative interior litres", points: []Point{{Percent: 0, Litres: -2}, {Percent: 50, Litres: -1}, {Percent: 100, Litres: 10}}, field: "litres"},
 		{name: "non-finite percentage", points: []Point{{Percent: 0, Litres: 0}, {Percent: math.NaN(), Litres: 5}, {Percent: 100, Litres: 10}}, field: "percent"},
 		{name: "infinite percentage", points: []Point{{Percent: 0, Litres: 0}, {Percent: math.Inf(1), Litres: 5}, {Percent: 100, Litres: 10}}, field: "percent"},
 		{name: "non-finite litres", points: []Point{{Percent: 0, Litres: 0}, {Percent: 50, Litres: math.NaN()}, {Percent: 100, Litres: 10}}, field: "litres"},

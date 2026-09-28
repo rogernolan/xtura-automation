@@ -344,23 +344,25 @@ test("water litres clear missing and non-finite values while preserving percenta
     state.overview.grey_water_litres = value;
     renderOverview();
     renderWater();
-    for (const id of ["freshWaterDetail", "greyWaterDetail", "waterFreshLevel", "waterGreyLevel"]) {
+    for (const id of ["freshWaterDetail", "greyWaterDetail"]) {
       assert.equal(elements[id].textContent, "", `${id} should clear ${value}`);
     }
+    assert.equal(elements.waterFreshLevel.textContent, "50%");
+    assert.equal(elements.waterGreyLevel.textContent, "25%");
     assert.equal(elements.freshWater.textContent, "50%");
     assert.equal(elements.greyWater.textContent, "25%");
   }
 });
 
-test("water page litres use overview values even while valve state is loading", () => {
+test("water page shows percentage with calibrated litres while valve state is loading", () => {
   const { renderOverview, renderWater, state, elements } = loadApp();
-  state.overview = { fresh_water_litres: 100.2, grey_water_litres: 0 };
+  state.overview = { fresh_water_percent: 81, grey_water_percent: 0, fresh_water_litres: 100.2, grey_water_litres: 0 };
   renderOverview();
   renderWater();
-  assert.equal(elements.waterFreshLevel.textContent, "100.2 L remaining");
-  assert.equal(elements.waterGreyLevel.textContent, "0.0 L remaining");
-  assert.equal(elements.waterFreshLevel.textContent, elements.freshWaterDetail.textContent);
-  assert.equal(elements.waterGreyLevel.textContent, elements.greyWaterDetail.textContent);
+  assert.equal(elements.waterFreshLevel.textContent, "81% · 100.2 L remaining");
+  assert.equal(elements.waterGreyLevel.textContent, "0% · 0.0 L remaining");
+  assert.equal(elements.freshWaterDetail.textContent, "100.2 L remaining");
+  assert.equal(elements.greyWaterDetail.textContent, "0.0 L remaining");
   state.overview = null;
   renderWater();
   assert.equal(elements.waterFreshLevel.textContent, "");

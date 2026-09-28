@@ -1557,7 +1557,11 @@ function renderWaterLevels() {
   const overview = state.overview || {};
   ["fresh", "grey"].forEach((kind) => {
     const level = byId(kind === "fresh" ? "waterFreshLevel" : "waterGreyLevel");
-    if (level) level.textContent = formatWaterLitres(overview[`${kind}_water_litres`]);
+    if (!level) return;
+    const percent = overview[`${kind}_water_percent`];
+    const percentText = percent === null || percent === undefined ? "" : overviewPercent(percent);
+    const litresText = formatWaterLitres(overview[`${kind}_water_litres`]);
+    level.textContent = [percentText, litresText].filter(Boolean).join(" · ");
   });
 }
 

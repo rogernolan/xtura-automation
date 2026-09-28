@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"path/filepath"
@@ -86,6 +87,33 @@ func TestOverviewWaterCalibration(t *testing.T) {
 				if math.Abs(value-*field.want) > 1e-9 {
 					t.Errorf("JSON %s = %v, want %v", field.name, value, *field.want)
 				}
+			}
+		})
+	}
+}
+
+func TestOverviewWaterCalibrationExactFreshPoints(t *testing.T) {
+	points := []watercalibration.Point{
+		{Percent: 0, Litres: 0}, {Percent: 17, Litres: 15.5},
+		{Percent: 23, Litres: 25.3}, {Percent: 27, Litres: 30.3},
+		{Percent: 36, Litres: 40}, {Percent: 45, Litres: 50.2},
+		{Percent: 50, Litres: 60.2}, {Percent: 57, Litres: 70.3},
+		{Percent: 66, Litres: 80.2}, {Percent: 74, Litres: 90.3},
+		{Percent: 81, Litres: 100.2}, {Percent: 87, Litres: 110.2},
+		{Percent: 95, Litres: 120.2}, {Percent: 99, Litres: 130.1},
+		{Percent: 100, Litres: 138.9},
+	}
+	app := &App{rawConfig: config.Config{WaterHistory: config.WaterHistoryConfig{Calibration: config.WaterCalibrationConfig{Fresh: points}}}}
+	for _, tc := range []struct{ percent, wantLitres float64 }{
+		{0, 0}, {17, 15.5}, {23, 25.3}, {27, 30.3}, {36, 40},
+		{45, 50.2}, {50, 60.2}, {57, 70.3}, {66, 80.2}, {74, 90.3},
+		{81, 100.2}, {87, 110.2}, {95, 120.2}, {99, 130.1}, {100, 138.9},
+	} {
+		t.Run(fmt.Sprintf("%g percent", tc.percent), func(t *testing.T) {
+			percent := tc.percent
+			doc := app.overviewDocument(overview.Telemetry{FreshWaterPercent: &percent})
+			if doc.FreshWaterLitres == nil || math.Abs(*doc.FreshWaterLitres-tc.wantLitres) > 1e-9 {
+				t.Fatalf("fresh_water_litres at %g%% = %v, want %g", percent, doc.FreshWaterLitres, tc.wantLitres)
 			}
 		})
 	}
