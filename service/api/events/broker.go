@@ -15,6 +15,7 @@ type Event struct {
 type Broker struct {
 	mu     sync.RWMutex
 	subs   map[chan Event]struct{}
+	latest map[string]Event
 	buffer int
 }
 
@@ -24,6 +25,7 @@ func NewBroker(buffer int) *Broker {
 	}
 	return &Broker{
 		subs:   make(map[chan Event]struct{}),
+		latest: make(map[string]Event),
 		buffer: buffer,
 	}
 }
@@ -31,6 +33,23 @@ func NewBroker(buffer int) *Broker {
 func (b *Broker) Publish(event Event) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+	b.publishLocked(event)
+}
+
+// PublishRetained broadcasts an event and replays its latest value to new
+// subscribers. Use it for state snapshots that may be published before a
+// client has subscribed.
+func (b *Broker) PublishRetained(event Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.latest == nil {
+		b.latest = make(map[string]Event)
+	}
+	b.latest[event.Type] = event
+	b.publishLocked(event)
+}
+
+func (b *Broker) publishLocked(event Event) {
 	for ch := range b.subs {
 		select {
 		case ch <- event:
@@ -43,6 +62,12 @@ func (b *Broker) Subscribe() (<-chan Event, func()) {
 	ch := make(chan Event, b.buffer)
 	b.mu.Lock()
 	b.subs[ch] = struct{}{}
+	for _, event := range b.latest {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
 	b.mu.Unlock()
 	cancel := func() {
 		b.mu.Lock()

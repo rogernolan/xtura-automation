@@ -515,38 +515,65 @@ func (s *Store) summaryLocked(tank string, current float64, now time.Time) Summa
 
 func (s *Store) freshPredictionLocked(fillAt time.Time, current float64, now time.Time) string {
 	threshold := s.options.PredictionThreshold
-	type point struct{ hours, value float64 }
-	points := make([]point, 0)
+	type dailyLevel struct {
+		first float64
+		last  float64
+		at    time.Time
+	}
+	daily := make(map[string]dailyLevel)
 	for _, sample := range s.chart.samples {
 		if sample.At.Before(fillAt) || sample.At.After(now) || sample.FreshPercent == nil {
 			continue
 		}
-		points = append(points, point{hours: sample.At.Sub(fillAt).Hours(), value: *sample.FreshPercent})
+		date := sample.At.UTC().Format("2006-01-02")
+		level, exists := daily[date]
+		if !exists {
+			level = dailyLevel{first: *sample.FreshPercent, last: *sample.FreshPercent, at: sample.At}
+		} else {
+			level.last = *sample.FreshPercent
+			level.at = sample.At
+		}
+		daily[date] = level
 	}
-	if len(points) < 2 || points[len(points)-1].hours-points[0].hours < 12 {
+	cutoff := now.UTC().Add(-30 * 24 * time.Hour)
+	type dailyUsage struct {
+		at   time.Time
+		used float64
+	}
+	usages := make([]dailyUsage, 0, len(daily))
+	levels := make([]dailyLevel, 0, len(daily))
+	for _, level := range daily {
+		levels = append(levels, level)
+	}
+	sort.Slice(levels, func(i, j int) bool { return levels[i].at.Before(levels[j].at) })
+	var previousClose float64
+	hasPreviousClose := false
+	for _, level := range levels {
+		used := level.first - level.last
+		if hasPreviousClose {
+			used = previousClose - level.last
+		}
+		previousClose = level.last
+		hasPreviousClose = true
+		if !level.at.Before(cutoff) && used > 0 {
+			usages = append(usages, dailyUsage{at: level.at, used: used})
+		}
+	}
+	if len(usages) == 0 {
 		return ""
 	}
-	meanX, meanY := 0.0, 0.0
-	for _, p := range points {
-		meanX += p.hours
-		meanY += p.value
+	if len(usages) > 5 {
+		usages = usages[len(usages)-5:]
 	}
-	meanX /= float64(len(points))
-	meanY /= float64(len(points))
-	var numerator, denominator float64
-	for _, p := range points {
-		dx := p.hours - meanX
-		numerator += dx * (p.value - meanY)
-		denominator += dx * dx
+	var totalUsage float64
+	for _, usage := range usages {
+		totalUsage += usage.used
 	}
-	if denominator == 0 {
+	averageDailyUsage := totalUsage / float64(len(usages))
+	if current <= threshold || averageDailyUsage <= 0 {
 		return ""
 	}
-	slope := numerator / denominator
-	if slope >= 0 || current <= threshold {
-		return ""
-	}
-	hoursToThreshold := (current - threshold) / -slope
+	hoursToThreshold := (current - threshold) / averageDailyUsage * 24
 	if !math.IsInf(hoursToThreshold, 0) && !math.IsNaN(hoursToThreshold) && hoursToThreshold >= 0 {
 		days := int(hoursToThreshold / 24)
 		hours := int(math.Round(hoursToThreshold - float64(days*24)))
@@ -558,11 +585,15 @@ func (s *Store) freshPredictionLocked(fillAt time.Time, current float64, now tim
 		if days == 1 {
 			dayLabel = "day"
 		}
+		dataDayLabel := "days"
+		if len(usages) == 1 {
+			dataDayLabel = "day"
+		}
 		hourLabel := "hours"
 		if hours == 1 {
 			hourLabel = "hour"
 		}
-		return fmt.Sprintf("Based on %d hours fresh water usage data, predict %.0f%% in %d %s %d %s", int(math.Round(points[len(points)-1].hours-points[0].hours)), threshold, days, dayLabel, hours, hourLabel)
+		return fmt.Sprintf("Based on %d %s fresh water usage data, predict %.0f%% in %d %s %d %s", len(usages), dataDayLabel, threshold, days, dayLabel, hours, hourLabel)
 	}
 	return ""
 }

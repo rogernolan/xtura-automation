@@ -166,7 +166,7 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 	})
 	hostManager := host.New(cfg.Host.SampleInterval, nil, time.Now, logger)
 	hostManager.SetOnChange(func(metrics host.Metrics) {
-		broker.Publish(events.Event{
+		broker.PublishRetained(events.Event{
 			Type:      "pi.state_changed",
 			Timestamp: time.Now().UTC(),
 			Payload:   metrics,

@@ -785,7 +785,7 @@ func TestSummaryUsage(t *testing.T) {
 	}
 }
 
-func TestFreshPredictionUsesTwelveHourLinearFit(t *testing.T) {
+func TestFreshPredictionUsesDailyUsageAverage(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base.Add(12*time.Hour))
 	store.events = []Event{{At: base, Tank: TankFresh, Kind: KindFill, To: 80}}
@@ -795,11 +795,31 @@ func TestFreshPredictionUsesTwelveHourLinearFit(t *testing.T) {
 	store.chart.samples = []Point{
 		{At: base, FreshPercent: &first},
 		{At: base.Add(6 * time.Hour), FreshPercent: &middle},
-		{At: base.Add(12 * time.Hour), FreshPercent: &last},
+		{At: base.Add(11 * time.Hour), FreshPercent: &last},
 	}
 
 	doc := store.Document(base.Add(12 * time.Hour))
-	if got, want := doc.Fresh.Prediction, "Based on 12 hours fresh water usage data, predict 10% in 1 day 6 hours"; got != want {
+	if got, want := doc.Fresh.Prediction, "Based on 1 day fresh water usage data, predict 10% in 2 days 12 hours"; got != want {
+		t.Fatalf("prediction = %q, want %q", got, want)
+	}
+}
+
+func TestFreshPredictionCarriesDepletionAcrossUTCMidnight(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	now := base.Add(12 * time.Hour)
+	store := testStore(t, now)
+	store.events = []Event{{At: base, Tank: TankFresh, Kind: KindFill, To: 80}}
+	current := 60.0
+	store.state.Fresh = &current
+	first, middle, last := 80.0, 70.0, 60.0
+	store.chart.samples = []Point{
+		{At: base, FreshPercent: &first},
+		{At: base.Add(6 * time.Hour), FreshPercent: &middle},
+		{At: now, FreshPercent: &last},
+	}
+
+	doc := store.Document(now)
+	if got, want := doc.Fresh.Prediction, "Based on 2 days fresh water usage data, predict 10% in 5 days 0 hours"; got != want {
 		t.Fatalf("prediction = %q, want %q", got, want)
 	}
 }
