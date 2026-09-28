@@ -795,7 +795,7 @@ func TestFreshPredictionUsesDailyUsageAverage(t *testing.T) {
 	store.chart.samples = []Point{
 		{At: base, FreshPercent: &first},
 		{At: base.Add(6 * time.Hour), FreshPercent: &middle},
-		{At: base.Add(12 * time.Hour), FreshPercent: &last},
+		{At: base.Add(11 * time.Hour), FreshPercent: &last},
 	}
 
 	doc := store.Document(base.Add(12 * time.Hour))
