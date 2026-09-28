@@ -3,10 +3,90 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"empirebus-tests/service/watercalibration"
+	"gopkg.in/yaml.v3"
 )
+
+func TestWaterCalibrationPreserved(t *testing.T) {
+	cfg := validTestConfig()
+	cfg.WaterHistory.Calibration = WaterCalibrationConfig{
+		Fresh: []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 50, Litres: 60.2}, {Percent: 100, Litres: 138.9}},
+		Grey:  []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 100, Litres: 80}},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	normalized, err := cfg.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(normalized.WaterHistory.Calibration, cfg.WaterHistory.Calibration) {
+		t.Fatalf("calibration changed: %+v", normalized.WaterHistory.Calibration)
+	}
+}
+
+func TestWaterCalibrationInvalid(t *testing.T) {
+	for _, tank := range []string{"fresh", "grey"} {
+		t.Run(tank, func(t *testing.T) {
+			cfg := validTestConfig()
+			points := []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 100, Litres: 0}}
+			if tank == "fresh" {
+				cfg.WaterHistory.Calibration.Fresh = points
+			} else {
+				cfg.WaterHistory.Calibration.Grey = points
+			}
+			for _, check := range []func() error{cfg.Validate, func() error { _, err := cfg.Normalize(); return err }} {
+				if err := check(); err == nil || !strings.Contains(err.Error(), "water_history.calibration."+tank) {
+					t.Fatalf("expected field-specific error, got %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestWaterCalibrationEmpty(t *testing.T) {
+	for _, block := range []string{"", "water_history:\n  calibration: {}\n", "water_history:\n  calibration:\n    fresh: []\n    grey: []\n"} {
+		cfg := validTestConfig()
+		if err := yaml.Unmarshal([]byte(block), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		normalized, err := cfg.Normalize()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(normalized.WaterHistory.Calibration, cfg.WaterHistory.Calibration) {
+			t.Fatal("empty calibration changed")
+		}
+	}
+}
+
+func TestWaterCalibrationLoadFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	data, err := yaml.Marshal(validTestConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data = append(data, []byte("water_history:\n  calibration:\n    fresh:\n      - percent: 0\n        litres: 0\n      - percent: 100\n        litres: 138.9\n    grey:\n      - percent: 0\n        litres: 0\n      - percent: 100\n        litres: 80\n")...)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := WaterCalibrationConfig{Fresh: []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 100, Litres: 138.9}}, Grey: []watercalibration.Point{{Percent: 0, Litres: 0}, {Percent: 100, Litres: 80}}}
+	if !reflect.DeepEqual(cfg.WaterHistory.Calibration, want) {
+		t.Fatalf("loaded calibration: %+v", cfg.WaterHistory.Calibration)
+	}
+}
 
 func TestWaterHistoryDefaults(t *testing.T) {
 	cfg := validTestConfig()

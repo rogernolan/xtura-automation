@@ -72,12 +72,14 @@
                 <div class="overview-card-heading"><span>Fresh water</span><span id="freshWaterState" class="state-text"></span></div>
                 <strong id="freshWater" class="overview-value">--</strong>
                 <div class="supply-bar" aria-hidden="true"><span id="freshWaterBar"></span></div>
+                <p id="freshWaterDetail" class="detail-text"></p>
                 <p id="freshWaterLastSeen" class="detail-text last-seen-text" hidden></p>
               </button>
               <button id="greyWaterCard" class="overview-card overview-supply-card" type="button" data-overview-route="#/water">
                 <div class="overview-card-heading"><span>Grey water</span><span id="greyWaterState" class="state-text"></span></div>
                 <strong id="greyWater" class="overview-value">--</strong>
                 <div class="supply-bar" aria-hidden="true"><span id="greyWaterBar"></span></div>
+                <p id="greyWaterDetail" class="detail-text"></p>
                 <p id="greyWaterLastSeen" class="detail-text last-seen-text" hidden></p>
               </button>
             </div>
@@ -140,6 +142,13 @@
         </section>
 
         <section id="waterPanel" class="page-panel" hidden>
+          <div id="waterLevelsPanel" class="panel">
+            <h2>Tank levels</h2>
+            <p>Fresh water</p>
+            <p id="waterFreshLevel" class="detail-text"></p>
+            <p>Grey water</p>
+            <p id="waterGreyLevel" class="detail-text"></p>
+          </div>
           <div id="waterControlsPanel" class="panel">
             <div class="panel-heading">
               <h2>Grey water valve</h2>

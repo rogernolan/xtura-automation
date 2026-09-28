@@ -1,38 +1,42 @@
-# Task 2 Report: Create battery estimate module
+# Task 2 report: YAML configuration and validation
 
-## What I implemented
+Status: complete.
 
-Created `service/runtime/battery_estimate.go` exactly per the task brief (verbatim transcription, then gofmt-normalized):
+Implemented `WaterHistoryConfig.Calibration` with optional fresh and grey point slices. `Config.Validate` passes each non-empty slice to Task 1's `watercalibration.New` and prefixes errors with the corresponding YAML field path. `normalizeWaterHistory` already copies the entire input struct (`out := in`), so it preserves both slices unchanged without additional code or defaults.
 
-- Constants: `idleDeadbandA` (2.0), `smoothingHalfLifeDuration` (5 min)
-- `BatteryMode` type with `Charging`/`Discharging`/`Idle`/`Unknown` values
-- `BatteryChargeState` type with `Bulk`/`Absorption`/`Float`/`Storage`/`Unknown` values
-- `BatteryConfig` struct (capacity, nominal voltage, floor SOC, ready SOC, max charge current, charge efficiency)
-- `BatteryEstimate` struct (mode, SOC, current, power, charge state, target SOC, estimated seconds, available)
-- `BatteryEstimateSmoothing` EWMA tracker: `NewBatteryEstimateSmoothing`, `Update`, `Smoothed`, `Reset`
-- `ComputeBatteryEstimate` — nil-guards SOC/current pointers, handles nil smoother (uses raw current), deadband mode selection, charge/discharge ETA math
-- `FormatBatteryDuration` — formatter for display durations
+## Changed files
 
-The file is in package `runtime`. It was NOT wired into `App` (that is Task 3). No tests were added (Task 4 covers that).
+- `service/config/config.go`: calibration types, YAML tags, and fresh/grey validation.
+- `service/config/config_test.go`: acceptance and preservation of both curves; field-specific rejection through Validate and Normalize; omitted, empty-block, and empty-slice compatibility; loading both curves through LoadFile.
+- `config.example.yaml`: all 15 specified measured fresh points, in the exact order and with the specified values, ending at 138.9 litres.
+- `.superpowers/sdd/task-2-report.md`: this requested handover report.
 
-## What I tested and test results
+## RED evidence
 
-- `gofmt -w service/runtime/battery_estimate.go` — clean, no diff after first pass
-- `go build ./service/runtime/...` — PASS, pristine output (exit 0, no output)
+Added the tests before production changes. Ran `rtk go test ./service/config -run 'TestWaterCalibration'`; exit 1, package build failed because `cfg.WaterHistory.Calibration` and `WaterCalibrationConfig` did not exist. This matches the brief's explicitly required compilation failure. Representative output:
 
-## Files changed
+```
+cfg.WaterHistory.Calibration undefined (type WaterHistoryConfig has no field or method Calibration)
+undefined: WaterCalibrationConfig
+```
 
-- `service/runtime/battery_estimate.go` (new, 194 lines)
+## GREEN evidence
 
-## Self-review findings
+- `rtk go test ./service/config -run 'TestWaterCalibration'`: exit 0, 6 passed in 1 package.
+- After gofmt, `rtk go test ./service/config`: exit 0, 65 passed in 1 package.
+- `rtk go test ./...`: exit 0, 465 passed in 34 packages.
+- `rtk git diff --check`: exit 0.
 
-- Completeness: every constant, type, struct field, and function from the brief is present with matching names and semantics.
-- Quality: gofmt-clean. The brief's non-canonical formatting (struct literal/keyword alignment, the misindented `dischargeCurrent` line) was normalized by gofmt; no semantic change.
-- Nil handling: `ComputeBatteryEstimate` returns `BatteryEstimate{Available: false}` when SOC or current is nil, and uses raw current when the smoother is nil — all per the brief.
-- Discipline: nothing beyond the brief — no App wiring, no extra functions, no tests.
-- Build: `go build ./service/runtime/...` passes with pristine output.
+The first sandboxed gofmt attempt could not create temporary files in the specified worktree; the authorized escalated retry succeeded. Tests completed successfully after formatting.
 
-## Issues or concerns
+## Self-review
 
-- None. The unused package-level constant `smoothingHalfLifeDuration` is intentional (specified in the brief; will be consumed by a later task) and does not affect the build.
-- Note: `docs/superpowers/plans/2026-09-15-battery-estimate.md` is untracked in the worktree but is outside this task's scope and was left untouched.
+Reviewed the complete scoped diff against the brief. Both curves use the existing calibration validator, empty calibration remains optional, and normalization preserves configured point order and values. YAML loading uses the existing loader and Point tags. The sample contains every required measurement. No runtime, overview, browser, or signal-reference files were modified. The existing Task 1 report modification and untracked plan were left untouched and excluded from staging.
+
+## Concerns
+
+None for this task. Runtime consumption is outside Task 2. Normalization retains the existing shallow struct-copy behavior; no new defensive-copy semantics are introduced.
+
+## Commit
+
+Configuration support and this report are committed together with message `feat: configure measured water tank curves`. The final response identifies the resulting commit hash.

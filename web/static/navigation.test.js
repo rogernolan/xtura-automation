@@ -91,6 +91,9 @@ test("overview markup uses page panels and drawer navigation", () => {
   ]);
   assertPanelOwnsDataTargets(html, "heatingPanel", ["5", "18", "21"]);
   assertPanelOwnsIds(html, "waterPanel", [
+    "waterLevelsPanel",
+    "waterFreshLevel",
+    "waterGreyLevel",
     "waterState",
     "openGreyValve",
     "closeGreyValve",
@@ -100,6 +103,10 @@ test("overview markup uses page panels and drawer navigation", () => {
     "greyScheduleMessage",
     "waterDetail",
   ]);
+  const overviewMarkup = html.slice(html.indexOf('id="overviewPanel"'), html.indexOf('id="heatingPanel"'));
+  for (const id of ["freshWaterDetail", "greyWaterDetail"]) {
+    assert.match(overviewMarkup, new RegExp(`id="${id}"`));
+  }
   const waterControlsStart = html.indexOf('<div id="waterControlsPanel" class="panel">');
   const waterHistoryStart = html.indexOf('<div id="waterHistoryPanel" class="panel">');
   const chartStart = html.indexOf('id="waterHistoryChart"');

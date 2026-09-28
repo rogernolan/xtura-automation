@@ -153,6 +153,8 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     "flashLights", "flashCount", "lightsState", "lightsDetail",
     "openGreyValve", "closeGreyValve", "greyScheduleButton", "greyScheduleDuration", "recordingButton", "waterState", "waterDetail", "greyScheduleMessage",
     "waterHistoryChart", "freshWaterUsage", "greyWaterUsage",
+    "freshWater", "greyWater", "freshWaterBar", "greyWaterBar",
+    "freshWaterDetail", "greyWaterDetail", "waterFreshLevel", "waterGreyLevel",
     "recordingPanel", "recordingState", "recordingDetail", "recordingDuration", "trackingPanel", "trackingState", "trackingDetail", "trackingManualControls", "trackingEngineOnly", "trackingStartButton", "trackingStopButton", "trackingInterval", "todayTrackMapView", "todayTrackMapStatus", "todayTrackMap", "trackList", "trackMapView", "trackMapBack", "trackMapTitle", "trackMapStatus", "trackMap",
     "modeOn", "modeSchedule", "modeOff", "modeState", "targetState", "modeDetail", "targetValue", "targetDown", "targetUp", "boostButton", "boostRunning", "cancelBoostButton",
     "scheduleForm", "scheduleState", "scheduleDetail", "scheduleSlots", "saveSchedule", "greyScheduleTime", "recordingWaitFor",
@@ -314,6 +316,58 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     },
   };
 }
+
+test("water litres render on Overview without replacing percentages", () => {
+  const { renderOverview, state, elements } = loadApp();
+  state.overview = { fresh_water_percent: 50, grey_water_percent: 25, fresh_water_litres: 100.2, grey_water_litres: 30.25 };
+  renderOverview();
+  assert.equal(elements.freshWaterDetail.textContent, "100.2 L remaining");
+  assert.equal(elements.greyWaterDetail.textContent, "30.3 L remaining");
+  assert.equal(elements.freshWater.textContent, "50%");
+  assert.equal(elements.greyWater.textContent, "25%");
+  assert.equal(elements.freshWaterBar.style.width, "50%");
+  assert.equal(elements.greyWaterBar.style.width, "25%");
+});
+
+test("water litres clear missing and non-finite values while preserving percentages", () => {
+  const { renderOverview, renderWater, state, elements } = loadApp();
+  state.overview = { fresh_water_percent: 50, grey_water_percent: 25, fresh_water_litres: 100.2, grey_water_litres: 30 };
+  for (const value of [undefined, null, NaN, Infinity, -Infinity, "100.2"]) {
+    state.overview.fresh_water_litres = 100.2;
+    state.overview.grey_water_litres = 30;
+    renderOverview();
+    renderWater();
+    for (const id of ["freshWaterDetail", "greyWaterDetail", "waterFreshLevel", "waterGreyLevel"]) {
+      elements[id].textContent = "100.2 L remaining";
+    }
+    state.overview.fresh_water_litres = value;
+    state.overview.grey_water_litres = value;
+    renderOverview();
+    renderWater();
+    for (const id of ["freshWaterDetail", "greyWaterDetail"]) {
+      assert.equal(elements[id].textContent, "", `${id} should clear ${value}`);
+    }
+    assert.equal(elements.waterFreshLevel.textContent, "50%");
+    assert.equal(elements.waterGreyLevel.textContent, "25%");
+    assert.equal(elements.freshWater.textContent, "50%");
+    assert.equal(elements.greyWater.textContent, "25%");
+  }
+});
+
+test("water page shows percentage with calibrated litres while valve state is loading", () => {
+  const { renderOverview, renderWater, state, elements } = loadApp();
+  state.overview = { fresh_water_percent: 81, grey_water_percent: 0, fresh_water_litres: 100.2, grey_water_litres: 0 };
+  renderOverview();
+  renderWater();
+  assert.equal(elements.waterFreshLevel.textContent, "81% · 100.2 L remaining");
+  assert.equal(elements.waterGreyLevel.textContent, "0% · 0.0 L remaining");
+  assert.equal(elements.freshWaterDetail.textContent, "100.2 L remaining");
+  assert.equal(elements.greyWaterDetail.textContent, "0.0 L remaining");
+  state.overview = null;
+  renderWater();
+  assert.equal(elements.waterFreshLevel.textContent, "");
+  assert.equal(elements.waterGreyLevel.textContent, "");
+});
 
 test("rerendering overview does not overwrite dirty settings fields", () => {
   const { renderOverviewSettings, state, elements } = loadApp();
