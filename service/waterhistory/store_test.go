@@ -803,3 +803,23 @@ func TestFreshPredictionUsesDailyUsageAverage(t *testing.T) {
 		t.Fatalf("prediction = %q, want %q", got, want)
 	}
 }
+
+func TestFreshPredictionCarriesDepletionAcrossUTCMidnight(t *testing.T) {
+	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	now := base.Add(12 * time.Hour)
+	store := testStore(t, now)
+	store.events = []Event{{At: base, Tank: TankFresh, Kind: KindFill, To: 80}}
+	current := 60.0
+	store.state.Fresh = &current
+	first, middle, last := 80.0, 70.0, 60.0
+	store.chart.samples = []Point{
+		{At: base, FreshPercent: &first},
+		{At: base.Add(6 * time.Hour), FreshPercent: &middle},
+		{At: now, FreshPercent: &last},
+	}
+
+	doc := store.Document(now)
+	if got, want := doc.Fresh.Prediction, "Based on 2 days fresh water usage data, predict 10% in 5 days 0 hours"; got != want {
+		t.Fatalf("prediction = %q, want %q", got, want)
+	}
+}

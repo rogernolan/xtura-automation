@@ -541,19 +541,27 @@ func (s *Store) freshPredictionLocked(fillAt time.Time, current float64, now tim
 		used float64
 	}
 	usages := make([]dailyUsage, 0, len(daily))
+	levels := make([]dailyLevel, 0, len(daily))
 	for _, level := range daily {
-		if level.at.Before(cutoff) {
-			continue
-		}
+		levels = append(levels, level)
+	}
+	sort.Slice(levels, func(i, j int) bool { return levels[i].at.Before(levels[j].at) })
+	var previousClose float64
+	hasPreviousClose := false
+	for _, level := range levels {
 		used := level.first - level.last
-		if used > 0 {
+		if hasPreviousClose {
+			used = previousClose - level.last
+		}
+		previousClose = level.last
+		hasPreviousClose = true
+		if !level.at.Before(cutoff) && used > 0 {
 			usages = append(usages, dailyUsage{at: level.at, used: used})
 		}
 	}
 	if len(usages) == 0 {
 		return ""
 	}
-	sort.Slice(usages, func(i, j int) bool { return usages[i].at.Before(usages[j].at) })
 	if len(usages) > 5 {
 		usages = usages[len(usages)-5:]
 	}
