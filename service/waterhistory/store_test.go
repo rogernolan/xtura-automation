@@ -785,7 +785,7 @@ func TestSummaryUsage(t *testing.T) {
 	}
 }
 
-func TestFreshPredictionUsesTwelveHourLinearFit(t *testing.T) {
+func TestFreshPredictionUsesDailyUsageAverage(t *testing.T) {
 	base := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	store := testStore(t, base.Add(12*time.Hour))
 	store.events = []Event{{At: base, Tank: TankFresh, Kind: KindFill, To: 80}}
@@ -799,7 +799,7 @@ func TestFreshPredictionUsesTwelveHourLinearFit(t *testing.T) {
 	}
 
 	doc := store.Document(base.Add(12 * time.Hour))
-	if got, want := doc.Fresh.Prediction, "Based on 12 hours fresh water usage data, predict 10% in 1 day 6 hours"; got != want {
+	if got, want := doc.Fresh.Prediction, "Based on 1 day fresh water usage data, predict 10% in 2 days 12 hours"; got != want {
 		t.Fatalf("prediction = %q, want %q", got, want)
 	}
 }

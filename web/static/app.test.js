@@ -935,14 +935,14 @@ test("renders the fresh water depletion prediction with its usage summary", () =
       event_at: new Date().toISOString(),
       days_since: 1,
       used_percent: 20,
-      prediction: "Based on 12 hours fresh water usage data, predict 10% in 1 day 6 hours",
+      prediction: "Based on 1 day fresh water usage data, predict 10% in 2 days 12 hours",
     },
     grey: {},
   };
 
   renderWaterHistory();
 
-  assert.equal(elements.freshWaterUsage.textContent, "1 day since last fresh water fill, used 20%. Based on 12 hours fresh water usage data, predict 10% in 1 day 6 hours");
+  assert.equal(elements.freshWaterUsage.textContent, "1 day since last fresh water fill, used 20%. Based on 1 day fresh water usage data, predict 10% in 2 days 12 hours");
 });
 
 test("trend label maps every trend value", () => {
