@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"empirebus-tests/service/config"
+	"empirebus-tests/service/domains/heating"
 	"empirebus-tests/service/domains/sensors"
 	"empirebus-tests/service/notifications"
 )
@@ -23,7 +24,7 @@ func (a *App) notificationSensorIDs() map[string]struct{} {
 func (a *App) NotificationSettings() notifications.Settings {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return notifications.Settings{Alerts: append([]notifications.Alert(nil), a.rawConfig.Notifications.Alerts...)}
+	return notifications.Settings{Alerts: append([]notifications.Alert(nil), a.rawConfig.Notifications.Alerts...), AldePowerAlertEnabled: a.rawConfig.Notifications.AldePowerAlertEnabled}
 }
 func (a *App) UpdateNotificationSettings(_ context.Context, settings notifications.Settings) (notifications.Settings, error) {
 	if err := settings.Validate(a.notificationSensorIDs()); err != nil {
@@ -35,10 +36,16 @@ func (a *App) UpdateNotificationSettings(_ context.Context, settings notificatio
 	next := a.rawConfig
 	path := a.configPath
 	a.mu.RUnlock()
+	powerWasEnabled := (notifications.Settings{AldePowerAlertEnabled: next.Notifications.AldePowerAlertEnabled}).PowerAlertEnabled()
 	if path == "" {
 		return notifications.Settings{}, fmt.Errorf("config path is not configured")
 	}
 	next.Notifications.Alerts = append([]notifications.Alert(nil), settings.Alerts...)
+	// Older clients only send temperature alerts. Omission preserves the
+	// persisted toggle rather than silently re-enabling a disabled warning.
+	if settings.AldePowerAlertEnabled != nil {
+		next.Notifications.AldePowerAlertEnabled = settings.AldePowerAlertEnabled
+	}
 	normalized, err := next.Normalize()
 	if err != nil {
 		return notifications.Settings{}, err
@@ -50,6 +57,10 @@ func (a *App) UpdateNotificationSettings(_ context.Context, settings notificatio
 	a.rawConfig = next
 	a.cfg = normalized
 	a.notificationEvaluator.Configure(settings)
+	powerIsEnabled := (notifications.Settings{AldePowerAlertEnabled: next.Notifications.AldePowerAlertEnabled}).PowerAlertEnabled()
+	if a.aldePowerEvaluator != nil && powerWasEnabled != powerIsEnabled {
+		a.aldePowerEvaluator.Evaluate(heating.ElectricSupplyState{}, false, time.Now())
+	}
 	a.revision = readConfigRevision(path)
 	a.mu.Unlock()
 	return a.NotificationSettings(), nil
@@ -92,8 +103,14 @@ func (a *App) evaluateOfflineNotifications() {
 }
 
 func (a *App) dispatchNotifications(items []notifications.Notification) {
+	if a.notificationSubs == nil || a.notificationSender == nil {
+		return
+	}
 	for _, n := range items {
 		for _, sub := range a.notificationSubs.List() {
+			if n.Kind == "alde_power" && sub.FormatVersion < 2 {
+				continue
+			}
 			goSafe(a.logger, "notification_send", func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
@@ -107,4 +124,30 @@ func (a *App) dispatchNotifications(items []notifications.Notification) {
 			})
 		}
 	}
+}
+
+func (a *App) aldePowerNotifications() []notifications.Notification {
+	if a.electricSupply == nil || a.aldePowerEvaluator == nil {
+		return nil
+	}
+	now := a.now().UTC()
+	state := a.electricSupply.ElectricSupplyState(now)
+	canDeliver := false
+	if a.notificationSender.Configured() && a.notificationSubs != nil {
+		for _, sub := range a.notificationSubs.List() {
+			if sub.FormatVersion >= 2 {
+				canDeliver = true
+				break
+			}
+		}
+	}
+	if !canDeliver && state.HeaterOn && state.ElectricWatts > state.ShoreWatts {
+		// Delay emission until a compatible phone can receive it, while still
+		// processing known safe states so they can rearm a previous warning.
+		state.Known = false
+	}
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	settings := notifications.Settings{AldePowerAlertEnabled: a.rawConfig.Notifications.AldePowerAlertEnabled}
+	return a.aldePowerEvaluator.Evaluate(state, settings.PowerAlertEnabled(), now)
 }

@@ -275,6 +275,39 @@ Power, hot-water, and energy-source related heating-domain signals:
 - `117`: `HeatingHotWaterNormal`
 - `118`: `HeatingHotWaterBoost`
 
+### Electric-setting capture, 2026-10-22
+
+Source: `captures/garmin-ws-20261022T073848Z.ndjson`, recorded by the live
+daemon while Rog selected electric heating, disconnected/reconnected shore
+power, changed the Alde electric setting, and increased the MultiPlus input
+limit. The raw capture is retained on the Pi under
+`/var/lib/xtura/recordings/`; `captures/` is ignored by Git. See
+[the capture analysis](alde-shore-power-capture-2026-10-22.md) for timestamps,
+record numbers, integrity checks, and the limits of these observations.
+
+The received `16/1` status frames support these selected-setting mappings:
+
+| Selected electric setting | Signal | Observed evidence |
+| --- | ---: | --- |
+| Off | `89` | `[89,0,1]` while the heater was on, then `[89,0,0]` when 3 kW was selected. |
+| 1 kW | `88` | Catalogue mapping only: no selected/on frame occurred in this capture. |
+| 2 kW | `87` | `[87,0,1]` accompanied `[97,0,0]`; the later 3 kW selection reversed these bits. |
+| 3 kW | `97` | `[97,0,1]` followed the Off setting, then alternated with the 2 kW indication. |
+
+These are user-correlated, capture-derived state mappings, not confirmations
+of a command write shape or measurements of heater consumption. The sequence
+was Off → 3 kW → 2 kW → 3 kW. Signals `113`–`115` did not assert their on bits:
+`113` remained `128`, and `114`/`115` changed between `0` and `128`. They must
+not be used as selected-setting indicators on the strength of their names.
+Their exact UI role remains unconfirmed.
+
+Signal `99` (gas priority) remained on while electric 3 kW and 2 kW were
+selected, and gas-enable signal `110` was off after 08:43:45 BST. Thus
+`98`/`99` priority alone does not identify whether electric heating is enabled.
+Heater power signal `101` also reported `129` during setting changes; an
+automation must account for transitions rather than equate every non-`1`
+value with heater off.
+
 ### Target-temperature evidence
 
 From `docs/superpowers/specs/2026-04-21-heating-go-client-design.md`, signal `105` is the strongest current candidate for target-temperature decoding.
@@ -462,6 +495,67 @@ These names suggest control semantics, but there is not yet a confirming browser
 - `222`: `Power Status: Output AC Watts`
 - `223`: `Power Status: Board Battery Watts`
 
+### Shore-power and input-limit capture, 2026-10-22
+
+Source: `captures/garmin-ws-20261022T073848Z.ndjson`, with Rog's reported
+unplug/reconnect and current-limit changes. All times below are BST. Detailed
+evidence is in [the capture analysis](alde-shore-power-capture-2026-10-22.md).
+
+- Signal `28` changed `1 → 129 → 128` during loss of shore power and
+  `128 → 129 → 1` during return. Its on bit was clear from 08:44:29.476 to
+  08:45:35.474; the final stable `1` arrived at 08:45:53.667. Because `128`
+  also carries the protocol's unavailable flag, this trace does not establish
+  a general rule that an unavailable indication means unplugged.
+- Scalar input voltage `205` carried a zero payload at 08:44:30.076 and
+  `237 V` at 08:45:36.230, both with flag `128` (unavailable). Its availability
+  flag cleared at 08:45:54.068 with `234 V`. The zero-payload interval was
+  roughly 66 seconds; that is not a period of valid zero-voltage measurements.
+  These received state changes correlate with Rog's reported unplug/reconnect.
+  Output voltage `208` returned to `230 V` at 08:45:04.733 while input voltage
+  remained zero: output voltage alone cannot identify shore availability.
+- Signal `204` is the configured input-current limit. Received `16/5`
+  frames used value type `6`, with signed little-endian raw values divided
+  by `1000` giving `3.0`, `3.1`, `5`, `10`, `15`, then `16 A`. The increases
+  to `5`–`16 A` followed received press/release status on `202`. These are
+  correlated status observations, not browser-confirmed command writes.
+- For this capture, `205`/`208` used value type `27` and raw/1000 volts;
+  `206`/`209` used type `6` and raw/1000 amperes. Power signals `221`–`223`
+  used type `0`; raw/1000 watts agrees with the corresponding voltage/current
+  products. The power scaling is capture-derived corroboration.
+- After input AC returned, a `3.1 A` limit, about `233 V`, and the selected
+  2 kW setting coincided with about `699 W` input, `2330 W` output, and
+  `-143.7 A` battery current. Raising the limit to `16 A` was followed by
+  positive battery current, including with 3 kW selected.
+
+The configured limit is not proof of actual shore draw or physical supply
+capacity. Before the unplug, signal `199` (charger only) was on, `200` was
+off, the configured limit was `3 A`, and the received input current was
+`13 A`. Later, with `200` on, input current was about `3 A` until the limit
+was raised. This capture does not establish why the reported limit was not
+reflected in the earlier actual draw, or how every MultiPlus mode enforces it.
+The unplugged state was communicated through unavailable/off indications
+alongside zero input payloads while the daemon kept receiving other telemetry.
+Consumers must distinguish that correlated source state from a lost session
+or an arbitrary unavailable value; zero payloads alone do not prove absence.
+
+### Alde shore-allowance warning repo usage
+
+The warning in `service/notifications/alde_power.go` depends on the received
+electric selection indications `89`/`88`/`87`/`97`, heater power `101`, shore
+indication `28`, input-current limit `204` (type `6`), and input voltage
+`205` (type `27`). `service/adapters/garmin/electric_supply.go` decodes them.
+The 1 kW mapping (`88`) remains catalogue-derived; the other selections and
+the paired unavailable/off shore plus unavailable zero input state are based
+on the dated capture above. No new hardware write command is introduced.
+
+The decoder retains delta-reported settings only within their current session
+and requires a frame received within 15 seconds. Unknown/conflicting settings,
+unsupported flags, malformed scalars, and incomplete reconnect snapshots do not
+count as a shore shortfall. The paired unplug state gives zero allowance;
+connected state requires available voltage and a valid current limit. The
+runtime evaluates the selected watts against that allowance once per second,
+with a 60-second delay and one warning until a known safe state re-arms it.
+
 ## Simulation note: `servsim` command echo
 
 `cmd/servsim` is a fake SERV for local development. It replays a recorded
@@ -490,26 +584,13 @@ value.
 
 ## Code Red Module Data
 
-This repo currently contains a request to include data from the Code Red module and cite its GitHub source.
-
-What is present in the repo today:
-
-- the local `signal-info.json` catalog, which provides names and labels for many signals
-- browser-captured HAR evidence for lights and heating controls
-
-What is not yet pinned down in this repo:
-
-- the exact public GitHub repository for the Code Red module
-- which parts of the current signal naming or command knowledge came directly from that module versus from browser capture and local reverse engineering
-
-Until the exact Code Red source URL is added, treat this section as a placeholder for provenance rather than a verified attribution block.
-
-Recommended follow-up once the repo is known:
-
-1. add the exact GitHub repo URL here
-2. record the commit or tag used
-3. list the concrete signals or command semantics imported from that source
-4. distinguish those imported facts from browser-confirmed facts in this repo
+The source URL already recorded under Sources is
+[`litti/node-red-contrib-garmin-empirbus`](https://github.com/litti/node-red-contrib-garmin-empirbus).
+No commit or tag has been recorded, and this document does not yet attribute
+any specific signal mapping or command shape to that module. The local
+`signal-info.json` catalogue, browser HARs, and dated NDJSON observations above
+remain separate evidence. Any future import from the module must name its
+revision and the concrete facts taken from it.
 
 ## Open Questions
 

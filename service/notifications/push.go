@@ -11,8 +11,9 @@ import (
 )
 
 type Subscription struct {
-	Endpoint string           `json:"endpoint"`
-	Keys     SubscriptionKeys `json:"keys"`
+	FormatVersion int              `json:"format_version,omitempty"`
+	Endpoint      string           `json:"endpoint"`
+	Keys          SubscriptionKeys `json:"keys"`
 }
 type SubscriptionKeys struct {
 	P256DH string `json:"p256dh"`
@@ -43,8 +44,12 @@ func NewSender(config PushConfig, client *http.Client) *Sender {
 	return &Sender{config: config, client: client}
 }
 
+func (s *Sender) Configured() bool {
+	return s != nil && s.config.PublicKey != "" && s.config.PrivateKey != "" && s.config.Subject != ""
+}
+
 func (s *Sender) Send(ctx context.Context, sub Subscription, notification Notification) error {
-	if s.config.PublicKey == "" || s.config.PrivateKey == "" || s.config.Subject == "" {
+	if !s.Configured() {
 		return fmt.Errorf("web push is not configured")
 	}
 	body, err := json.Marshal(notification)
