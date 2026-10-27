@@ -44,15 +44,16 @@ type Adapter struct {
 	cfg    Config
 	logger *log.Logger
 
-	mu          sync.RWMutex
-	session     *rootheating.Session
-	client      *rootheating.Client
-	state       domainheating.State
-	lightsState domainlights.State
-	waterState  domainwater.State
-	overview    domainoverview.Telemetry
-	health      domainheating.AdapterHealth
-	greyEvents  []GreyWaterDischargeEvent
+	mu                sync.RWMutex
+	session           *rootheating.Session
+	sessionGeneration uint64
+	client            *rootheating.Client
+	state             domainheating.State
+	lightsState       domainlights.State
+	waterState        domainwater.State
+	overview          domainoverview.Telemetry
+	health            domainheating.AdapterHealth
+	greyEvents        []GreyWaterDischargeEvent
 
 	discoveryMu     sync.Mutex
 	discoveredWSURL string
@@ -180,6 +181,7 @@ func (a *Adapter) installSession(session *rootheating.Session) {
 	}
 	a.closeSessionLocked()
 	a.session = session
+	a.sessionGeneration++
 	a.client = rootheating.NewClient(session)
 	a.health.Connected = true
 	a.health.LastError = ""

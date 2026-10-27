@@ -548,6 +548,7 @@ function overviewTemperatureTone(value, thresholds) {
   if (temperature < (bands[2] + bands[3]) / 2) return "warm";
   return "hot";
 }
+/* exported overviewCurrentState */
 function overviewCurrentState(doc) {
   if (!doc) return "loading";
   if (doc.status === "stale") return "stale";
@@ -963,6 +964,11 @@ function renderOverviewSettings() {
 
 function renderNotifications() {
   const settings = state.notificationSettings;
+  const powerToggle = byId("aldePowerAlertEnabled");
+  if (powerToggle) {
+    powerToggle.disabled = !settings || state.requestInFlight;
+    powerToggle.checked = settings?.alde_power_alert_enabled !== false;
+  }
   const select = byId("notificationSensor");
   if (!settings || !select) return;
   const sensors = state.overview?.temperature?.sensors || [];
@@ -1643,7 +1649,7 @@ function renderWaterHistory() {
   const start = end - 7 * 24 * 60 * 60 * 1000;
   const x = (at) => left + ((new Date(at).getTime() - start) / (end - start)) * plotWidth;
   const y = (value) => top + ((100 - Number(value)) / 100) * plotHeight;
-  const lineSamples = (field) => {
+  const lineSamples = (_field) => {
     return chartSamples.filter((sample) => {
       const timestamp = new Date(sample.t).getTime();
       return timestamp >= start && timestamp <= end;
@@ -2410,11 +2416,37 @@ function bindActions() {
   });
   if (settingsForm) settingsForm.addEventListener("input", () => { state.overviewSettingsDirty = true; });
   const notificationForm = byId("notificationForm");
-  if (notificationForm) notificationForm.addEventListener("submit", async (event) => { event.preventDefault(); const high = byId("notificationHigh").value; const low = byId("notificationLow").value; const next = { id: state.editingNotificationID || crypto.randomUUID(), name: byId("notificationName").value, sensor_id: byId("notificationSensor").value, high_celsius: high === "" ? undefined : Number(high), low_celsius: low === "" ? undefined : Number(low), mode: byId("notificationMode").value }; const alerts = state.editingNotificationID ? (state.notificationSettings.alerts || []).map((alert) => alert.id === state.editingNotificationID ? next : alert) : [...(state.notificationSettings?.alerts || []), next]; try { state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts }), "Saving notifications"); state.editingNotificationID = null; renderNotifications(); notificationForm.reset(); } catch (_) {} });
+  if (notificationForm) notificationForm.addEventListener("submit", async (event) => { event.preventDefault(); const high = byId("notificationHigh").value; const low = byId("notificationLow").value; const next = { id: state.editingNotificationID || crypto.randomUUID(), name: byId("notificationName").value, sensor_id: byId("notificationSensor").value, high_celsius: high === "" ? undefined : Number(high), low_celsius: low === "" ? undefined : Number(low), mode: byId("notificationMode").value }; const alerts = state.editingNotificationID ? (state.notificationSettings.alerts || []).map((alert) => alert.id === state.editingNotificationID ? next : alert) : [...(state.notificationSettings?.alerts || []), next]; try { state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ ...state.notificationSettings, alerts }), "Saving notifications"); state.editingNotificationID = null; renderNotifications(); notificationForm.reset(); } catch (_) { /* withRequest reports the error. */ } });
   const notificationList = byId("notificationAlerts");
-  if (notificationList) notificationList.addEventListener("click", async (event) => { const button = event.target.closest("button[data-notification-action]"); if (!button) return; const id = button.dataset.notificationID; const alert = (state.notificationSettings.alerts || []).find((item) => item.id === id); if (!alert) return; if (button.dataset.notificationAction === "edit") { state.editingNotificationID = id; byId("notificationName").value = alert.name; byId("notificationSensor").value = alert.sensor_id; byId("notificationHigh").value = alert.high_celsius ?? ""; byId("notificationLow").value = alert.low_celsius ?? ""; byId("notificationMode").value = alert.mode || "crossing"; return; } state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ alerts: state.notificationSettings.alerts.filter((item) => item.id !== id) }), "Removing notification"); renderNotifications(); });
+  if (notificationList) notificationList.addEventListener("click", async (event) => { const button = event.target.closest("button[data-notification-action]"); if (!button) return; const id = button.dataset.notificationID; const alert = (state.notificationSettings.alerts || []).find((item) => item.id === id); if (!alert) return; if (button.dataset.notificationAction === "edit") { state.editingNotificationID = id; byId("notificationName").value = alert.name; byId("notificationSensor").value = alert.sensor_id; byId("notificationHigh").value = alert.high_celsius ?? ""; byId("notificationLow").value = alert.low_celsius ?? ""; byId("notificationMode").value = alert.mode || "crossing"; return; } state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ ...state.notificationSettings, alerts: state.notificationSettings.alerts.filter((item) => item.id !== id) }), "Removing notification"); renderNotifications(); });
+  const powerToggle = byId("aldePowerAlertEnabled");
+  if (powerToggle) powerToggle.addEventListener("change", async () => {
+    const previous = state.notificationSettings;
+    const enabled = powerToggle.checked;
+    powerToggle.disabled = true;
+    try {
+      state.notificationSettings = await withRequest(() => api.updateNotificationSettings({ ...previous, alde_power_alert_enabled: enabled }), "Saving Alde warning");
+    } catch (_) {
+      powerToggle.checked = previous?.alde_power_alert_enabled !== false;
+    } finally {
+      renderNotifications();
+    }
+  });
   const subscribe = byId("notificationSubscribe");
-  if (subscribe) subscribe.addEventListener("click", async () => { try { const registration = await navigator.serviceWorker.register("/sw.js"); const permission = await Notification.requestPermission(); if (permission !== "granted") throw new Error("Browser notification permission was not granted"); const capabilities = await api.notificationCapabilities(); const encoded = capabilities.public_key.replace(/-/g, "+").replace(/_/g, "/"); const key = Uint8Array.from(atob(encoded + "=".repeat((4 - encoded.length % 4) % 4)), (c) => c.charCodeAt(0)); const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); await api.registerSubscription(subscription.toJSON()); state.notificationSubscription = true; renderNotifications(); } catch (error) { setStatus(error.message, "error"); } });
+  if (subscribe) subscribe.addEventListener("click", async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") throw new Error("Browser notification permission was not granted");
+      const registration = await notificationRegistration();
+      const capabilities = await api.notificationCapabilities();
+      const encoded = capabilities.public_key.replace(/-/g, "+").replace(/_/g, "/");
+      const key = Uint8Array.from(atob(encoded + "=".repeat((4 - encoded.length % 4) % 4)), (c) => c.charCodeAt(0));
+      const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      await api.registerSubscription({ ...subscription.toJSON(), format_version: 2 });
+      state.notificationSubscription = true;
+      renderNotifications();
+    } catch (error) { setStatus(error.message, "error"); }
+  });
 }
 
 function flashCount() {
@@ -2461,6 +2493,7 @@ async function adjustTarget(delta) {
 }
 
 async function boot() {
+  registerNotificationWorker();
   bindActions();
   window.addEventListener("hashchange", () => applyRoute(XturaNavigation.parse(window.location.hash)));
   applyRoute(XturaNavigation.parse(window.location.hash));
@@ -2472,6 +2505,58 @@ async function boot() {
     setConnection("Offline", "error");
     setStatus(error.message, "error");
   }
+}
+
+async function registerNotificationWorker() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  try {
+    const registration = await notificationRegistration();
+    const subscription = await registration.pushManager.getSubscription();
+    if (subscription) await api.registerSubscription({ ...subscription.toJSON(), format_version: 2 });
+    state.notificationSubscription = Boolean(subscription);
+    renderNotifications();
+  } catch (error) {
+    console.warn("Could not update notification worker", error);
+  }
+}
+
+async function notificationRegistration() {
+  const registration = await navigator.serviceWorker.register("/sw.js");
+  await registration.update();
+  const worker = registration.installing || registration.waiting || registration.active;
+  if (!worker) throw new Error("Notification worker is unavailable");
+  if (worker.state !== "activated") {
+    await new Promise((resolve, reject) => {
+      const finish = (error) => {
+        clearTimeout(timeout);
+        worker.removeEventListener("statechange", changed);
+        if (error) reject(error); else resolve();
+      };
+      const changed = () => {
+        if (worker.state === "activated") finish();
+        else if (worker.state === "redundant") finish(new Error("Notification worker was replaced; reload and try again"));
+      };
+      const timeout = setTimeout(() => finish(new Error("Notification worker did not activate")), 5000);
+      worker.addEventListener("statechange", changed);
+      changed();
+    });
+  }
+  // A stored subscription may still target an old worker. Confirm support
+  // before letting the server send the new message format to that phone.
+  await new Promise((resolve, reject) => {
+    const channel = new MessageChannel();
+    const finish = (error) => {
+      clearTimeout(timeout);
+      channel.port1.close();
+      channel.port2.close();
+      if (error) reject(error); else resolve();
+    };
+    const timeout = setTimeout(() => finish(new Error("Open Xtura again to update phone notifications")), 5000);
+    channel.port1.onmessage = (event) => finish(event.data?.version === 2 ? null : new Error("Unsupported notification format"));
+    try { worker.postMessage({ type: "xtura-notification-version" }, [channel.port2]); }
+    catch (error) { finish(error); }
+  });
+  return registration;
 }
 
 document.addEventListener("DOMContentLoaded", boot);

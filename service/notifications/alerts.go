@@ -28,7 +28,12 @@ type Alert struct {
 }
 
 type Settings struct {
-	Alerts []Alert `json:"alerts,omitempty" yaml:"alerts,omitempty"`
+	Alerts                []Alert `json:"alerts,omitempty" yaml:"alerts,omitempty"`
+	AldePowerAlertEnabled *bool   `json:"alde_power_alert_enabled,omitempty" yaml:"alde_power_alert_enabled,omitempty"`
+}
+
+func (s Settings) PowerAlertEnabled() bool {
+	return s.AldePowerAlertEnabled == nil || *s.AldePowerAlertEnabled
 }
 
 func (s Settings) Validate(knownSensors map[string]struct{}) error {
@@ -72,6 +77,9 @@ func (s Settings) Validate(knownSensors map[string]struct{}) error {
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
 type Notification struct {
+	Kind         string    `json:"kind,omitempty"`
+	Title        string    `json:"title,omitempty"`
+	Body         string    `json:"body,omitempty"`
 	AlertID      string    `json:"alert_id"`
 	AlertName    string    `json:"alert_name"`
 	SensorID     string    `json:"sensor_id"`

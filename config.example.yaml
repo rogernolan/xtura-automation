@@ -175,6 +175,9 @@ mopeka:
   # tank_base_radius_mm: 150
 
 notifications:
+  # Warn once after Alde's selected electric setting exceeds the configured
+  # shore allowance for 60 seconds. Missing means enabled; also editable in UI.
+  alde_power_alert_enabled: true
   # Xtura generates this pair on first startup and persists it here. It is
   # stable server identity: do not rotate it while browsers are subscribed.
   # To generate it manually, run:

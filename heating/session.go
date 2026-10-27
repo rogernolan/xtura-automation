@@ -35,21 +35,22 @@ type SessionConfig struct {
 }
 
 type Session struct {
-	cfg         SessionConfig
-	conn        *websocket.Conn
-	mu          sync.Mutex
-	writeMu     sync.Mutex
-	cond        *sync.Cond
-	state       HeaterState
-	signals     map[int]int
-	signalAt    map[int]time.Time
-	signalKnown map[int]bool
-	signalOn    map[int]bool
-	signalEdges []SignalEdge
-	received    map[int]receivedSignal
-	closed      bool
-	readErr     error
-	traceTill   time.Time
+	cfg            SessionConfig
+	conn           *websocket.Conn
+	mu             sync.Mutex
+	writeMu        sync.Mutex
+	cond           *sync.Cond
+	state          HeaterState
+	signals        map[int]int
+	signalAt       map[int]time.Time
+	signalKnown    map[int]bool
+	signalOn       map[int]bool
+	signalEdges    []SignalEdge
+	received       map[int]receivedSignal
+	closed         bool
+	readErr        error
+	lastReceivedAt time.Time
+	traceTill      time.Time
 }
 
 func NewSession(cfg SessionConfig) *Session {
@@ -127,6 +128,14 @@ func (s *Session) Err() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.readErr
+}
+
+// LastReceivedAt excludes writes: outbound commands do not prove that the
+// remote Garmin stream is still providing current state.
+func (s *Session) LastReceivedAt() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastReceivedAt
 }
 
 func (s *Session) SignalIsOn(signal int) (bool, bool, time.Time) {
@@ -314,6 +323,9 @@ func (s *Session) record(at time.Time, direction Direction, raw string) {
 
 func (s *Session) ingest(frame Frame) {
 	s.mu.Lock()
+	if frame.Direction == DirectionReceive {
+		s.lastReceivedAt = frame.At
+	}
 	changed := updateState(&s.state, frame)
 	if frame.Direction == DirectionReceive && isMFDStatusFrame(frame) {
 		signalID := frame.SignalID()

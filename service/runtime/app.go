@@ -74,6 +74,10 @@ type OverviewTelemetryProvider interface {
 	OverviewTelemetry() overview.Telemetry
 }
 
+type ElectricSupplyProvider interface {
+	ElectricSupplyState(time.Time) domainheating.ElectricSupplyState
+}
+
 type GreyWaterDischargeProvider interface {
 	DrainGreyWaterDischargeEvents() []garmin.GreyWaterDischargeEvent
 }
@@ -108,6 +112,8 @@ type App struct {
 	notificationEvaluator *notifications.Evaluator
 	notificationSender    *notifications.Sender
 	notificationSubs      *notifications.SubscriptionStore
+	aldePowerEvaluator    *notifications.AldePowerEvaluator
+	electricSupply        ElectricSupplyProvider
 	waterHistory          *waterhistory.Store
 
 	batteryEstimate *BatteryEstimateSmoothing
@@ -289,9 +295,13 @@ func New(ctx context.Context, rawConfig config.Config, configPath string, logger
 		lastHistory:           make(map[string]sensorStamp),
 		sensorSettings:        cfg.Switchbot,
 		notificationEvaluator: notifications.NewEvaluator(notifications.Settings{Alerts: cfg.Notifications.Alerts}),
+		aldePowerEvaluator:    &notifications.AldePowerEvaluator{},
 		notificationSender:    notifications.NewSender(notifications.PushConfig{PublicKey: cfg.Notifications.VAPIDPublicKey, PrivateKey: cfg.Notifications.VAPIDPrivateKey, Subject: cfg.Notifications.Subject}, nil),
 		schedulerWake:         make(chan struct{}, 1),
 		waterSchedulerWake:    make(chan struct{}, 1),
+	}
+	if provider, ok := interface{}(adapter).(ElectricSupplyProvider); ok {
+		app.electricSupply = provider
 	}
 	if store, err := notifications.LoadSubscriptionStore(filepath.Join(filepath.Dir(configPath), "notifications-subscriptions.json")); err != nil {
 		logger.Printf("notifications subscriptions: %v", err)
@@ -887,6 +897,7 @@ func (a *App) publishStateLoop(ctx context.Context) {
 			a.observeAldeTelemetry()
 			a.observeWaterHistory()
 			a.evaluateOfflineNotifications()
+			a.dispatchNotifications(a.aldePowerNotifications())
 			if a.batteryEstimate != nil && a.overviewTelemetry != nil {
 				t := a.overviewTelemetry()
 				if t.BatteryStateOfChargePercent != nil && t.BatteryCurrentA != nil {

@@ -104,6 +104,10 @@ class ElementStub {
     children.forEach((child) => this.appendChild(child));
   }
 
+  replaceChildren(...children) {
+    this.children = children;
+  }
+
   hasAttribute(name) {
     return this.attributes.has(name);
   }
@@ -144,7 +148,7 @@ function dispatchWithListeners(target, listeners, event) {
   }
 }
 
-function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async () => ({ ok: true, text: async () => "" }), localStorage = undefined } = {}) {
+function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async () => ({ ok: true, text: async () => "" }), localStorage = undefined, browserNavigator, TestMessageChannel } = {}) {
   const ids = [
     "statusMessage", "connectionStatus", "pageTitle",
     "appContent",
@@ -161,6 +165,7 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     "overviewSettingsForm", "deploymentInfo", "piStatusPanel", "piPowerState", "piStats", "piDetail", "comfortCold", "comfortComfort", "comfortWarm", "comfortHot", "batteryCapacity", "gasCapacity", "batteryPower", "timeToFull",
     "gasPercent", "gasBar", "gasState", "gasDetail", "gasLastSeen",
     "temperatureBody",
+    "aldePowerAlertEnabled",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new ElementStub(id)]));
   const drawerLayoutReads = [];
@@ -262,6 +267,8 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
   };
   const context = {
     console,
+    navigator: browserNavigator,
+    MessageChannel: TestMessageChannel,
     document,
     window,
     fetch: fetchImpl,
@@ -275,8 +282,10 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     localStorage,
   };
   const source = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
-  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, renderGas, gasStateLabel, gasLevelTrustworthy, renderGasLastSeen, formatGasAge, formatBatteryCurrent, formatBatteryDuration, formatBatteryPower, formatLastSeen, sensorLastSeenText, state };`, context, { filename: "app.js" });
+  vm.runInNewContext(`${source}\nmodule.exports = { applyRoute, bindActions, loadInitialState, renderOverviewSettings, renderOverview, renderTemperature, renderWater, renderWaterHistory, temperatureChartDomain, temperatureChartHourBoundaries, trendLabel, getTrendState, renderTrendControl, overviewTemperatureTone, overviewCurrentState, overviewSupplyState, renderGas, gasStateLabel, gasLevelTrustworthy, renderGasLastSeen, formatGasAge, formatBatteryCurrent, formatBatteryDuration, formatBatteryPower, formatLastSeen, sensorLastSeenText, state, registerNotificationWorker, notificationRegistration };`, context, { filename: "app.js" });
   return {
+    registerNotificationWorker: context.module.exports.registerNotificationWorker,
+    notificationRegistration: context.module.exports.notificationRegistration,
     applyRoute: context.module.exports.applyRoute,
     bindActions: context.module.exports.bindActions,
     loadInitialState: context.module.exports.loadInitialState,
@@ -316,6 +325,63 @@ function loadApp({ hash = "#/overview", reducedMotion = false, fetchImpl = async
     },
   };
 }
+
+test("Alde power toggle saves enablement without losing temperature alerts", async () => {
+  const requests = [];
+  const app = loadApp({ fetchImpl: async (url, options) => {
+    requests.push({ url, body: JSON.parse(options.body) });
+    return { ok: true, text: async () => options.body };
+  } });
+  const alerts = [{ id: "cold", name: "Cold", sensor_id: "alde", low_celsius: 5 }];
+  app.state.notificationSettings = { alerts };
+  app.bindActions();
+  const toggle = app.elements.aldePowerAlertEnabled;
+  toggle.checked = false;
+  assert.equal(typeof toggle.listeners.get("change")?.[0], "function");
+  await toggle.listeners.get("change")[0]();
+  assert.equal(requests[0].body.alde_power_alert_enabled, false);
+  assert.deepEqual(requests[0].body.alerts, alerts);
+  assert.equal(app.state.notificationSettings.alde_power_alert_enabled, false);
+});
+
+function notificationWorkerApp(version, requests) {
+  class TestMessageChannel {
+    constructor() {
+      this.port1 = { close() {} };
+      this.port2 = { close() {}, deliver: (data) => this.port1.onmessage({ data }) };
+    }
+  }
+  const registration = {
+    update: async () => {},
+    active: { state: "activated", postMessage: (_message, ports) => ports[0].deliver({ version }) },
+    pushManager: { getSubscription: async () => ({ toJSON: () => ({ endpoint: "https://push.example.test/phone", keys: { auth: "example" } }) }) },
+  };
+  return loadApp({
+    browserNavigator: { serviceWorker: { register: async () => registration } },
+    TestMessageChannel,
+    fetchImpl: async (url, options) => {
+      requests.push({ url, body: JSON.parse(options.body) });
+      return { ok: true, text: async () => "{}" };
+    },
+  });
+}
+
+test("opening Xtura upgrades a subscription after worker format confirmation", async () => {
+  const requests = [];
+  const app = notificationWorkerApp(2, requests);
+  await app.registerNotificationWorker();
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].url, /notifications\/subscription$/);
+  assert.equal(requests[0].body.format_version, 2);
+  assert.equal(app.state.notificationSubscription, true);
+});
+
+test("old worker cannot claim support for the new alert format", async () => {
+  const requests = [];
+  const app = notificationWorkerApp(1, requests);
+  await assert.rejects(() => app.notificationRegistration(), /Unsupported notification format/);
+  assert.equal(requests.length, 0);
+});
 
 test("water litres render on Overview without replacing percentages", () => {
   const { renderOverview, state, elements } = loadApp();

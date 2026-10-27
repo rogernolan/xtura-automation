@@ -177,10 +177,11 @@ type MopekaConfig struct {
 }
 
 type NotificationsConfig struct {
-	VAPIDPublicKey  string                `yaml:"vapid_public_key,omitempty"`
-	VAPIDPrivateKey string                `yaml:"vapid_private_key,omitempty"`
-	Subject         string                `yaml:"subject,omitempty"`
-	Alerts          []notifications.Alert `yaml:"alerts,omitempty"`
+	AldePowerAlertEnabled *bool                 `yaml:"alde_power_alert_enabled,omitempty"`
+	VAPIDPublicKey        string                `yaml:"vapid_public_key,omitempty"`
+	VAPIDPrivateKey       string                `yaml:"vapid_private_key,omitempty"`
+	Subject               string                `yaml:"subject,omitempty"`
+	Alerts                []notifications.Alert `yaml:"alerts,omitempty"`
 }
 
 // RecordingConfig controls the on-demand WebSocket traffic recording directory.

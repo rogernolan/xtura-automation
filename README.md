@@ -82,6 +82,28 @@ for more than 30 minutes; the offline state re-arms when the sensor reports
 again. Browser push requires enabling notifications from the Settings page and
 accessing Xtura over the Tailscale HTTPS hostname.
 
+Alde's shore-allowance warning is enabled by default and can be turned off
+under More > Settings > Notifications, or with
+`notifications.alde_power_alert_enabled: false`. With Alde on, it sends one
+push after the selected electric setting has exceeded the configured
+MultiPlus input-current limit multiplied by input voltage for 60 seconds.
+Confirmed absent shore power gives zero allowance. For example, a 3.1 A
+limit at 233 V permits about 722 W, below a selected 2 kW setting. The rule
+uses the selected setting even while the thermostat is idle; other appliances
+can reduce the headroom further. It describes configured allowance, since
+the actual current-limit behaviour can depend on the MultiPlus mode.
+
+The warning re-arms when heating/electric power is off or shore allowance is
+sufficient. Unknown readings, a silent Garmin session, or a reconnect restart
+the pending 60-second wait without rearming an already-sent warning. A phone
+must have enabled browser push and the server must have complete Web Push
+configuration before the timer runs. The updated worker is registered when
+the UI opens; open the deployed UI once to update an existing subscription.
+The server waits for the phone to confirm the new alert format before starting
+this timer. Existing temperature notifications continue to older phone workers.
+Capture evidence and the untested 1 kW selection are described in
+[the Alde/shore-power analysis](docs/alde-shore-power-capture-2026-10-22.md).
+
 Web Push also uses a VAPID key pair to identify Xtura to browser push
 providers. The daemon generates and persists a pair in the configured YAML file
 when both keys are absent. It never rotates an existing pair; if only one key
